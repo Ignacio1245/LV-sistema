@@ -1,0 +1,1531 @@
+let pedidoActual = {
+    cliente: null,
+    items: [],
+    formaPago: "CUENTA_CORRIENTE",
+    observaciones: []
+};
+let pedidoEditando = null;
+
+function limpiarPedidoActual() {
+    pedidoActual = {
+        cliente: null,
+        items: [],
+        formaPago: "CUENTA_CORRIENTE",
+        observaciones: []
+    };
+}
+
+function pedidoActualTieneDatos() {
+    return pedidoActual.items.length > 0 ||
+        pedidoActual.cliente ||
+        pedidoActual.observaciones.length > 0 ||
+        dom.clienteSearchInput.value.trim() !== "" ||
+        dom.productoSearchInput.value.trim() !== "" ||
+        pedidoEditando !== null;
+}
+
+function obtenerSiguienteNumeroPedido() {
+
+    if (pedidos.length === 0) {
+        return 1;
+    }
+
+    const numerosDePedidos =
+        pedidos.map(function (pedido) {
+
+            return Number(pedido.numero) || 0;
+
+        });
+
+    return Math.max.apply(null, numerosDePedidos) + 1;
+
+}
+
+function limpiarFormularioPedido() {
+
+    dom.clienteSearchInput.value = "";
+    dom.productoSearchInput.value = "";
+    dom.cantidadInput.value = 1;
+    dom.formaPagoInput.value = "CUENTA_CORRIENTE";
+    clienteSeleccionado = null;
+    productoSeleccionado = null;
+    actualizarVistaBusqueda();
+    actualizarClientePedidoSeleccionado();
+    renderizarProductosHabitualesCliente();
+    renderizarCatalogoProductosPedido();
+
+}
+
+function obtenerTextoFormaPago(formaPago) {
+    const mapaFormasDePago = {
+        CUENTA_CORRIENTE: "Cuenta corriente",
+        EFECTIVO: "Efectivo",
+        TRANSFERENCIA: "Transferencia"
+    };
+
+    return mapaFormasDePago[formaPago] || "Cuenta corriente";
+}
+
+function obtenerFormaPagoActual() {
+    if (!dom.formaPagoInput) {
+        return "CUENTA_CORRIENTE";
+    }
+
+    return dom.formaPagoInput.value || "CUENTA_CORRIENTE";
+}
+
+function actualizarEncabezadoFormularioPedido() {
+    if (!dom.pedidoFormTitle || !dom.pedidoFormSubtitle) {
+        return;
+    }
+
+    if (!pedidoEditando) {
+        dom.pedidoFormTitle.textContent = "Nuevo pedido";
+        dom.pedidoFormSubtitle.textContent =
+            "Arma el pedido en orden: cliente, productos y cierre.";
+        dom.guardarPedidoButton.textContent = "Guardar pendiente";
+        dom.guardarBorradorPedidoButton.textContent = "Guardar borrador";
+        return;
+    }
+
+    const numeroPedido =
+        pedidoEditando.numero || pedidoEditando.id;
+
+    if (pedidoEditando.estado === "BORRADOR") {
+        dom.pedidoFormTitle.textContent =
+            "Editando borrador #" + numeroPedido;
+        dom.pedidoFormSubtitle.textContent =
+            "Completa los datos y guardalo como pendiente cuando este listo.";
+        dom.guardarPedidoButton.textContent = "Pasar a pendiente";
+        dom.guardarBorradorPedidoButton.textContent = "Guardar borrador";
+        return;
+    }
+
+    dom.pedidoFormTitle.textContent =
+        "Editando pedido #" + numeroPedido;
+    dom.pedidoFormSubtitle.textContent =
+        "Estas modificando un pedido guardado. Revisa cliente, productos y forma de pago.";
+    dom.guardarPedidoButton.textContent = "Guardar cambios";
+    dom.guardarBorradorPedidoButton.textContent = "Guardar como borrador";
+}
+
+function borrarPedidoActual() {
+    if (pedidoActualTieneDatos()) {
+        const confirmar =
+            confirm("Limpiar el pedido actual?");
+
+        if (!confirmar) {
+            return;
+        }
+    }
+
+    limpiarPedidoActual();
+    pedidoEditando = null;
+    limpiarFormularioPedido();
+    renderizarPedidoActual();
+}
+
+function guardarYAtenderPedidoActual() {
+    const pedidoGuardado =
+        guardarPedido();
+
+    if (!pedidoGuardado) {
+        return;
+    }
+
+    if (pedidoGuardado.estado !== "PENDIENTE") {
+        alert("Solo se puede atender un pedido pendiente.");
+        return;
+    }
+
+    atenderPedido(pedidoGuardado.id);
+}
+
+function actualizarClientePedidoSeleccionado() {
+
+    if (!dom.selectedClientName || !dom.selectedClientDetails) {
+        return;
+    }
+
+    const cliente =
+        clienteSeleccionado ||
+        buscarCliente(dom.clienteSearchInput.value);
+
+    if (!cliente) {
+        dom.selectedClientName.textContent = "Ninguno";
+        dom.selectedClientDetails.textContent = "Elegilo para comenzar el pedido.";
+        renderizarProductosHabitualesCliente();
+        return;
+    }
+
+    dom.selectedClientName.textContent =
+        cliente.codigo + " - " + cliente.nombre;
+
+    dom.selectedClientDetails.textContent =
+        cliente.direccion + " | Zona: " + (cliente.zona || "Sin zona") +
+        " | Saldo: " + formatearDinero(cliente.saldo || 0);
+
+    renderizarProductosHabitualesCliente();
+
+}
+
+function obtenerCantidadProductoEnPedido(codigoProducto) {
+
+    const itemEncontrado =
+        pedidoActual.items.find(function (item) {
+
+            return item.producto.codigo === codigoProducto;
+
+        });
+
+    if (!itemEncontrado) {
+        return 0;
+    }
+
+    return itemEncontrado.cantidad;
+
+}
+
+function obtenerStockDisponibleParaPedido(producto) {
+
+    return obtenerStockVendible(producto) - obtenerCantidadProductoEnPedido(producto.codigo);
+
+}
+
+function normalizarDescuentoPedido(descuento) {
+    const descuentoNumerico = Number(descuento);
+
+    if (Number.isNaN(descuentoNumerico) || descuentoNumerico < 0) {
+        return 0;
+    }
+
+    if (descuentoNumerico > 100) {
+        return 100;
+    }
+
+    return descuentoNumerico;
+}
+
+function calcularSubtotalItemPedido(producto, cantidad, descuentoPorcentaje) {
+    const descuentoNormalizado =
+        normalizarDescuentoPedido(descuentoPorcentaje);
+
+    const subtotalSinDescuento =
+        producto.precio * cantidad;
+
+    const importeDescuento =
+        subtotalSinDescuento * descuentoNormalizado / 100;
+
+    return subtotalSinDescuento - importeDescuento;
+}
+
+function actualizarSubtotalItemPedido(item) {
+    item.descuentoPorcentaje =
+        normalizarDescuentoPedido(item.descuentoPorcentaje || 0);
+
+    item.subtotal =
+        calcularSubtotalItemPedido(
+            item.producto,
+            item.cantidad,
+            item.descuentoPorcentaje
+        );
+}
+
+function renderizarCatalogoProductosPedido() {
+
+    if (!dom.pedidoProductCatalog) {
+        return;
+    }
+
+    const textoBusqueda =
+        dom.productoSearchInput.value.trim().toLowerCase();
+
+    const productosFiltrados =
+        productos.filter(function (producto) {
+            const coincideBusqueda =
+                textoBusqueda === "" ||
+                String(producto.codigo).includes(textoBusqueda) ||
+                producto.nombre.toLowerCase().includes(textoBusqueda);
+
+            return productoActivo(producto) && coincideBusqueda;
+        });
+
+    dom.pedidoProductCatalog.innerHTML = "";
+
+    if (productosFiltrados.length === 0) {
+        dom.pedidoProductCatalog.innerHTML = `
+      <div class="empty-catalog">
+        No hay productos que coincidan con la busqueda.
+      </div>
+    `;
+        return;
+    }
+
+    productosFiltrados.forEach(function (producto) {
+        const stockDisponible =
+            obtenerStockDisponibleParaPedido(producto);
+
+        const card = document.createElement("article");
+        card.className = "product-catalog-card";
+
+        const estadoStock =
+            obtenerEstadoStockProducto(producto);
+
+        if (stockDisponible <= 0) {
+            card.classList.add("without-stock");
+        }
+
+        card.innerHTML = `
+      <div>
+        <span class="product-code">#${producto.codigo}</span>
+        <h4>${producto.nombre}</h4>
+        <p>${formatearDinero(producto.precio)}</p>
+        <small class="stock-pill ${estadoStock.clase}">${estadoStock.texto}</small>
+      </div>
+      <div class="product-card-footer">
+        <span>Disponible: ${stockDisponible}</span>
+        <button class="btn btn-atender" type="button" ${stockDisponible <= 0 ? "disabled" : ""}>
+          Agregar
+        </button>
+      </div>
+    `;
+
+        const botonAgregar =
+            card.querySelector("button");
+
+        botonAgregar.addEventListener("click", function () {
+            productoSeleccionado = producto;
+            agregarProductoAlPedidoActual();
+        });
+
+        dom.pedidoProductCatalog.appendChild(card);
+    });
+
+}
+
+function agregarItemPedido(producto, cantidad) {
+
+    if (!productoDisponibleParaPedido(producto)) {
+        alert("El producto no esta activo para vender o no tiene stock disponible.");
+        return false;
+    }
+
+    const cantidadActual =
+        obtenerCantidadProductoEnPedido(producto.codigo);
+
+    const nuevaCantidad =
+        cantidadActual + cantidad;
+
+    const stockVendible =
+        obtenerStockVendible(producto);
+
+    if (nuevaCantidad > stockVendible) {
+        alert(
+            "No podes agregar mas de " +
+            stockVendible +
+            " unidades de " +
+            producto.nombre +
+            "."
+        );
+        return false;
+    }
+
+    const existente = pedidoActual.items.find(function (item) {
+
+        return item.producto.codigo === producto.codigo;
+
+    });
+
+    if (existente) {
+
+        existente.cantidad += cantidad;
+
+        actualizarSubtotalItemPedido(existente);
+
+        return true;
+
+    }
+
+    pedidoActual.items.push({
+
+        producto: producto,
+        cantidad: cantidad,
+        descuentoPorcentaje: 0,
+        subtotal: calcularSubtotalItemPedido(producto, cantidad, 0)
+
+    });
+
+    return true;
+
+}
+
+function calcularTotalPedido() {
+
+    return pedidoActual.items.reduce(
+
+        function (total, item) {
+
+            return total + item.subtotal;
+
+        },
+
+        0
+
+    );
+
+}
+
+function agregarProductoAlPedidoActual() {
+
+    const producto =
+        productoSeleccionado ||
+        buscarProducto(dom.productoSearchInput.value);
+
+    const cantidad =
+        Number(dom.cantidadInput.value);
+
+    if (!producto) {
+
+        alert("Seleccione un producto");
+
+        return;
+
+    }
+
+    if (cantidad <= 0) {
+
+        alert("Cantidad invalida");
+
+        return;
+
+    }
+
+    const productoAgregado = agregarItemPedido(
+        producto,
+        cantidad
+    );
+
+    if (!productoAgregado) {
+        return;
+    }
+
+    dom.productoSearchInput.value = "";
+    dom.cantidadInput.value = 1;
+    productoSeleccionado = null;
+    actualizarVistaBusqueda();
+    renderizarPedidoActual();
+    renderizarCatalogoProductosPedido();
+
+}
+
+function renderizarPedidoActual() {
+
+    dom.pedidoItemsTable.innerHTML = "";
+
+    pedidoActual.formaPago = obtenerFormaPagoActual();
+    actualizarEncabezadoFormularioPedido();
+
+    if (dom.pedidoNumeroPreview) {
+        dom.pedidoNumeroPreview.textContent =
+            pedidoEditando
+                ? "#" + (pedidoEditando.numero || pedidoEditando.id)
+                : "#" + obtenerSiguienteNumeroPedido();
+    }
+
+    if (dom.pedidoVendedorPreview) {
+        dom.pedidoVendedorPreview.textContent =
+            usuarioActual ? usuarioActual.nombre : "Actual";
+    }
+
+    renderizarObservacionesPedidoActual();
+
+    if (pedidoActual.items.length === 0) {
+
+        dom.pedidoItemsTable.innerHTML = `
+      <tr>
+        <td colspan="7" class="empty-table">
+          Todavia no agregaste productos al pedido.
+        </td>
+      </tr>
+    `;
+
+        dom.pedidoTotal.textContent = formatearDinero(0);
+
+        if (dom.pedidoItemCount) {
+            dom.pedidoItemCount.textContent = "0 unidades cargadas";
+        }
+
+        return;
+
+    }
+
+    pedidoActual.items.forEach(function (item) {
+
+        actualizarSubtotalItemPedido(item);
+
+        const row =
+            document.createElement("tr");
+
+        row.innerHTML = `
+      <td>${item.producto.codigo}</td>
+      <td>${item.producto.nombre}</td>
+      <td>
+        <div class="quantity-control">
+          <button class="btn btn-secondary" onclick="restarUnidadPedidoActual(${item.producto.codigo})">-</button>
+          <span>${item.cantidad}</span>
+          <button class="btn btn-secondary" onclick="sumarUnidadPedidoActual(${item.producto.codigo})">+</button>
+        </div>
+      </td>
+      <td>
+        <input
+          class="discount-input"
+          type="number"
+          min="0"
+          max="100"
+          value="${item.descuentoPorcentaje}"
+          onchange="cambiarDescuentoProductoPedido(${item.producto.codigo}, this.value)"
+        >
+      </td>
+      <td>${formatearDinero(item.producto.precio)}</td>
+      <td>${formatearDinero(item.subtotal)}</td>
+      <td>
+        <button class="btn btn-secondary" onclick="quitarProductoDelPedidoActual(${item.producto.codigo})">
+          Quitar
+        </button>
+      </td>
+    `;
+
+        dom.pedidoItemsTable
+            .appendChild(row);
+
+    });
+
+    dom.pedidoTotal.textContent =
+        formatearDinero(
+            calcularTotalPedido()
+        );
+
+    const cantidadTotalItems =
+        pedidoActual.items.reduce(function (total, item) {
+            return total + item.cantidad;
+        }, 0);
+
+    if (dom.pedidoItemCount) {
+        dom.pedidoItemCount.textContent =
+            cantidadTotalItems === 1
+                ? "1 unidad cargada"
+                : cantidadTotalItems + " unidades cargadas";
+    }
+
+}
+
+function guardarPedido(estadoPedido) {
+    const estadoFinal =
+        typeof estadoPedido === "string"
+            ? estadoPedido
+            : pedidoEditando && pedidoEditando.estado !== "BORRADOR"
+                ? pedidoEditando.estado
+                : "PENDIENTE";
+
+    pedidoActual.cliente =
+        clienteSeleccionado ||
+        buscarCliente(
+            dom.clienteSearchInput.value
+        );
+
+    if (!pedidoActual.cliente) {
+
+        alert("Seleccione un cliente");
+
+        return;
+
+    }
+
+    if (!clienteActivo(pedidoActual.cliente)) {
+
+        alert("El cliente seleccionado esta inactivo.");
+
+        return;
+
+    }
+
+    if (pedidoActual.items.length === 0 && estadoFinal !== "BORRADOR") {
+
+        alert("Agregue productos");
+
+        return;
+
+    }
+    if (pedidoEditando) {
+        const pedidoGuardado =
+            pedidoEditando;
+
+        pedidoGuardado.cliente =
+            pedidoActual.cliente;
+
+        if (!pedidoGuardado.vendedor) {
+            pedidoGuardado.vendedor =
+                usuarioActual ? usuarioActual.nombre : "Sin vendedor";
+        }
+
+        pedidoGuardado.zona =
+            pedidoActual.cliente.zona || pedidoGuardado.zona || "Sin zona";
+
+        pedidoGuardado.items =
+            pedidoActual.items.map(function (item) {
+                actualizarSubtotalItemPedido(item);
+
+                return {
+                    producto: item.producto,
+                    cantidad: item.cantidad,
+                    descuentoPorcentaje: item.descuentoPorcentaje,
+                    subtotal: item.subtotal
+                };
+            });
+
+        pedidoGuardado.formaPago =
+            obtenerFormaPagoActual();
+
+        pedidoGuardado.observaciones =
+            [...pedidoActual.observaciones];
+
+        pedidoGuardado.total =
+            calcularTotalPedido();
+
+        pedidoGuardado.estado =
+            estadoFinal;
+
+        guardarPedidos();
+
+        registrarAuditoria(
+            "Pedidos",
+            estadoFinal === "BORRADOR" ? "Guardo borrador" : "Actualizo pedido",
+            "#" + (pedidoGuardado.numero || pedidoGuardado.id) + " | " + pedidoGuardado.cliente.nombre + " | " + formatearDinero(pedidoGuardado.total)
+        );
+
+        renderizarPedidos();
+        actualizarDashboard();
+        renderizarProductosHabitualesCliente();
+
+        limpiarPedidoActual();
+
+        pedidoEditando = null;
+
+        limpiarFormularioPedido();
+        renderizarPedidoActual();
+
+        alert(
+            estadoFinal === "BORRADOR"
+                ? "Borrador guardado"
+                : "Pedido actualizado"
+        );
+
+        volverAlListadoDePedidos();
+
+        return pedidoGuardado;
+    }
+
+    const nuevoPedido = {
+
+        numero: obtenerSiguienteNumeroPedido(),
+
+        id: Date.now(),
+
+        cliente: pedidoActual.cliente,
+
+        vendedor: usuarioActual ? usuarioActual.nombre : "Sin vendedor",
+
+        zona: pedidoActual.cliente.zona || "Sin zona",
+
+        items: pedidoActual.items.map(function (item) {
+            actualizarSubtotalItemPedido(item);
+
+            return {
+                producto: item.producto,
+                cantidad: item.cantidad,
+                descuentoPorcentaje: item.descuentoPorcentaje,
+                subtotal: item.subtotal
+            };
+        }),
+
+        formaPago: obtenerFormaPagoActual(),
+
+        observaciones: [...pedidoActual.observaciones],
+
+        total: calcularTotalPedido(),
+
+        estado: estadoFinal,
+
+        fecha:
+            new Date()
+                .toLocaleDateString("es-AR")
+
+    };
+
+    pedidos.unshift(nuevoPedido);
+
+    guardarPedidos();
+
+    registrarAuditoria(
+        "Pedidos",
+        estadoFinal === "BORRADOR" ? "Creo borrador" : "Creo pedido",
+        "#" + nuevoPedido.numero + " | " + nuevoPedido.cliente.nombre + " | " + formatearDinero(nuevoPedido.total)
+    );
+
+    renderizarPedidos();
+    actualizarDashboard();
+    renderizarProductosHabitualesCliente();
+
+    limpiarPedidoActual();
+
+    limpiarFormularioPedido();
+    renderizarPedidoActual();
+
+    alert(
+        estadoFinal === "BORRADOR"
+            ? "Borrador guardado"
+            : "Pedido creado"
+    );
+
+    volverAlListadoDePedidos();
+
+    return nuevoPedido;
+
+}
+
+function guardarBorradorPedidoActual() {
+    return guardarPedido("BORRADOR");
+}
+
+function obtenerFechaPedidoParaFiltro(fechaPedido) {
+    if (!fechaPedido) {
+        return "";
+    }
+
+    if (fechaPedido.includes("-")) {
+        return fechaPedido;
+    }
+
+    const partesFecha =
+        fechaPedido.split("/");
+
+    if (partesFecha.length !== 3) {
+        return "";
+    }
+
+    const dia =
+        partesFecha[0].padStart(2, "0");
+
+    const mes =
+        partesFecha[1].padStart(2, "0");
+
+    const anio =
+        partesFecha[2];
+
+    return anio + "-" + mes + "-" + dia;
+}
+
+function renderizarPedidos() {
+
+    dom.pedidosTable.innerHTML = "";
+
+    actualizarMenuPedidos();
+
+    const textoBusqueda =
+        dom.buscarPedidoTabla
+            ? dom.buscarPedidoTabla.value.trim().toLowerCase()
+            : "";
+
+    const filtroEstado =
+        filtroEstadoPedidos || "TODOS";
+
+    const filtroFecha =
+        dom.pedidoFechaFiltro
+            ? dom.pedidoFechaFiltro.value
+            : "";
+
+    const filtroMes =
+        dom.pedidoMesFiltro
+            ? dom.pedidoMesFiltro.value
+            : "";
+
+    const pedidosFiltrados =
+        pedidos.filter(function (pedido) {
+            const numeroPedido =
+                String(pedido.numero || pedido.id);
+
+            const codigoCliente =
+                pedido.cliente && pedido.cliente.codigo !== undefined
+                    ? String(pedido.cliente.codigo)
+                    : "";
+
+            const nombreCliente =
+                pedido.cliente ? pedido.cliente.nombre : "";
+
+            const formaPago =
+                obtenerTextoFormaPago(pedido.formaPago || "CUENTA_CORRIENTE");
+
+            const totalPedido =
+                String(pedido.total || 0);
+
+            const fechaPedidoFiltro =
+                obtenerFechaPedidoParaFiltro(pedido.fecha);
+
+            const coincideBusqueda =
+                textoBusqueda === "" ||
+                numeroPedido.includes(textoBusqueda) ||
+                codigoCliente.includes(textoBusqueda) ||
+                normalizarTexto(nombreCliente).includes(textoBusqueda) ||
+                normalizarTexto(pedido.estado).includes(textoBusqueda) ||
+                normalizarTexto(pedido.fecha || "").includes(textoBusqueda) ||
+                normalizarTexto(formaPago).includes(textoBusqueda) ||
+                totalPedido.includes(textoBusqueda);
+
+            const coincideEstado =
+                filtroEstado === "TODOS" ||
+                pedido.estado === filtroEstado;
+
+            const coincideFecha =
+                filtroFecha === "" ||
+                fechaPedidoFiltro === filtroFecha;
+
+            const coincideMes =
+                filtroMes === "" ||
+                fechaPedidoFiltro.slice(0, 7) === filtroMes;
+
+            return coincideBusqueda && coincideEstado && coincideFecha && coincideMes;
+        }).sort(function (primero, segundo) {
+            return (segundo.numero || segundo.id) - (primero.numero || primero.id);
+        });
+
+    if (dom.pedidosResultadoContador) {
+        const totalFiltrado =
+            pedidosFiltrados.reduce(function (total, pedido) {
+                return total + (Number(pedido.total) || 0);
+            }, 0);
+
+        dom.pedidosResultadoContador.textContent =
+            pedidosFiltrados.length === 1
+                ? "Mostrando 1 pedido | Total " + formatearDinero(totalFiltrado)
+                : "Mostrando " + pedidosFiltrados.length + " pedidos | Total " + formatearDinero(totalFiltrado);
+    }
+
+    if (pedidosFiltrados.length === 0) {
+
+        dom.pedidosTable.innerHTML = `
+      <tr>
+        <td colspan="7" class="empty-table">
+          No hay pedidos para mostrar.
+        </td>
+      </tr>
+    `;
+
+        return;
+
+    }
+
+    pedidosFiltrados.forEach(function (pedido) {
+
+        const row =
+            document.createElement("tr");
+
+        row.innerHTML = `
+
+      <td>
+        #${pedido.numero || pedido.id}
+      </td>
+
+      <td>
+        ${pedido.cliente.codigo} - ${pedido.cliente.nombre}
+      </td>
+
+      <td>
+        ${obtenerTextoFormaPago(pedido.formaPago || "CUENTA_CORRIENTE")}
+      </td>
+
+      <td>
+        ${formatearDinero(pedido.total)}
+      </td>
+
+      <td>
+        <span class="status ${pedido.estado.toLowerCase()}">
+          ${pedido.estado}
+        </span>
+      </td>
+
+      <td>
+        ${pedido.fecha}
+      </td>
+
+      <td>
+
+        ${pedido.estado === "BORRADOR"
+                ? `
+            <button class="btn btn-secondary" onclick="editarPedido(${pedido.id})">
+              Editar
+            </button>
+
+            <button class="btn btn-danger" onclick="eliminarPedido(${pedido.id})">
+              Eliminar
+            </button>
+          `
+                : ""
+            }
+
+        ${pedido.estado === "PENDIENTE"
+                ? `
+            <button class="btn btn-atender" onclick="atenderPedido(${pedido.id})">
+              Atender
+            </button>
+
+            <button class="btn btn-danger" onclick="cancelarPedido(${pedido.id})">
+              Cancelar
+            </button>
+            <button class="btn btn-secondary" onclick="editarPedido(${pedido.id})">
+              Editar
+            </button>
+          `
+                : ""
+            }
+
+        ${pedido.estado === "ATENDIDO"
+                ? `
+            <button class="btn btn-entregar" onclick="entregarPedido(${pedido.id})">
+              Entregar
+            </button>
+          `
+                : ""
+            }
+
+        ${pedido.estado === "ENTREGADO"
+                ? `
+            <button class="btn btn-cobrado" onclick="cobrarPedido(${pedido.id})">
+              Marcar cobrado
+            </button>
+
+            <button class="btn btn-cc" onclick="pasarACuentaCorriente(${pedido.id})">
+              A cuenta
+            </button>
+          `
+                : ""
+            }
+
+        <button class="btn btn-secondary" onclick="verDetallePedido(${pedido.id})">
+          Ver
+        </button>
+        <button class="btn btn-secondary" onclick="imprimirPedidoGuardado(${pedido.id})">
+          Imprimir
+        </button>
+        ${pedido.estado === "CANCELADO"
+                ? `
+      <button class="btn btn-danger" onclick="eliminarPedido(${pedido.id})">
+        Eliminar
+      </button>
+    `
+                : ""
+            }
+
+      </td>
+    `;
+
+        dom.pedidosTable.appendChild(row);
+
+    });
+
+}
+
+function atenderPedido(id) {
+
+    const pedido =
+        pedidos.find(function (p) {
+
+            return p.id === id;
+
+        });
+
+    if (!pedido) {
+        return;
+    }
+
+    if (pedido.estado !== "PENDIENTE") {
+
+        alert("Solo se pueden atender pedidos pendientes.");
+
+        return;
+
+    }
+
+    const productosSinStock =
+        pedido.items.map(function (item) {
+
+            const producto =
+                productos.find(function (productoGuardado) {
+
+                    return productoGuardado.codigo === item.producto.codigo;
+
+                });
+
+            if (!producto || !productoActivo(producto)) {
+                return {
+                    nombre: item.producto.nombre,
+                    pedido: item.cantidad,
+                    disponible: 0
+                };
+            }
+
+            const disponible =
+                obtenerStockVendible(producto);
+
+            if (disponible >= item.cantidad) {
+                return null;
+            }
+
+            return {
+                nombre: producto.nombre,
+                pedido: item.cantidad,
+                disponible: disponible
+            };
+
+        }).filter(function (faltante) {
+            return faltante !== null;
+        });
+
+    if (productosSinStock.length > 0) {
+
+        alert(
+            "No hay stock suficiente:\n\n" +
+            productosSinStock.map(function (faltante) {
+                return "- " + faltante.nombre +
+                    " | Pedido: " + faltante.pedido +
+                    " | Disponible: " + faltante.disponible +
+                    " | Faltan: " + (faltante.pedido - faltante.disponible);
+            }).join("\n")
+        );
+
+        return;
+
+    }
+
+    pedido.items.forEach(function (item) {
+
+        const producto =
+            productos.find(function (productoGuardado) {
+
+                return productoGuardado.codigo === item.producto.codigo;
+
+            });
+
+        if (!Array.isArray(producto.movimientosStock)) {
+            producto.movimientosStock = [];
+        }
+
+        producto.movimientosStock.push({
+            fecha: new Date().toLocaleDateString("es-AR"),
+            tipo: "Salida por pedido",
+            pedido: pedido.numero || pedido.id,
+            cantidad: -item.cantidad,
+            stockFinal: producto.stock - item.cantidad
+        });
+
+        producto.stock -= item.cantidad;
+
+    });
+
+    pedido.estado = "ATENDIDO";
+
+    guardarPedidos();
+    guardarProductos();
+
+    registrarAuditoria(
+        "Pedidos",
+        "Atendio pedido",
+        "#" + (pedido.numero || pedido.id) + " | " + pedido.cliente.nombre
+    );
+
+    renderizarPedidos();
+    renderizarProductos();
+    renderizarMovimientosGenerales();
+    actualizarStockTotal();
+    actualizarDashboard();
+
+}
+
+function quitarProductoDelPedidoActual(codigoProducto) {
+
+    pedidoActual.items =
+        pedidoActual.items.filter(function (item) {
+
+            return item.producto.codigo !== codigoProducto;
+
+        });
+
+    renderizarPedidoActual();
+    renderizarCatalogoProductosPedido();
+
+}
+
+function sumarUnidadPedidoActual(codigoProducto) {
+
+    const item =
+        pedidoActual.items.find(function (itemActual) {
+
+            return itemActual.producto.codigo === codigoProducto;
+
+        });
+
+    if (!item) {
+        return;
+    }
+
+    agregarItemPedido(item.producto, 1);
+    renderizarPedidoActual();
+    renderizarCatalogoProductosPedido();
+
+}
+
+function restarUnidadPedidoActual(codigoProducto) {
+
+    const item =
+        pedidoActual.items.find(function (itemActual) {
+
+            return itemActual.producto.codigo === codigoProducto;
+
+        });
+
+    if (!item) {
+        return;
+    }
+
+    item.cantidad -= 1;
+
+    if (item.cantidad <= 0) {
+        quitarProductoDelPedidoActual(codigoProducto);
+        return;
+    }
+
+    actualizarSubtotalItemPedido(item);
+
+    renderizarPedidoActual();
+    renderizarCatalogoProductosPedido();
+
+}
+
+function cambiarDescuentoProductoPedido(codigoProducto, descuentoNuevo) {
+
+    const item =
+        pedidoActual.items.find(function (itemActual) {
+
+            return itemActual.producto.codigo === codigoProducto;
+
+        });
+
+    if (!item) {
+        return;
+    }
+
+    item.descuentoPorcentaje =
+        normalizarDescuentoPedido(descuentoNuevo);
+
+    actualizarSubtotalItemPedido(item);
+    renderizarPedidoActual();
+
+}
+
+function entregarPedido(id) {
+
+    const pedido =
+        pedidos.find(function (p) {
+
+            return p.id === id;
+
+        });
+
+    if (!pedido) {
+        return;
+    }
+
+    if (pedido.estado !== "ATENDIDO") {
+
+        alert("Solo se pueden entregar pedidos atendidos.");
+
+        return;
+
+    }
+
+    pedido.estado = "ENTREGADO";
+
+    guardarPedidos();
+
+    registrarAuditoria(
+        "Pedidos",
+        "Entrego pedido",
+        "#" + (pedido.numero || pedido.id) + " | " + pedido.cliente.nombre
+    );
+
+    renderizarPedidos();
+    actualizarDashboard();
+
+}
+
+function cobrarPedido(id) {
+
+    const pedido =
+        pedidos.find(function (p) {
+
+            return p.id === id;
+
+        });
+
+    if (!pedido) {
+        return;
+    }
+
+    if (pedido.estado !== "ENTREGADO") {
+
+        alert("Solo se pueden cobrar pedidos entregados.");
+
+        return;
+
+    }
+
+    const confirmar =
+        confirm("Marcar este pedido como cobrado?");
+
+    if (!confirmar) {
+        return;
+    }
+
+    pedido.estado = "COBRADO";
+
+    guardarPedidos();
+
+    registrarAuditoria(
+        "Pedidos",
+        "Cobro pedido",
+        "#" + (pedido.numero || pedido.id) + " | " + pedido.cliente.nombre + " | " + formatearDinero(pedido.total)
+    );
+
+    renderizarPedidos();
+    actualizarDashboard();
+
+}
+
+function pasarACuentaCorriente(id) {
+
+    const pedido =
+        pedidos.find(function (p) {
+
+            return p.id === id;
+
+        });
+
+    if (!pedido) {
+        return;
+    }
+
+    if (pedido.estado !== "ENTREGADO") {
+
+        alert("Solo se puede pasar a cuenta corriente un pedido entregado.");
+
+        return;
+
+    }
+
+    if (
+        pedido.estado ===
+        "CUENTA_CORRIENTE"
+    ) {
+        return;
+    }
+
+    const confirmar =
+        confirm("Pasar este pedido a cuenta corriente?");
+
+    if (!confirmar) {
+        return;
+    }
+
+    const cliente =
+        clientes.find(function (c) {
+
+            return c.codigo ===
+                pedido.cliente.codigo;
+
+        });
+
+    if (!cliente) {
+        return;
+    }
+
+    cliente.saldo += pedido.total;
+
+    if (!cliente.historial) {
+
+        cliente.historial = [];
+
+    }
+
+    cliente.historial.push({
+
+        fecha:
+            new Date()
+                .toLocaleDateString("es-AR"),
+
+        tipo: "Pedido CC",
+
+        importe: pedido.total
+
+    });
+
+    pedido.estado =
+        "CUENTA_CORRIENTE";
+
+    guardarClientes();
+    guardarPedidos();
+
+    registrarAuditoria(
+        "Cuenta corriente",
+        "Paso pedido a cuenta",
+        "#" + (pedido.numero || pedido.id) + " | " + cliente.nombre + " | " + formatearDinero(pedido.total)
+    );
+
+    renderizarClientes();
+    renderizarClientesConDeuda();
+    renderizarPedidos();
+    actualizarDashboard();
+
+}
+
+function cancelarPedido(id) {
+
+    const pedido = pedidos.find(function (p) {
+        return p.id === id;
+    });
+
+    if (!pedido) {
+        return;
+    }
+
+    if (pedido.estado !== "PENDIENTE") {
+
+        alert(
+            "Solo se pueden cancelar pedidos pendientes"
+        );
+
+        return;
+    }
+
+    pedido.estado = "CANCELADO";
+
+    guardarPedidos();
+
+    registrarAuditoria(
+        "Pedidos",
+        "Cancelo pedido",
+        "#" + (pedido.numero || pedido.id) + " | " + pedido.cliente.nombre
+    );
+
+    renderizarPedidos();
+    actualizarDashboard();
+
+}
+
+function verDetallePedido(id) {
+
+    const pedido =
+        pedidos.find(function (p) {
+
+            return p.id === id;
+
+        });
+
+    if (!pedido) {
+        return;
+    }
+
+    const filasProductos =
+        pedido.items.map(function (item) {
+            const descuentoTexto =
+                item.descuentoPorcentaje > 0
+                    ? item.descuentoPorcentaje + "%"
+                    : "-";
+
+            return `
+      <tr>
+        <td>${item.producto.codigo}</td>
+        <td>${item.producto.nombre}</td>
+        <td>${item.cantidad}</td>
+        <td>${descuentoTexto}</td>
+        <td>${formatearDinero(item.producto.precio)}</td>
+        <td>${formatearDinero(item.subtotal)}</td>
+      </tr>
+    `;
+        }).join("");
+
+    const observaciones =
+        pedido.observaciones && pedido.observaciones.length > 0
+            ? pedido.observaciones.join(" | ")
+            : "Sin observaciones";
+
+    const cantidadTotalUnidades =
+        pedido.items.reduce(function (total, item) {
+            return total + item.cantidad;
+        }, 0);
+
+    dom.detallePedidoTitulo.textContent =
+        "Pedido #" + (pedido.numero || pedido.id);
+
+    dom.detallePedidoContenido.innerHTML = `
+    <div class="pedido-detail-header">
+      <div>
+        <span class="status ${pedido.estado.toLowerCase()}">${pedido.estado}</span>
+        <h3>${pedido.cliente.codigo} - ${pedido.cliente.nombre}</h3>
+        <p>${pedido.cliente.direccion || "-"}</p>
+      </div>
+      <div class="pedido-detail-total">
+        <span>Total</span>
+        <strong>${formatearDinero(pedido.total)}</strong>
+      </div>
+    </div>
+
+    <div class="pedido-detail-grid">
+      <div>
+        <span>Fecha</span>
+        <strong>${pedido.fecha}</strong>
+      </div>
+      <div>
+        <span>Forma de pago</span>
+        <strong>${obtenerTextoFormaPago(pedido.formaPago || "CUENTA_CORRIENTE")}</strong>
+      </div>
+      <div>
+        <span>Productos</span>
+        <strong>${pedido.items.length} tipos | ${cantidadTotalUnidades} unidades</strong>
+      </div>
+    </div>
+
+    <div class="table-wrapper pedido-detail-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Codigo</th>
+            <th>Producto</th>
+            <th>Cant.</th>
+            <th>Desc.</th>
+            <th>P.U</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filasProductos || `<tr><td colspan="6" class="empty-table">Sin productos cargados</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pedido-detail-notes">
+      <span>Observaciones</span>
+      <p>${observaciones}</p>
+    </div>
+
+    <div class="pedido-detail-actions">
+      <button class="primary-button" type="button" onclick="editarPedidoDesdeDetalle(${pedido.id})">
+        Editar pedido
+      </button>
+      <button class="secondary-button" type="button" onclick="imprimirPedidoGuardado(${pedido.id})">
+        Imprimir comprobante
+      </button>
+    </div>
+  `;
+
+    dom.detallePedidoModal.classList.remove("hidden");
+
+}
+
+function cerrarDetallePedidoModal() {
+    dom.detallePedidoModal.classList.add("hidden");
+}
+
+function editarPedidoDesdeDetalle(id) {
+    cerrarDetallePedidoModal();
+    editarPedido(id);
+}
+
+function editarPedido(id) {
+
+    const pedido = pedidos.find(function (p) {
+        return p.id === id;
+    });
+
+    if (!pedido) {
+        return;
+    }
+
+    pedidoEditando = pedido;
+
+    pedidoActual = {
+        cliente: pedido.cliente,
+        formaPago: pedido.formaPago || "CUENTA_CORRIENTE",
+        observaciones: pedido.observaciones ? [...pedido.observaciones] : [],
+        items: pedido.items.map(function (item) {
+            return {
+                producto: item.producto,
+                cantidad: item.cantidad,
+                descuentoPorcentaje: item.descuentoPorcentaje || 0,
+                subtotal: item.subtotal
+            };
+        })
+    };
+
+    clienteSeleccionado = pedido.cliente;
+
+    dom.clienteSearchInput.value =
+        pedido.cliente.codigo +
+        " - " +
+        pedido.cliente.nombre;
+
+    dom.formaPagoInput.value =
+        pedidoActual.formaPago;
+
+    mostrarPagina("ventas");
+    dom.ventasPage.classList.add("hidden");
+    dom.pedidoFormPanel.classList.remove("hidden");
+
+    renderizarPedidoActual();
+
+}
+function eliminarPedido(id){
+
+  const indice =
+    pedidos.findIndex(function(p){
+
+      return p.id === id;
+
+    });
+
+  if(indice === -1){
+    return;
+  }
+
+  const confirmar =
+    confirm("Eliminar pedido #" + (pedidos[indice].numero || pedidos[indice].id) + "?");
+
+  if(!confirmar){
+    return;
+  }
+
+  const pedidoEliminado =
+    pedidos[indice];
+
+  pedidos.splice(indice,1);
+
+  guardarPedidos();
+
+  registrarAuditoria(
+    "Pedidos",
+    "Elimino pedido",
+    "#" + (pedidoEliminado.numero || pedidoEliminado.id) + " | " + pedidoEliminado.cliente.nombre
+  );
+
+  renderizarPedidos();
+  actualizarDashboard();
+
+}
