@@ -1,22 +1,19 @@
 let auditoria = [];
 
 function guardarAuditoria() {
-  localStorage.setItem(
-    "auditoria",
-    JSON.stringify(auditoria)
-  );
+  dataStore.guardarLista("auditoria", auditoria);
 }
 
 function cargarAuditoria() {
   const auditoriaGuardada =
-    localStorage.getItem("auditoria");
+    dataStore.leerLista("auditoria");
 
   if (!auditoriaGuardada) {
     return;
   }
 
   const datosAuditoria =
-    JSON.parse(auditoriaGuardada);
+    auditoriaGuardada;
 
   if (Array.isArray(datosAuditoria)) {
     auditoria = datosAuditoria;
@@ -47,13 +44,98 @@ function registrarAuditoria(modulo, accion, detalle) {
   renderizarAuditoria();
 }
 
+function obtenerFechaAuditoriaParaFiltro(fechaAuditoria) {
+  if (!fechaAuditoria) {
+    return "";
+  }
+
+  if (fechaAuditoria.includes("-")) {
+    return fechaAuditoria;
+  }
+
+  const partesFecha =
+    fechaAuditoria.split("/");
+
+  if (partesFecha.length !== 3) {
+    return "";
+  }
+
+  return partesFecha[2] + "-" +
+    partesFecha[1].padStart(2, "0") + "-" +
+    partesFecha[0].padStart(2, "0");
+}
+
+function renderizarOpcionesAuditoria() {
+  if (!dom.auditoriaUsuarioFiltro) {
+    return;
+  }
+
+  const usuarioSeleccionado = dom.auditoriaUsuarioFiltro.value || "TODOS";
+  const moduloSeleccionado = dom.auditoriaModuloFiltro.value || "TODOS";
+  const accionSeleccionada = dom.auditoriaAccionFiltro.value || "TODAS";
+
+  const usuarios =
+    [...new Set(auditoria.map(function (registro) {
+      return registro.usuario || "Sistema";
+    }))].sort();
+
+  const modulos =
+    [...new Set(auditoria.map(function (registro) {
+      return registro.modulo || "-";
+    }))].sort();
+
+  const acciones =
+    [...new Set(auditoria.map(function (registro) {
+      return registro.accion || "-";
+    }))].sort();
+
+  dom.auditoriaUsuarioFiltro.innerHTML =
+    `<option value="TODOS">Todos los usuarios</option>` +
+    usuarios.map(function (usuario) {
+      return `<option value="${usuario}">${usuario}</option>`;
+    }).join("");
+
+  dom.auditoriaModuloFiltro.innerHTML =
+    `<option value="TODOS">Todos los modulos</option>` +
+    modulos.map(function (modulo) {
+      return `<option value="${modulo}">${modulo}</option>`;
+    }).join("");
+
+  dom.auditoriaAccionFiltro.innerHTML =
+    `<option value="TODAS">Todas las acciones</option>` +
+    acciones.map(function (accion) {
+      return `<option value="${accion}">${accion}</option>`;
+    }).join("");
+
+  dom.auditoriaUsuarioFiltro.value = usuarios.includes(usuarioSeleccionado) ? usuarioSeleccionado : "TODOS";
+  dom.auditoriaModuloFiltro.value = modulos.includes(moduloSeleccionado) ? moduloSeleccionado : "TODOS";
+  dom.auditoriaAccionFiltro.value = acciones.includes(accionSeleccionada) ? accionSeleccionada : "TODAS";
+}
+
 function renderizarAuditoria() {
   if (!dom.auditoriaTable) {
     return;
   }
 
+  renderizarOpcionesAuditoria();
+
   const textoBusqueda =
     normalizarTexto(dom.buscarAuditoriaInput.value || "");
+
+  const filtroFechaDesde =
+    dom.auditoriaFechaDesdeFiltro.value || "";
+
+  const filtroFechaHasta =
+    dom.auditoriaFechaHastaFiltro.value || "";
+
+  const filtroUsuario =
+    dom.auditoriaUsuarioFiltro.value || "TODOS";
+
+  const filtroModulo =
+    dom.auditoriaModuloFiltro.value || "TODOS";
+
+  const filtroAccion =
+    dom.auditoriaAccionFiltro.value || "TODAS";
 
   const registrosFiltrados =
     auditoria.filter(function (registro) {
@@ -70,6 +152,31 @@ function renderizarAuditoria() {
 
       return textoBusqueda === "" ||
         normalizarTexto(textoRegistro).includes(textoBusqueda);
+    }).filter(function (registro) {
+      const fechaRegistro =
+        obtenerFechaAuditoriaParaFiltro(registro.fecha);
+
+      const coincideFechaDesde =
+        filtroFechaDesde === "" ||
+        (fechaRegistro !== "" && fechaRegistro >= filtroFechaDesde);
+
+      const coincideFechaHasta =
+        filtroFechaHasta === "" ||
+        (fechaRegistro !== "" && fechaRegistro <= filtroFechaHasta);
+
+      const coincideUsuario =
+        filtroUsuario === "TODOS" ||
+        registro.usuario === filtroUsuario;
+
+      const coincideModulo =
+        filtroModulo === "TODOS" ||
+        registro.modulo === filtroModulo;
+
+      const coincideAccion =
+        filtroAccion === "TODAS" ||
+        registro.accion === filtroAccion;
+
+      return coincideFechaDesde && coincideFechaHasta && coincideUsuario && coincideModulo && coincideAccion;
     });
 
   dom.auditoriaTotalResumen.textContent = registrosFiltrados.length;
@@ -102,6 +209,16 @@ function renderizarAuditoria() {
       </tr>
     `;
     }).join("");
+}
+
+function limpiarFiltrosAuditoria() {
+  dom.buscarAuditoriaInput.value = "";
+  dom.auditoriaFechaDesdeFiltro.value = "";
+  dom.auditoriaFechaHastaFiltro.value = "";
+  dom.auditoriaUsuarioFiltro.value = "TODOS";
+  dom.auditoriaModuloFiltro.value = "TODOS";
+  dom.auditoriaAccionFiltro.value = "TODAS";
+  renderizarAuditoria();
 }
 
 function limpiarAuditoria() {

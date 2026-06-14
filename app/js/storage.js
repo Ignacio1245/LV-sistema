@@ -1,59 +1,75 @@
 function guardarClientes() {
-    localStorage.setItem(
+    dataStore.guardarLista(
         "clientes",
-        JSON.stringify(clientes)
+        clientes
     );
+
+    programarSincronizacionAutomatica("clientes");
 }
 
 function guardarProductos() {
-    localStorage.setItem(
+    dataStore.guardarLista(
         "productos",
-        JSON.stringify(productos)
+        productos
     );
+
+    programarSincronizacionAutomatica("productos");
 }
 
 function guardarPedidos() {
-    localStorage.setItem(
+    dataStore.guardarLista(
         "pedidos",
-        JSON.stringify(pedidos)
+        pedidos
     );
+
+    programarSincronizacionAutomatica("pedidos");
 }
 
 function guardarZonas() {
-    localStorage.setItem(
+    dataStore.guardarLista(
         "zonas",
-        JSON.stringify(zonas)
+        zonas
     );
+
+    programarSincronizacionAutomatica("datosBase");
 }
 
 function guardarProveedores() {
-    localStorage.setItem(
+    dataStore.guardarLista(
         "proveedores",
-        JSON.stringify(proveedores)
+        proveedores
     );
+
+    programarSincronizacionAutomatica("datosBase");
 }
 
 function guardarCompras() {
-    localStorage.setItem(
+    dataStore.guardarLista(
         "compras",
-        JSON.stringify(compras)
+        compras
     );
 }
 
+function guardarRubros() {
+    dataStore.guardarLista(
+        "rubros",
+        rubros
+    );
+
+    programarSincronizacionAutomatica("datosBase");
+}
+
+function guardarListasPrecios() {
+    dataStore.guardarLista(
+        "listasPrecios",
+        listasPrecios
+    );
+
+    programarSincronizacionAutomatica("datosBase");
+}
+
 function leerListaGuardada(nombreDeLista) {
-    const datosGuardados = localStorage.getItem(nombreDeLista);
-
-    if (!datosGuardados) {
-        return null;
-    }
-
-    try {
-        return JSON.parse(datosGuardados);
-    } catch (error) {
-        console.warn("No se pudieron leer los datos guardados de " + nombreDeLista);
-        localStorage.removeItem(nombreDeLista);
-        return null;
-    }
+    return dataStore.leerLista(nombreDeLista);
 }
 
 function cargarDatos() {
@@ -64,6 +80,35 @@ function cargarDatos() {
     const zonasGuardadas = leerListaGuardada("zonas");
     const proveedoresGuardados = leerListaGuardada("proveedores");
     const comprasGuardadas = leerListaGuardada("compras");
+    const rubrosGuardados = leerListaGuardada("rubros");
+    const listasPreciosGuardadas = leerListaGuardada("listasPrecios");
+
+    if (listasPreciosGuardadas) {
+        listasPrecios = listasPreciosGuardadas;
+    }
+
+    listasPrecios.forEach(function (lista, indice) {
+        lista.codigo = Number(lista.codigo) || indice + 1;
+        lista.nombre = lista.nombre || "Lista " + lista.codigo;
+
+        if (typeof lista.activo !== "boolean") {
+            lista.activo = true;
+        }
+    });
+
+    if (rubrosGuardados) {
+        rubros = rubrosGuardados;
+
+        rubros.forEach(function (rubro, indice) {
+            rubro.codigo = Number(rubro.codigo) || indice + 1;
+            rubro.nombre = rubro.nombre || "Rubro";
+            rubro.descripcion = rubro.descripcion || "-";
+
+            if (typeof rubro.activo !== "boolean") {
+                rubro.activo = true;
+            }
+        });
+    }
 
     if (proveedoresGuardados) {
         proveedores = proveedoresGuardados;
@@ -111,6 +156,19 @@ function cargarDatos() {
             if (!cliente.zona) {
                 cliente.zona = "Sin zona";
             }
+            cliente.razonSocial = cliente.razonSocial || "";
+            cliente.nombreFantasia = cliente.nombreFantasia || "";
+            cliente.localidad = cliente.localidad || "";
+            cliente.codigoPostal = cliente.codigoPostal || "";
+            cliente.telefonoParticular = cliente.telefonoParticular || "";
+            cliente.telefonoMovil = cliente.telefonoMovil || "";
+            cliente.email = cliente.email || "";
+            cliente.listaPrecios = cliente.listaPrecios || "";
+            cliente.posicionZona = Number(cliente.posicionZona) || 0;
+            cliente.vendedorAsignado = cliente.vendedorAsignado || "";
+            cliente.condicionIva = cliente.condicionIva || "";
+            cliente.horarioAtencion = cliente.horarioAtencion || "";
+            cliente.observaciones = cliente.observaciones || "";
         });
 
         let seCrearonZonasDesdeClientes = false;
@@ -139,6 +197,7 @@ function cargarDatos() {
 
     if (productosGuardados) {
         productos = productosGuardados;
+        let seActualizoEstadoProductoPorStock = false;
 
         productos.forEach(function (producto) {
             if (typeof producto.activo !== "boolean") {
@@ -150,7 +209,55 @@ function cargarDatos() {
             if (!producto.proveedor) {
                 producto.proveedor = "Sin proveedor";
             }
+            if (!producto.rubro) {
+                producto.rubro = "Sin rubro";
+            }
+            producto.codigoReal = producto.codigoReal || "";
+            producto.preciosLista = obtenerPreciosListaProducto(producto);
+            if (!Array.isArray(producto.historialPrecios)) {
+                producto.historialPrecios = [];
+            }
+            producto.precioCompra = Number(producto.precioCompra) || 0;
+            producto.stockMinimo = Number(producto.stockMinimo) || 0;
+            producto.tipo = producto.tipo || "";
+            producto.marca = producto.marca || "";
+            producto.detalle = producto.detalle || "";
+            producto.pack = Number(producto.pack) || 0;
+            producto.unidad = producto.unidad || "";
+            producto.iva = Number(producto.iva) || 0;
+            producto.bonificacionVenta = Number(producto.bonificacionVenta) || 0;
+            producto.proveedorAlternativo = producto.proveedorAlternativo || "";
+            seActualizoEstadoProductoPorStock =
+                actualizarEstadoAutomaticoPorStock(producto, false) ||
+                seActualizoEstadoProductoPorStock;
         });
+
+        if (seActualizoEstadoProductoPorStock) {
+            guardarProductos();
+        }
+
+        let seCrearonRubrosDesdeProductos = false;
+
+        productos.forEach(function (producto) {
+            const rubroExistente =
+                rubros.some(function (rubro) {
+                    return normalizarTexto(rubro.nombre) === normalizarTexto(producto.rubro);
+                });
+
+            if (!rubroExistente) {
+                rubros.push({
+                    codigo: rubros.length + 1,
+                    nombre: producto.rubro,
+                    descripcion: "Creado desde productos existentes",
+                    activo: true
+                });
+                seCrearonRubrosDesdeProductos = true;
+            }
+        });
+
+        if (seCrearonRubrosDesdeProductos) {
+            guardarRubros();
+        }
 
         let seCrearonProveedoresDesdeProductos = false;
 
@@ -209,9 +316,16 @@ function cargarDatos() {
                 if (typeof item.descuentoPorcentaje !== "number") {
                     item.descuentoPorcentaje = 0;
                 }
+                if (typeof item.precioUnitario !== "number") {
+                    item.precioUnitario =
+                        item.producto ? Number(item.producto.precio) || 0 : 0;
+                }
+                if (!item.listaPrecios) {
+                    item.listaPrecios = "Lista 1";
+                }
                 if (typeof item.subtotal !== "number" && item.producto) {
                     item.subtotal =
-                        item.producto.precio * item.cantidad;
+                        item.precioUnitario * item.cantidad;
                 }
             });
         });

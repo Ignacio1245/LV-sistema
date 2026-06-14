@@ -14,6 +14,31 @@ function obtenerPedidosDelMes(mesFiltro) {
   });
 }
 
+function obtenerRubroProductoPedido(item) {
+  if (item.producto && item.producto.rubro) {
+    return item.producto.rubro;
+  }
+
+  const productoActual =
+    productos.find(function (producto) {
+      return item.producto && producto.codigo === item.producto.codigo;
+    });
+
+  return productoActual && productoActual.rubro
+    ? productoActual.rubro
+    : "Sin rubro";
+}
+
+function pedidoTieneRubro(pedido, rubro) {
+  if (rubro === "TODOS") {
+    return true;
+  }
+
+  return pedido.items.some(function (item) {
+    return obtenerRubroProductoPedido(item) === rubro;
+  });
+}
+
 function pedidoEsFacturable(pedido) {
   return pedido.estado !== "CANCELADO" && pedido.estado !== "BORRADOR";
 }
@@ -43,6 +68,195 @@ function obtenerClienteTextoPedido(pedido) {
   }
 
   return pedido.cliente.codigo + " - " + pedido.cliente.nombre;
+}
+
+function obtenerUltimoCostoProducto(codigoProducto) {
+  const compraProducto =
+    compras.find(function (compra) {
+      return String(compra.productoCodigo) === String(codigoProducto) &&
+        Number(compra.costoUnitario) > 0;
+    });
+
+  if (compraProducto) {
+    return Number(compraProducto.costoUnitario) || 0;
+  }
+
+  const productoActual =
+    productos.find(function (producto) {
+      return String(producto.codigo) === String(codigoProducto);
+    });
+
+  return productoActual
+    ? Number(productoActual.precioCompra) || 0
+    : 0;
+}
+
+function obtenerSubtotalItemInforme(item) {
+  const subtotalGuardado =
+    Number(item.subtotal);
+
+  if (!Number.isNaN(subtotalGuardado) && subtotalGuardado > 0) {
+    return subtotalGuardado;
+  }
+
+  const precio =
+    typeof item.precioUnitario === "number"
+      ? item.precioUnitario
+      : item.producto ? Number(item.producto.precio) || 0 : 0;
+  const cantidad =
+    Number(item.cantidad) || 0;
+
+  return precio * cantidad;
+}
+
+function calcularMargenPedidosInforme(pedidosFacturables) {
+  const productosSinCosto = new Set();
+  let ventaTotal = 0;
+  let costoTotal = 0;
+
+  pedidosFacturables.forEach(function (pedido) {
+    pedido.items.forEach(function (item) {
+      const codigoProducto =
+        item.producto ? item.producto.codigo : "";
+      const cantidad =
+        Number(item.cantidad) || 0;
+      const subtotal =
+        obtenerSubtotalItemInforme(item);
+      const costoUnitario =
+        obtenerUltimoCostoProducto(codigoProducto);
+
+      ventaTotal += subtotal;
+
+      if (costoUnitario > 0) {
+        costoTotal += costoUnitario * cantidad;
+      } else if (codigoProducto !== "") {
+        productosSinCosto.add(codigoProducto);
+      }
+    });
+  });
+
+  const gananciaEstimada =
+    ventaTotal - costoTotal;
+  const margenEstimado =
+    ventaTotal > 0
+      ? (gananciaEstimada / ventaTotal) * 100
+      : 0;
+
+  return {
+    costoTotal: costoTotal,
+    gananciaEstimada: gananciaEstimada,
+    margenEstimado: margenEstimado,
+    productosSinCosto: productosSinCosto.size
+  };
+}
+
+function obtenerTextoMesInforme(mesFiltro) {
+  if (!mesFiltro) {
+    return "Periodo sin definir";
+  }
+
+  const partesFecha = mesFiltro.split("-");
+  const fecha = new Date(
+    Number(partesFecha[0]),
+    Number(partesFecha[1]) - 1,
+    1
+  );
+
+  return fecha.toLocaleDateString("es-AR", {
+    month: "long",
+    year: "numeric"
+  });
+}
+
+function obtenerFiltrosAplicadosInforme() {
+  const filtros = [];
+
+  if (dom.informesVendedorFiltro.value !== "TODOS") {
+    filtros.push("Vendedor: " + dom.informesVendedorFiltro.value);
+  }
+
+  if (dom.informesZonaFiltro.value !== "TODAS") {
+    filtros.push("Zona: " + dom.informesZonaFiltro.value);
+  }
+
+  if (dom.informesClienteFiltro.value !== "TODOS") {
+    filtros.push("Cliente: " + dom.informesClienteFiltro.value);
+  }
+
+  if (dom.informesRubroFiltro.value !== "TODOS") {
+    filtros.push("Rubro: " + dom.informesRubroFiltro.value);
+  }
+
+  if (dom.informesEstadoFiltro.value !== "TODOS") {
+    filtros.push("Estado: " + dom.informesEstadoFiltro.value);
+  }
+
+  return filtros;
+}
+
+function obtenerResumenOperativoInforme(pedidosDelMes) {
+  const clientesVendidos = new Set();
+  const productosVendidos = new Set();
+  let unidadesVendidas = 0;
+  let pedidosCuentaCorriente = 0;
+
+  pedidosDelMes.forEach(function (pedido) {
+    if (!pedidoEsFacturable(pedido)) {
+      return;
+    }
+
+    clientesVendidos.add(obtenerClienteTextoPedido(pedido));
+
+    if (pedido.formaPago === "CUENTA_CORRIENTE") {
+      pedidosCuentaCorriente += 1;
+    }
+
+    pedido.items.forEach(function (item) {
+      if (item.producto && item.producto.codigo !== undefined) {
+        productosVendidos.add(item.producto.codigo);
+      }
+
+      unidadesVendidas += Number(item.cantidad) || 0;
+    });
+  });
+
+  return {
+    clientesVendidos: clientesVendidos.size,
+    productosDistintos: productosVendidos.size,
+    unidadesVendidas: unidadesVendidas,
+    pedidosCuentaCorriente: pedidosCuentaCorriente
+  };
+}
+
+function renderizarEncabezadoEjecutivoInforme(mesFiltro, pedidosDelMes) {
+  const filtrosAplicados = obtenerFiltrosAplicadosInforme();
+  const resumenOperativo = obtenerResumenOperativoInforme(pedidosDelMes);
+  const nombreEmpresa =
+    CONFIG.empresa || CONFIG.impresionTitulo || "LV Sistema";
+  const fechaGeneracion =
+    new Date().toLocaleDateString("es-AR");
+
+  dom.informeEmpresaNombre.textContent = nombreEmpresa;
+  dom.informeTituloEjecutivo.textContent =
+    "Informe comercial - " + obtenerTextoMesInforme(mesFiltro);
+  dom.informeSubtituloEjecutivo.textContent =
+    "Generado el " + fechaGeneracion + ". Datos calculados segun los filtros seleccionados.";
+
+  dom.informeFiltrosAplicados.innerHTML =
+    filtrosAplicados.length === 0
+      ? `<span>Sin filtros especiales</span>`
+      : filtrosAplicados.map(function (filtro) {
+        return `<span>${filtro}</span>`;
+      }).join("");
+
+  dom.informeClientesVendidos.textContent =
+    resumenOperativo.clientesVendidos;
+  dom.informeUnidadesVendidas.textContent =
+    resumenOperativo.unidadesVendidas;
+  dom.informeProductosDistintos.textContent =
+    resumenOperativo.productosDistintos;
+  dom.informePedidosCuenta.textContent =
+    resumenOperativo.pedidosCuentaCorriente;
 }
 
 function agruparPedidosPorEstado(pedidosDelMes) {
@@ -164,6 +378,10 @@ function obtenerDetalleVendedorZonaCliente(pedidosDelMes) {
 
     pedido.items.forEach(function (item) {
       const codigoProducto = item.producto.codigo;
+      const cantidad =
+        Number(item.cantidad) || 0;
+      const costoUnitario =
+        obtenerUltimoCostoProducto(codigoProducto);
 
       if (!grupos[clave].productos[codigoProducto]) {
         grupos[clave].productos[codigoProducto] = {
@@ -172,9 +390,13 @@ function obtenerDetalleVendedorZonaCliente(pedidosDelMes) {
         };
       }
 
-      grupos[clave].productos[codigoProducto].unidades += Number(item.cantidad) || 0;
-      grupos[clave].unidades += Number(item.cantidad) || 0;
+      grupos[clave].productos[codigoProducto].unidades += cantidad;
+      grupos[clave].unidades += cantidad;
+      grupos[clave].costo = (grupos[clave].costo || 0) + (costoUnitario * cantidad);
     });
+
+    grupos[clave].ganancia =
+      grupos[clave].total - (grupos[clave].costo || 0);
   });
 
   return Object.values(grupos).sort(function (primero, segundo) {
@@ -225,10 +447,186 @@ function renderizarListaInforme(contenedor, items, renderItem, mensajeVacio) {
     items.map(renderItem).join("");
 }
 
+function obtenerInformesMensualesGuardados() {
+  const informesGuardados =
+    dataStore.leerLista("informesMensuales");
+
+  if (!informesGuardados) {
+    return [];
+  }
+
+  return Array.isArray(informesGuardados) ? informesGuardados : [];
+}
+
+function guardarInformesMensuales(informesMensuales) {
+  dataStore.guardarLista(
+    "informesMensuales",
+    informesMensuales
+  );
+}
+
+function guardarResumenMensualInforme(mesFiltro, pedidosCantidad, facturacion, resumenMargen) {
+  const informesMensuales =
+    obtenerInformesMensualesGuardados().filter(function (informe) {
+      return informe.mes !== mesFiltro;
+    });
+
+  informesMensuales.unshift({
+    mes: mesFiltro,
+    pedidos: pedidosCantidad,
+    facturacion: facturacion,
+    costo: resumenMargen.costoTotal,
+    ganancia: resumenMargen.gananciaEstimada,
+    margen: resumenMargen.margenEstimado,
+    actualizado: new Date().toLocaleDateString("es-AR")
+  });
+
+  informesMensuales.sort(function (primero, segundo) {
+    return segundo.mes.localeCompare(primero.mes);
+  });
+
+  guardarInformesMensuales(informesMensuales.slice(0, 24));
+}
+
+function renderizarInformesMensualesGuardados() {
+  const informesMensuales =
+    obtenerInformesMensualesGuardados();
+
+  if (!dom.informesMensualesTable) {
+    return;
+  }
+
+  if (informesMensuales.length === 0) {
+    dom.informesMensualesTable.innerHTML = `
+      <tr>
+        <td colspan="6" class="empty-table">
+          Todavia no hay informes mensuales guardados.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  dom.informesMensualesTable.innerHTML =
+    informesMensuales.map(function (informe) {
+      return `
+        <tr>
+          <td>${obtenerTextoMesInforme(informe.mes)}</td>
+          <td>${informe.pedidos}</td>
+          <td>${formatearDinero(informe.facturacion)}</td>
+          <td>${formatearDinero(informe.costo)}</td>
+          <td>${formatearDinero(informe.ganancia)}</td>
+          <td>${Number(informe.margen || 0).toFixed(1)}%</td>
+        </tr>
+      `;
+    }).join("");
+}
+
+function renderizarOpcionesInformes() {
+  if (!dom.informesVendedorFiltro) {
+    return;
+  }
+
+  const vendedorActual = dom.informesVendedorFiltro.value || "TODOS";
+  const zonaActual = dom.informesZonaFiltro.value || "TODAS";
+  const clienteActual = dom.informesClienteFiltro.value || "TODOS";
+  const rubroActual = dom.informesRubroFiltro.value || "TODOS";
+
+  const vendedores =
+    [...new Set(pedidos.map(obtenerVendedorPedido))].sort();
+
+  const zonasDisponibles =
+    zonas.filter(zonaActiva).map(function (zona) {
+      return zona.nombre;
+    }).sort();
+
+  const clientesDisponibles =
+    clientes.filter(clienteActivo).map(function (cliente) {
+      return cliente.codigo + " - " + cliente.nombre;
+    }).sort();
+
+  const rubrosDisponibles =
+    rubros.filter(rubroActivo).map(function (rubro) {
+      return rubro.nombre;
+    }).sort();
+
+  dom.informesVendedorFiltro.innerHTML =
+    `<option value="TODOS">Todos los vendedores</option>` +
+    vendedores.map(function (vendedor) {
+      return `<option value="${vendedor}">${vendedor}</option>`;
+    }).join("");
+
+  dom.informesZonaFiltro.innerHTML =
+    `<option value="TODAS">Todas las zonas</option>` +
+    zonasDisponibles.map(function (zona) {
+      return `<option value="${zona}">${zona}</option>`;
+    }).join("");
+
+  dom.informesClienteFiltro.innerHTML =
+    `<option value="TODOS">Todos los clientes</option>` +
+    clientesDisponibles.map(function (cliente) {
+      return `<option value="${cliente}">${cliente}</option>`;
+    }).join("");
+
+  dom.informesRubroFiltro.innerHTML =
+    `<option value="TODOS">Todos los rubros</option>` +
+    rubrosDisponibles.map(function (rubro) {
+      return `<option value="${rubro}">${rubro}</option>`;
+    }).join("");
+
+  dom.informesVendedorFiltro.value = vendedores.includes(vendedorActual) ? vendedorActual : "TODOS";
+  dom.informesZonaFiltro.value = zonasDisponibles.includes(zonaActual) ? zonaActual : "TODAS";
+  dom.informesClienteFiltro.value = clientesDisponibles.includes(clienteActual) ? clienteActual : "TODOS";
+  dom.informesRubroFiltro.value = rubrosDisponibles.includes(rubroActual) ? rubroActual : "TODOS";
+}
+
+function aplicarFiltrosInformes(pedidosDelMes) {
+  const filtroVendedor =
+    dom.informesVendedorFiltro.value || "TODOS";
+
+  const filtroZona =
+    dom.informesZonaFiltro.value || "TODAS";
+
+  const filtroCliente =
+    dom.informesClienteFiltro.value || "TODOS";
+
+  const filtroRubro =
+    dom.informesRubroFiltro.value || "TODOS";
+
+  const filtroEstado =
+    dom.informesEstadoFiltro.value || "TODOS";
+
+  return pedidosDelMes.filter(function (pedido) {
+    const coincideVendedor =
+      filtroVendedor === "TODOS" ||
+      obtenerVendedorPedido(pedido) === filtroVendedor;
+
+    const coincideZona =
+      filtroZona === "TODAS" ||
+      obtenerZonaPedido(pedido) === filtroZona;
+
+    const coincideCliente =
+      filtroCliente === "TODOS" ||
+      obtenerClienteTextoPedido(pedido) === filtroCliente;
+
+    const coincideRubro =
+      pedidoTieneRubro(pedido, filtroRubro);
+
+    const coincideEstado =
+      filtroEstado === "TODOS" ||
+      pedido.estado === filtroEstado ||
+      pedido.estadoCobro === filtroEstado;
+
+    return coincideVendedor && coincideZona && coincideCliente && coincideRubro && coincideEstado;
+  });
+}
+
 function renderizarInformes() {
   if (!dom.informesPage) {
     return;
   }
+
+  renderizarOpcionesInformes();
 
   if (!dom.informesMesFiltro.value) {
     dom.informesMesFiltro.value = obtenerMesActualParaInput();
@@ -237,8 +635,13 @@ function renderizarInformes() {
   const mesFiltro =
     dom.informesMesFiltro.value;
 
-  const pedidosDelMes =
+  const pedidosDelMesSinFiltros =
     obtenerPedidosDelMes(mesFiltro);
+
+  const pedidosDelMes =
+    aplicarFiltrosInformes(pedidosDelMesSinFiltros);
+
+  renderizarEncabezadoEjecutivoInforme(mesFiltro, pedidosDelMes);
 
   const pedidosFacturables =
     pedidosDelMes.filter(function (pedido) {
@@ -260,10 +663,38 @@ function renderizarInformes() {
       return total + (Number(cliente.saldo) || 0);
     }, 0);
 
+  const resumenMargen =
+    calcularMargenPedidosInforme(pedidosFacturables);
+
   dom.informeFacturacion.textContent = formatearDinero(facturacion);
   dom.informePedidos.textContent = pedidosDelMes.length;
   dom.informeTicketPromedio.textContent = formatearDinero(ticketPromedio);
   dom.informeCuentaCorriente.textContent = formatearDinero(cuentaCorriente);
+  dom.informeCostoEstimado.textContent = formatearDinero(resumenMargen.costoTotal);
+  dom.informeGananciaEstimada.textContent = formatearDinero(resumenMargen.gananciaEstimada);
+  dom.informeMargenEstimado.textContent =
+    resumenMargen.margenEstimado.toFixed(1) + "%";
+  dom.informeProductosSinCosto.textContent =
+    resumenMargen.productosSinCosto;
+
+  const pedidosFacturablesMensuales =
+    pedidosDelMesSinFiltros.filter(function (pedido) {
+      return pedidoEsFacturable(pedido);
+    });
+  const facturacionMensual =
+    pedidosFacturablesMensuales.reduce(function (total, pedido) {
+      return total + (Number(pedido.total) || 0);
+    }, 0);
+  const resumenMargenMensual =
+    calcularMargenPedidosInforme(pedidosFacturablesMensuales);
+
+  guardarResumenMensualInforme(
+    mesFiltro,
+    pedidosFacturablesMensuales.length,
+    facturacionMensual,
+    resumenMargenMensual
+  );
+  renderizarInformesMensualesGuardados();
 
   renderizarListaInforme(
     dom.informeVentasEstado,
@@ -369,7 +800,7 @@ function renderizarInformes() {
   if (detalleVendedorZonaCliente.length === 0) {
     dom.informeDetalleVendedorZonaCliente.innerHTML = `
       <tr>
-        <td colspan="7" class="empty-table">
+        <td colspan="9" class="empty-table">
           Sin ventas detalladas en este mes.
         </td>
       </tr>
@@ -387,6 +818,8 @@ function renderizarInformes() {
           <td>${detalle.pedidos}</td>
           <td>${detalle.unidades}</td>
           <td>${formatearDinero(detalle.total)}</td>
+          <td>${formatearDinero(detalle.costo || 0)}</td>
+          <td>${formatearDinero(detalle.ganancia || 0)}</td>
           <td>${obtenerTextoProductosDetalle(detalle.productos) || "-"}</td>
         </tr>
       `;
@@ -395,5 +828,15 @@ function renderizarInformes() {
 
 function mostrarInformesMesActual() {
   dom.informesMesFiltro.value = obtenerMesActualParaInput();
+  renderizarInformes();
+}
+
+function limpiarFiltrosInformes() {
+  dom.informesMesFiltro.value = obtenerMesActualParaInput();
+  dom.informesVendedorFiltro.value = "TODOS";
+  dom.informesZonaFiltro.value = "TODAS";
+  dom.informesClienteFiltro.value = "TODOS";
+  dom.informesRubroFiltro.value = "TODOS";
+  dom.informesEstadoFiltro.value = "TODOS";
   renderizarInformes();
 }

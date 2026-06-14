@@ -3,10 +3,14 @@ const dom = {
   pageTitle: document.querySelector("#pageTitle"),
   currentUserBadge: document.querySelector("#currentUserBadge"),
   sidebarToggleButton: document.querySelector("#sidebarToggleButton"),
+  sidebarBackdrop: document.querySelector("#sidebarBackdrop"),
   menuLinks: document.querySelectorAll(".menu a[data-page]"),
+  quickAccessButtons: document.querySelectorAll("[data-quick-page]"),
   dashboardPage: document.querySelector("#dashboardPage"),
   ventasPage: document.querySelector("#ventasPage"),
   clientesPage: document.querySelector("#clientesPage"),
+  listasPage: document.querySelector("#listasPage"),
+  rubrosPage: document.querySelector("#rubrosPage"),
   zonasPage: document.querySelector("#zonasPage"),
   proveedoresPage: document.querySelector("#proveedoresPage"),
   productosPage: document.querySelector("#productosPage"),
@@ -15,6 +19,7 @@ const dom = {
   movimientosPage: document.querySelector("#movimientosPage"),
   auditoriaPage: document.querySelector("#auditoriaPage"),
   informesPage: document.querySelector("#informesPage"),
+  impresionPage: document.querySelector("#impresionPage"),
 
   /*configuracion*/
   configuracionPage: document.querySelector("#configuracionPage"),
@@ -24,11 +29,47 @@ const dom = {
   whatsappInput: document.querySelector("#whatsappInput"),
   aliasInput: document.querySelector("#aliasInput"),
   stockMinimoInput: document.querySelector("#stockMinimoInput"),
+  impresionForm: document.querySelector("#impresionForm"),
+  impresionTituloInput: document.querySelector("#impresionTituloInput"),
+  impresionSubtituloInput: document.querySelector("#impresionSubtituloInput"),
+  impresionPieInput: document.querySelector("#impresionPieInput"),
+  impresionMostrarQrInput: document.querySelector("#impresionMostrarQrInput"),
+  impresionQrTextoInput: document.querySelector("#impresionQrTextoInput"),
+  impresionPreviewTitulo: document.querySelector("#impresionPreviewTitulo"),
+  impresionPreviewSubtitulo: document.querySelector("#impresionPreviewSubtitulo"),
+  impresionPreviewQr: document.querySelector("#impresionPreviewQr"),
+  cargarSupabaseButton: document.querySelector("#cargarSupabaseButton"),
+  sincronizarDatosBaseButton: document.querySelector("#sincronizarDatosBaseButton"),
+  sincronizarAdministracionButton: document.querySelector("#sincronizarAdministracionButton"),
+  sincronizarClientesProductosButton: document.querySelector("#sincronizarClientesProductosButton"),
+  sincronizarPedidosButton: document.querySelector("#sincronizarPedidosButton"),
+  sincronizarCuentaButton: document.querySelector("#sincronizarCuentaButton"),
+  supabaseSyncStatus: document.querySelector("#supabaseSyncStatus"),
   usuarioForm: document.querySelector("#usuarioForm"),
   usuarioNombreInput: document.querySelector("#usuarioNombreInput"),
   usuarioNuevoRolInput: document.querySelector("#usuarioNuevoRolInput"),
+  rolForm: document.querySelector("#rolForm"),
+  rolNombreInput: document.querySelector("#rolNombreInput"),
+  rolPermisosInputs: document.querySelectorAll("[data-role-permission]"),
   usuariosSistemaTable: document.querySelector("#usuariosSistemaTable"),
   usuarioRolInput: document.querySelector("#usuarioRolInput"),
+  listaPrecioForm: document.querySelector("#listaPrecioForm"),
+  listaPrecioNombreInput: document.querySelector("#listaPrecioNombreInput"),
+  listasPreciosTable: document.querySelector("#listasPreciosTable"),
+  listasPreciosBloque: document.querySelector("#listasPreciosBloque"),
+  baseModuleContent: document.querySelector(".base-module-content"),
+  baseDataMenuButtons: document.querySelectorAll("[data-base-section]"),
+  rubroForm: document.querySelector("#rubroForm"),
+  rubroNombreInput: document.querySelector("#rubroNombreInput"),
+  rubroDescripcionInput: document.querySelector("#rubroDescripcionInput"),
+  rubroSubmitButton: document.querySelector("#rubroSubmitButton"),
+  cancelarEdicionRubroButton: document.querySelector("#cancelarEdicionRubroButton"),
+  buscarRubroInput: document.querySelector("#buscarRubroInput"),
+  rubrosTable: document.querySelector("#rubrosTable"),
+  rubrosActivosResumen: document.querySelector("#rubrosActivosResumen"),
+  rubrosProductosResumen: document.querySelector("#rubrosProductosResumen"),
+  rubrosSinAsignarResumen: document.querySelector("#rubrosSinAsignarResumen"),
+  rubrosActivosLista: document.querySelector("#rubrosActivosLista"),
   zonaForm: document.querySelector("#zonaForm"),
   zonaNombreInput: document.querySelector("#zonaNombreInput"),
   zonaDescripcionInput: document.querySelector("#zonaDescripcionInput"),
@@ -37,7 +78,6 @@ const dom = {
   zonasActivasResumen: document.querySelector("#zonasActivasResumen"),
   zonasClientesResumen: document.querySelector("#zonasClientesResumen"),
   zonasSinAsignarResumen: document.querySelector("#zonasSinAsignarResumen"),
-  zonasActivasLista: document.querySelector("#zonasActivasLista"),
   proveedorForm: document.querySelector("#proveedorForm"),
   proveedorNombreInput: document.querySelector("#proveedorNombreInput"),
   proveedorTelefonoInput: document.querySelector("#proveedorTelefonoInput"),
@@ -70,17 +110,43 @@ const dom = {
   movimientosSalidasResumen: document.querySelector("#movimientosSalidasResumen"),
   movimientosNetoResumen: document.querySelector("#movimientosNetoResumen"),
   buscarAuditoriaInput: document.querySelector("#buscarAuditoriaInput"),
+  auditoriaFechaDesdeFiltro: document.querySelector("#auditoriaFechaDesdeFiltro"),
+  auditoriaFechaHastaFiltro: document.querySelector("#auditoriaFechaHastaFiltro"),
+  auditoriaUsuarioFiltro: document.querySelector("#auditoriaUsuarioFiltro"),
+  auditoriaModuloFiltro: document.querySelector("#auditoriaModuloFiltro"),
+  auditoriaAccionFiltro: document.querySelector("#auditoriaAccionFiltro"),
+  limpiarFiltrosAuditoriaButton: document.querySelector("#limpiarFiltrosAuditoriaButton"),
   limpiarAuditoriaButton: document.querySelector("#limpiarAuditoriaButton"),
   auditoriaTable: document.querySelector("#auditoriaTable"),
   auditoriaTotalResumen: document.querySelector("#auditoriaTotalResumen"),
   auditoriaUltimaResumen: document.querySelector("#auditoriaUltimaResumen"),
   auditoriaUsuarioResumen: document.querySelector("#auditoriaUsuarioResumen"),
   informesMesFiltro: document.querySelector("#informesMesFiltro"),
+  informesVendedorFiltro: document.querySelector("#informesVendedorFiltro"),
+  informesZonaFiltro: document.querySelector("#informesZonaFiltro"),
+  informesClienteFiltro: document.querySelector("#informesClienteFiltro"),
+  informesRubroFiltro: document.querySelector("#informesRubroFiltro"),
+  informesEstadoFiltro: document.querySelector("#informesEstadoFiltro"),
   informesMesActualButton: document.querySelector("#informesMesActualButton"),
+  limpiarFiltrosInformesButton: document.querySelector("#limpiarFiltrosInformesButton"),
+  imprimirInformeButton: document.querySelector("#imprimirInformeButton"),
+  informeEmpresaNombre: document.querySelector("#informeEmpresaNombre"),
+  informeTituloEjecutivo: document.querySelector("#informeTituloEjecutivo"),
+  informeSubtituloEjecutivo: document.querySelector("#informeSubtituloEjecutivo"),
+  informeFiltrosAplicados: document.querySelector("#informeFiltrosAplicados"),
+  informeClientesVendidos: document.querySelector("#informeClientesVendidos"),
+  informeUnidadesVendidas: document.querySelector("#informeUnidadesVendidas"),
+  informeProductosDistintos: document.querySelector("#informeProductosDistintos"),
+  informePedidosCuenta: document.querySelector("#informePedidosCuenta"),
   informeFacturacion: document.querySelector("#informeFacturacion"),
   informePedidos: document.querySelector("#informePedidos"),
   informeTicketPromedio: document.querySelector("#informeTicketPromedio"),
   informeCuentaCorriente: document.querySelector("#informeCuentaCorriente"),
+  informeCostoEstimado: document.querySelector("#informeCostoEstimado"),
+  informeGananciaEstimada: document.querySelector("#informeGananciaEstimada"),
+  informeMargenEstimado: document.querySelector("#informeMargenEstimado"),
+  informeProductosSinCosto: document.querySelector("#informeProductosSinCosto"),
+  informesMensualesTable: document.querySelector("#informesMensualesTable"),
   informeVentasEstado: document.querySelector("#informeVentasEstado"),
   informeProductosVendidos: document.querySelector("#informeProductosVendidos"),
   informeVentasVendedor: document.querySelector("#informeVentasVendedor"),
@@ -101,12 +167,10 @@ const dom = {
   buscarClienteTabla: document.querySelector("#buscarClienteTabla"),
   buscarPedidoTabla: document.querySelector("#buscarPedidoTabla"),
   pedidoFechaFiltro: document.querySelector("#pedidoFechaFiltro"),
-  pedidoMesFiltro: document.querySelector("#pedidoMesFiltro"),
   limpiarFiltrosPedidoButton: document.querySelector("#limpiarFiltrosPedidoButton"),
   pedidosResultadoContador: document.querySelector("#pedidosResultadoContador"),
   pedidoMenuNuevoButton: document.querySelector("#pedidoMenuNuevoButton"),
   pedidoMenuFilterButtons: document.querySelectorAll("[data-order-menu-filter]"),
-  pedidoMenuTotalCount: document.querySelector("#pedidoMenuTotalCount"),
   pedidoMenuPendingCount: document.querySelector("#pedidoMenuPendingCount"),
   pedidoMenuDraftCount: document.querySelector("#pedidoMenuDraftCount"),
   pedidoMenuAttendedCount: document.querySelector("#pedidoMenuAttendedCount"),
@@ -140,6 +204,7 @@ const dom = {
   pedidoItemCount: document.querySelector("#pedidoItemCount"),
   pedidoNumeroPreview: document.querySelector("#pedidoNumeroPreview"),
   pedidoVendedorPreview: document.querySelector("#pedidoVendedorPreview"),
+  pedidoListaPreview: document.querySelector("#pedidoListaPreview"),
   pedidoItemsTable: document.querySelector("#pedidoItemsTable"),
   pedidoTotal: document.querySelector("#pedidoTotal"),
   guardarBorradorPedidoButton: document.querySelector("#guardarBorradorPedidoButton"),
@@ -161,6 +226,19 @@ const dom = {
   clientPhoneInput: document.querySelector("#clientPhoneInput"),
   clientAddressInput: document.querySelector("#clientAddressInput"),
   clientZoneInput: document.querySelector("#clientZoneInput"),
+  clientRazonSocialInput: document.querySelector("#clientRazonSocialInput"),
+  clientNombreFantasiaInput: document.querySelector("#clientNombreFantasiaInput"),
+  clientLocalidadInput: document.querySelector("#clientLocalidadInput"),
+  clientCodigoPostalInput: document.querySelector("#clientCodigoPostalInput"),
+  clientTelefonoParticularInput: document.querySelector("#clientTelefonoParticularInput"),
+  clientTelefonoMovilInput: document.querySelector("#clientTelefonoMovilInput"),
+  clientEmailInput: document.querySelector("#clientEmailInput"),
+  clientListaPreciosInput: document.querySelector("#clientListaPreciosInput"),
+  clientPosicionZonaInput: document.querySelector("#clientPosicionZonaInput"),
+  clientVendedorAsignadoInput: document.querySelector("#clientVendedorAsignadoInput"),
+  clientCondicionIvaInput: document.querySelector("#clientCondicionIvaInput"),
+  clientHorarioAtencionInput: document.querySelector("#clientHorarioAtencionInput"),
+  clientObservacionesInput: document.querySelector("#clientObservacionesInput"),
   clientsTable: document.querySelector("#clientsTable"),
   clientesImportacionTexto: document.querySelector("#clientesImportacionTexto"),
   importarClientesButton: document.querySelector("#importarClientesButton"),
@@ -182,6 +260,11 @@ const dom = {
   /*cuentas*/
   pedidosAtendidosDashboard: document.querySelector("#pedidosAtendidosDashboard"),
   pedidosPendientesDashboard: document.querySelector("#pedidosPendientesDashboard"),
+  dashboardPrioridadResumen: document.querySelector("#dashboardPrioridadResumen"),
+  dashboardPedidosPendientesLista: document.querySelector("#dashboardPedidosPendientesLista"),
+  dashboardStockCriticoLista: document.querySelector("#dashboardStockCriticoLista"),
+  dashboardCobranzaLista: document.querySelector("#dashboardCobranzaLista"),
+  dashboardReposicionLista: document.querySelector("#dashboardReposicionLista"),
   porCobrar: document.querySelector("#porCobrar"),
   clientesConDeuda: document.querySelector("#clientesConDeuda"),
   buscarCuentaClienteInput: document.querySelector("#buscarCuentaClienteInput"),
@@ -198,10 +281,25 @@ const dom = {
   /*Producto*/
   productForm: document.querySelector("#productForm"),
   productCodeInput: document.querySelector("#productCodeInput"),
+  productBarcodeInput: document.querySelector("#productBarcodeInput"),
   productNameInput: document.querySelector("#productNameInput"),
   productPriceInput: document.querySelector("#productPriceInput"),
+  productPriceList2Input: document.querySelector("#productPriceList2Input"),
+  productPriceList3Input: document.querySelector("#productPriceList3Input"),
+  productPriceList4Input: document.querySelector("#productPriceList4Input"),
+  productPurchasePriceInput: document.querySelector("#productPurchasePriceInput"),
   productStockInput: document.querySelector("#productStockInput"),
+  productMinimumStockInput: document.querySelector("#productMinimumStockInput"),
+  productCategoryInput: document.querySelector("#productCategoryInput"),
+  productTypeInput: document.querySelector("#productTypeInput"),
+  productBrandInput: document.querySelector("#productBrandInput"),
+  productDetailInput: document.querySelector("#productDetailInput"),
+  productPackInput: document.querySelector("#productPackInput"),
+  productUnitInput: document.querySelector("#productUnitInput"),
+  productIvaInput: document.querySelector("#productIvaInput"),
+  productSaleDiscountInput: document.querySelector("#productSaleDiscountInput"),
   productProviderInput: document.querySelector("#productProviderInput"),
+  productAltProviderInput: document.querySelector("#productAltProviderInput"),
   productsTable: document.querySelector("#productsTable"),
   productSubmitButton: document.querySelector("#productSubmitButton"),
   productosResultadoContador: document.querySelector("#productosResultadoContador"),
@@ -216,8 +314,28 @@ const dom = {
   productosListadoBloque: document.querySelector("#productosListadoBloque"),
   productoAltaBloque: document.querySelector("#productoAltaBloque"),
   productosImportacionBloque: document.querySelector("#productosImportacionBloque"),
+  productosPreciosBloque: document.querySelector("#productosPreciosBloque"),
+  priceUpdateForm: document.querySelector("#priceUpdateForm"),
+  priceUpdateRubroInput: document.querySelector("#priceUpdateRubroInput"),
+  priceUpdateProveedorInput: document.querySelector("#priceUpdateProveedorInput"),
+  priceUpdateListaInput: document.querySelector("#priceUpdateListaInput"),
+  priceUpdatePercentInput: document.querySelector("#priceUpdatePercentInput"),
+  priceUpdatePreview: document.querySelector("#priceUpdatePreview"),
+  priceHistoryTable: document.querySelector("#priceHistoryTable"),
   productosMovimientosBloque: document.querySelector("#productosMovimientosBloque"),
   buscarMovimientoProductoInput: document.querySelector("#buscarMovimientoProductoInput"),
+  stockScannerInput: document.querySelector("#stockScannerInput"),
+  stockScannerResult: document.querySelector("#stockScannerResult"),
+  stockQuickQuantityInput: document.querySelector("#stockQuickQuantityInput"),
+  stockQuickNoteInput: document.querySelector("#stockQuickNoteInput"),
+  stockQuickActionButtons: document.querySelectorAll("[data-stock-quick-action]"),
+  stockMovementForm: document.querySelector("#stockMovementForm"),
+  stockProductInput: document.querySelector("#stockProductInput"),
+  productosStockLista: document.querySelector("#productosStockLista"),
+  stockMovementTypeInput: document.querySelector("#stockMovementTypeInput"),
+  stockMovementQuantityInput: document.querySelector("#stockMovementQuantityInput"),
+  stockMovementNoteInput: document.querySelector("#stockMovementNoteInput"),
+  stockMovementPreview: document.querySelector("#stockMovementPreview"),
   movimientosProductosTable: document.querySelector("#movimientosProductosTable"),
   movimientosProductosTotal: document.querySelector("#movimientosProductosTotal"),
   movimientosProductosUnidades: document.querySelector("#movimientosProductosUnidades"),
@@ -233,13 +351,139 @@ const dom = {
   detallePedidoTitulo: document.querySelector("#detallePedidoTitulo"),
   detallePedidoContenido: document.querySelector("#detallePedidoContenido"),
   cerrarDetallePedido: document.querySelector("#cerrarDetallePedido"),
+  entregaPedidoModal: document.querySelector("#entregaPedidoModal"),
+  entregaPedidoForm: document.querySelector("#entregaPedidoForm"),
+  entregaPedidoResumen: document.querySelector("#entregaPedidoResumen"),
+  entregaPagoInput: document.querySelector("#entregaPagoInput"),
+  entregaSaldoPreview: document.querySelector("#entregaSaldoPreview"),
+  entregaSinPagoButton: document.querySelector("#entregaSinPagoButton"),
+  entregaPagoTotalButton: document.querySelector("#entregaPagoTotalButton"),
+  cancelarEntregaPedidoButton: document.querySelector("#cancelarEntregaPedidoButton"),
+  cerrarEntregaPedido: document.querySelector("#cerrarEntregaPedido"),
   movimientosStockModal: document.querySelector("#movimientosStockModal"),
   movimientosStockTitulo: document.querySelector("#movimientosStockTitulo"),
   movimientosStockContenido: document.querySelector("#movimientosStockContenido"),
   cerrarMovimientosStock: document.querySelector("#cerrarMovimientosStock"),
 };
 
-let filtroEstadoPedidos = "TODOS";
+let filtroEstadoPedidos = "PENDIENTE";
+
+function renderizarListaDashboard(contenedor, items, crearFila, mensajeVacio) {
+  if (!contenedor) {
+    return;
+  }
+
+  if (items.length === 0) {
+    contenedor.innerHTML =
+      `<div class="dashboard-empty">${mensajeVacio}</div>`;
+    return;
+  }
+
+  contenedor.innerHTML =
+    items.map(crearFila).join("");
+}
+
+function obtenerPedidosPendientesParaDashboard() {
+  return pedidos.filter(function (pedido) {
+    return pedido.estado === "PENDIENTE";
+  }).sort(function (primero, segundo) {
+    return segundo.id - primero.id;
+  }).slice(0, 5);
+}
+
+function obtenerProductosCriticosParaDashboard() {
+  return productos.filter(function (producto) {
+    const estadoStock = obtenerEstadoStockProducto(producto);
+
+    return productoActivo(producto) &&
+      (estadoStock.clase === "stock-low" || estadoStock.clase === "stock-empty");
+  }).sort(function (primero, segundo) {
+    return Number(primero.stock) - Number(segundo.stock);
+  }).slice(0, 5);
+}
+
+function obtenerClientesDeudoresParaDashboard() {
+  return clientes.filter(function (cliente) {
+    return clienteActivo(cliente) && Number(cliente.saldo) > 0;
+  }).sort(function (primero, segundo) {
+    return Number(segundo.saldo) - Number(primero.saldo);
+  }).slice(0, 5);
+}
+
+function renderizarCentroControlDashboard() {
+  const pedidosPendientes = obtenerPedidosPendientesParaDashboard();
+  const productosCriticos = obtenerProductosCriticosParaDashboard();
+  const clientesDeudores = obtenerClientesDeudoresParaDashboard();
+  const alertasTotales =
+    pedidosPendientes.length + productosCriticos.length + clientesDeudores.length;
+
+  dom.dashboardPrioridadResumen.textContent =
+    alertasTotales === 0
+      ? "Sin alertas importantes"
+      : alertasTotales + " prioridades para revisar";
+
+  renderizarListaDashboard(
+    dom.dashboardPedidosPendientesLista,
+    pedidosPendientes,
+    function (pedido) {
+      const clientePedido = pedido.cliente ? pedido.cliente.nombre : "Sin cliente";
+
+      return `
+        <div class="dashboard-alert-row">
+          <span>Pedido #${pedido.id} | ${clientePedido}</span>
+          <strong>${formatearDinero(pedido.total)}</strong>
+        </div>
+      `;
+    },
+    "No hay pedidos pendientes."
+  );
+
+  renderizarListaDashboard(
+    dom.dashboardStockCriticoLista,
+    productosCriticos,
+    function (producto) {
+      return `
+        <div class="dashboard-alert-row">
+          <span>${producto.codigo} - ${producto.nombre}</span>
+          <strong>Stock ${producto.stock}</strong>
+        </div>
+      `;
+    },
+    "No hay productos criticos."
+  );
+
+  renderizarListaDashboard(
+    dom.dashboardCobranzaLista,
+    clientesDeudores,
+    function (cliente) {
+      return `
+        <div class="dashboard-alert-row">
+          <span>${cliente.codigo} - ${cliente.nombre}</span>
+          <strong>${formatearDinero(cliente.saldo)}</strong>
+        </div>
+      `;
+    },
+    "No hay saldos pendientes."
+  );
+
+  renderizarListaDashboard(
+    dom.dashboardReposicionLista,
+    productosCriticos,
+    function (producto) {
+      const stockMinimo = Number(CONFIG.stockMinimo) || 0;
+      const cantidadSugerida = Math.max(stockMinimo * 2 - Number(producto.stock), stockMinimo);
+
+      return `
+        <div class="dashboard-alert-row">
+          <span>${producto.codigo} - ${producto.nombre}</span>
+          <strong>Comprar ${cantidadSugerida}</strong>
+        </div>
+      `;
+    },
+    "Sin reposiciones urgentes."
+  );
+}
+
 function actualizarDashboard() {
 
   const pendientes =
@@ -272,6 +516,8 @@ function actualizarDashboard() {
 
   dom.cantidadProductos.textContent =
     productos.length;
+
+  renderizarCentroControlDashboard();
 }
 
 function contarPedidosPorEstado(estado) {
@@ -286,8 +532,25 @@ function obtenerPedidosPorEstados(estados) {
   });
 }
 
+function obtenerPedidosPorEstadosDeCobro(estadosDeCobro) {
+  return pedidos.filter(function (pedido) {
+    return estadosDeCobro.includes(pedido.estadoCobro) ||
+      estadosDeCobro.includes(pedido.estado);
+  });
+}
+
 function sumarTotalPedidosPorEstados(estados) {
   return obtenerPedidosPorEstados(estados).reduce(function (total, pedido) {
+    return total + (Number(pedido.total) || 0);
+  }, 0);
+}
+
+function sumarSaldoPedidosPorEstadosDeCobro(estadosDeCobro) {
+  return obtenerPedidosPorEstadosDeCobro(estadosDeCobro).reduce(function (total, pedido) {
+    if (typeof pedido.saldoPendiente === "number") {
+      return total + pedido.saldoPendiente;
+    }
+
     return total + (Number(pedido.total) || 0);
   }, 0);
 }
@@ -308,7 +571,7 @@ function actualizarResumenPedidos() {
     obtenerPedidosPorEstados(["ATENDIDO", "ENTREGADO"]);
 
   const pedidosCuentaCorriente =
-    obtenerPedidosPorEstados(["CUENTA_CORRIENTE"]);
+    obtenerPedidosPorEstadosDeCobro(["CUENTA_CORRIENTE"]);
 
   dom.pedidoResumenBorradores.textContent =
     contarPedidosPorEstado("BORRADOR");
@@ -324,28 +587,29 @@ function actualizarResumenPedidos() {
     obtenerTextoCantidadPedidos(pedidosEnEntrega.length);
 
   dom.pedidoResumenCuenta.textContent =
-    formatearDinero(sumarTotalPedidosPorEstados(["CUENTA_CORRIENTE"]));
+    formatearDinero(sumarSaldoPedidosPorEstadosDeCobro(["CUENTA_CORRIENTE"]));
   dom.pedidoResumenCuentaCantidad.textContent =
     obtenerTextoCantidadPedidos(pedidosCuentaCorriente.length);
 }
 
 function actualizarMenuPedidos() {
-  if (!dom.pedidoMenuTotalCount) {
+  if (!dom.pedidoMenuPendingCount) {
     return;
   }
 
-  dom.pedidoMenuTotalCount.textContent = pedidos.length;
   dom.pedidoMenuPendingCount.textContent = contarPedidosPorEstado("PENDIENTE");
   dom.pedidoMenuDraftCount.textContent = contarPedidosPorEstado("BORRADOR");
   dom.pedidoMenuAttendedCount.textContent = contarPedidosPorEstado("ATENDIDO");
   dom.pedidoMenuDeliveredCount.textContent = contarPedidosPorEstado("ENTREGADO");
 
   if (dom.pedidoMenuAccountCount) {
-    dom.pedidoMenuAccountCount.textContent = contarPedidosPorEstado("CUENTA_CORRIENTE");
+    dom.pedidoMenuAccountCount.textContent =
+      obtenerPedidosPorEstadosDeCobro(["CUENTA_CORRIENTE"]).length;
   }
 
   if (dom.pedidoMenuPaidCount) {
-    dom.pedidoMenuPaidCount.textContent = contarPedidosPorEstado("COBRADO");
+    dom.pedidoMenuPaidCount.textContent =
+      obtenerPedidosPorEstadosDeCobro(["COBRADO"]).length;
   }
 
   if (dom.pedidoMenuCancelledCount) {
@@ -384,7 +648,12 @@ function mostrarSeccionProducto(seccion) {
   dom.productosTablaBloque.classList.toggle("hidden", !mostrarListado);
   dom.productForm.classList.toggle("hidden", seccionActual !== "alta");
   dom.productosImportacionBloque.classList.toggle("hidden", seccionActual !== "importar");
+  dom.productosPreciosBloque.classList.toggle("hidden", seccionActual !== "precios");
   dom.productosMovimientosBloque.classList.toggle("hidden", seccionActual !== "movimientos");
+
+  if (seccionActual === "precios") {
+    renderizarPanelPreciosProductos();
+  }
 
   if (seccionActual === "alta") {
     dom.productCodeInput.focus();
@@ -446,6 +715,112 @@ function mostrarSeccionCuenta(seccion) {
   }
 }
 
+function actualizarEstadoSincronizacionSupabase(mensaje, tipo) {
+  if (!dom.supabaseSyncStatus) {
+    return;
+  }
+
+  dom.supabaseSyncStatus.textContent = mensaje;
+  dom.supabaseSyncStatus.classList.remove("sync-ok", "sync-error", "sync-working");
+
+  if (tipo) {
+    dom.supabaseSyncStatus.classList.add(tipo);
+  }
+}
+
+async function ejecutarAccionSupabase(nombreAccion, accion, requiereConfirmacion) {
+  if (requiereConfirmacion) {
+    const confirmar =
+      confirm(
+        nombreAccion + "\n\n" +
+        "Esto enviara datos de la empresa a Supabase. Continuar?"
+      );
+
+    if (!confirmar) {
+      return;
+    }
+  }
+
+  try {
+    actualizarEstadoSincronizacionSupabase(nombreAccion + " en curso...", "sync-working");
+    const resultado =
+      await accion();
+
+    actualizarEstadoSincronizacionSupabase(
+      nombreAccion + " terminado. " + JSON.stringify(resultado),
+      "sync-ok"
+    );
+  } catch (error) {
+    console.error(nombreAccion + " fallo:", error);
+    actualizarEstadoSincronizacionSupabase(
+      nombreAccion + " fallo. Revisa consola o permisos de Supabase.",
+      "sync-error"
+    );
+  }
+}
+
+async function cargarTodoDesdeSupabase() {
+  await cargarDatosBaseDesdeSupabase();
+  await cargarAdministracionDesdeSupabase();
+  await cargarClientesDesdeSupabase();
+  await cargarProductosDesdeSupabase();
+  await cargarPedidosDesdeSupabase();
+
+  return "Datos cargados desde Supabase";
+}
+
+async function sincronizarClientesYProductosConSupabase() {
+  const clientesCantidad =
+    await sincronizarClientesLocalesConSupabase();
+  const productosCantidad =
+    await sincronizarProductosLocalesConSupabase();
+
+  return {
+    clientes: clientesCantidad,
+    productos: productosCantidad
+  };
+}
+
+function mostrarSeccionDatosBase(seccion) {
+  const seccionActual = seccion || "precios";
+
+  if (dom.baseModuleContent) {
+    if (dom.rubrosPage.parentElement !== dom.baseModuleContent) {
+      dom.baseModuleContent.appendChild(dom.rubrosPage);
+    }
+
+    if (dom.zonasPage.parentElement !== dom.baseModuleContent) {
+      dom.baseModuleContent.appendChild(dom.zonasPage);
+    }
+  }
+
+  dom.baseDataMenuButtons.forEach(function (boton) {
+    boton.classList.toggle(
+      "active",
+      boton.dataset.baseSection === seccionActual
+    );
+  });
+
+  dom.listasPreciosBloque.classList.toggle("hidden", seccionActual !== "precios");
+  dom.rubrosPage.classList.toggle("hidden", seccionActual !== "rubros");
+  dom.zonasPage.classList.toggle("hidden", seccionActual !== "zonas");
+
+  if (seccionActual === "precios") {
+    renderizarListasPrecios();
+    dom.listaPrecioNombreInput.focus();
+  }
+
+  if (seccionActual === "rubros") {
+    renderizarRubros();
+    dom.rubroNombreInput.focus();
+  }
+
+  if (seccionActual === "zonas") {
+    renderizarZonas();
+    dom.zonaNombreInput.focus();
+  }
+}
+
 function abrirNuevoPedidoDesdeMenu() {
   if (pedidoActualTieneDatos()) {
     const confirmar =
@@ -483,6 +858,8 @@ function obtenerModuloDesdePagina(nombrePagina) {
     dashboard: null,
     ventas: "ventas",
     clientes: "clientes",
+    listas: "rubros",
+    rubros: "rubros",
     zonas: "zonas",
     proveedores: "proveedores",
     productos: "productos",
@@ -490,6 +867,7 @@ function obtenerModuloDesdePagina(nombrePagina) {
     compras: "compras",
     movimientos: "movimientos",
     configuracion: "configuracion",
+    impresion: "impresion",
     auditoria: "auditoria",
     informes: "informes"
   };
@@ -535,6 +913,8 @@ function mostrarPagina(nombre) {
     dashboard: "Escritorio",
     ventas: "Pedidos",
     clientes: "Clientes",
+    listas: "Listas",
+    rubros: "Rubros",
     zonas: "Zonas",
     proveedores: "Proveedores",
     productos: "Productos",
@@ -542,6 +922,7 @@ function mostrarPagina(nombre) {
     compras: "Compras",
     movimientos: "Movimientos",
     configuracion: "Configuracion",
+    impresion: "Impresion",
     auditoria: "Auditoria",
     informes: "Informes"
   };
@@ -550,6 +931,8 @@ function mostrarPagina(nombre) {
   dom.dashboardPage.classList.add("hidden");
   dom.ventasPage.classList.add("hidden");
   dom.clientesPage.classList.add("hidden");
+  dom.listasPage.classList.add("hidden");
+  dom.rubrosPage.classList.add("hidden");
   dom.zonasPage.classList.add("hidden");
   dom.proveedoresPage.classList.add("hidden");
   dom.productosPage.classList.add("hidden");
@@ -557,6 +940,7 @@ function mostrarPagina(nombre) {
   dom.comprasPage.classList.add("hidden");
   dom.movimientosPage.classList.add("hidden");
   dom.configuracionPage.classList.add("hidden");
+  dom.impresionPage.classList.add("hidden");
   dom.auditoriaPage.classList.add("hidden");
   dom.informesPage.classList.add("hidden");
   if (dom.pedidoFormPanel) {
@@ -568,6 +952,13 @@ function mostrarPagina(nombre) {
 
   dom.menuLinks.forEach(function (link) {
     link.classList.remove("active");
+  });
+
+  dom.quickAccessButtons.forEach(function (button) {
+    button.classList.toggle(
+      "active",
+      button.dataset.quickPage === nombre
+    );
   });
 
   const linkActivo =
@@ -593,6 +984,16 @@ function mostrarPagina(nombre) {
 
   if (nombre === "clientes") {
     dom.clientesPage.classList.remove("hidden");
+  }
+
+  if (nombre === "listas") {
+    dom.listasPage.classList.remove("hidden");
+    mostrarSeccionDatosBase("precios");
+  }
+
+  if (nombre === "rubros") {
+    dom.rubrosPage.classList.remove("hidden");
+    renderizarRubros();
   }
 
   if (nombre === "zonas") {
@@ -628,6 +1029,11 @@ function mostrarPagina(nombre) {
     dom.configuracionPage.classList.remove("hidden");
   }
 
+  if (nombre === "impresion") {
+    dom.impresionPage.classList.remove("hidden");
+    renderizarConfiguracionImpresion();
+  }
+
   if (nombre === "auditoria") {
     dom.auditoriaPage.classList.remove("hidden");
     renderizarAuditoria();
@@ -639,12 +1045,54 @@ function mostrarPagina(nombre) {
   }
 }
 
+function obtenerContenedorApp() {
+  return document.querySelector(".app");
+}
+
+let sidebarColapsadoActual = true;
+
+function actualizarEstadoSidebar(colapsado) {
+  const app =
+    obtenerContenedorApp();
+
+  sidebarColapsadoActual = colapsado;
+
+  app.classList.toggle("sidebar-collapsed", colapsado);
+
+  dom.sidebarToggleButton.setAttribute(
+    "aria-label",
+    colapsado ? "Abrir menu" : "Cerrar menu"
+  );
+  dom.sidebarToggleButton.setAttribute(
+    "aria-expanded",
+    String(!colapsado)
+  );
+}
+
+function alternarSidebar() {
+  const app =
+    obtenerContenedorApp();
+  const estaColapsado =
+    app.classList.contains("sidebar-collapsed");
+
+  actualizarEstadoSidebar(!estaColapsado);
+}
+
+function inicializarSidebar() {
+  actualizarEstadoSidebar(sidebarColapsadoActual);
+}
+
 function configurarEventos() {
 
   dom.sidebarToggleButton.addEventListener(
     "click",
+    alternarSidebar
+  );
+
+  dom.sidebarBackdrop.addEventListener(
+    "click",
     function () {
-      document.querySelector(".app").classList.toggle("sidebar-collapsed");
+      actualizarEstadoSidebar(true);
     }
   );
 
@@ -653,15 +1101,115 @@ function configurarEventos() {
     link.addEventListener("click", function () {
 
       mostrarPagina(link.dataset.page);
+      actualizarEstadoSidebar(true);
 
     });
 
+  });
+
+  dom.quickAccessButtons.forEach(function (button) {
+
+    button.addEventListener("click", function () {
+
+      mostrarPagina(button.dataset.quickPage);
+      actualizarEstadoSidebar(true);
+
+    });
+
+  });
+
+  dom.baseDataMenuButtons.forEach(function (boton) {
+    boton.addEventListener("click", function () {
+      mostrarSeccionDatosBase(boton.dataset.baseSection);
+    });
   });
 
   dom.configForm.addEventListener(
     "submit",
     guardarFormularioConfiguracion
   );
+
+  dom.impresionForm.addEventListener(
+    "submit",
+    guardarFormularioImpresion
+  );
+
+  dom.cargarSupabaseButton.addEventListener(
+    "click",
+    function () {
+      ejecutarAccionSupabase(
+        "Cargar datos desde Supabase",
+        cargarTodoDesdeSupabase,
+        false
+      );
+    }
+  );
+
+  dom.sincronizarDatosBaseButton.addEventListener(
+    "click",
+    function () {
+      ejecutarAccionSupabase(
+        "Subir datos base a Supabase",
+        sincronizarDatosBaseLocalesConSupabase,
+        true
+      );
+    }
+  );
+
+  dom.sincronizarAdministracionButton.addEventListener(
+    "click",
+    function () {
+      ejecutarAccionSupabase(
+        "Subir administracion a Supabase",
+        sincronizarAdministracionLocalConSupabase,
+        true
+      );
+    }
+  );
+
+  dom.sincronizarClientesProductosButton.addEventListener(
+    "click",
+    function () {
+      ejecutarAccionSupabase(
+        "Subir clientes y productos a Supabase",
+        sincronizarClientesYProductosConSupabase,
+        true
+      );
+    }
+  );
+
+  dom.sincronizarPedidosButton.addEventListener(
+    "click",
+    function () {
+      ejecutarAccionSupabase(
+        "Subir pedidos a Supabase",
+        sincronizarPedidosLocalesConSupabase,
+        true
+      );
+    }
+  );
+
+  dom.sincronizarCuentaButton.addEventListener(
+    "click",
+    function () {
+      ejecutarAccionSupabase(
+        "Subir cuenta corriente a Supabase",
+        sincronizarCuentaCorrienteLocalConSupabase,
+        true
+      );
+    }
+  );
+
+  [
+    dom.impresionTituloInput,
+    dom.impresionSubtituloInput,
+    dom.impresionPieInput,
+    dom.impresionMostrarQrInput,
+    dom.impresionQrTextoInput
+  ].forEach(function (input) {
+    input.addEventListener("input", actualizarVistaPreviaImpresion);
+    input.addEventListener("change", actualizarVistaPreviaImpresion);
+  });
 
   dom.usuarioRolInput.addEventListener(
     "change",
@@ -673,6 +1221,31 @@ function configurarEventos() {
   dom.usuarioForm.addEventListener(
     "submit",
     agregarUsuarioSistema
+  );
+
+  dom.rolForm.addEventListener(
+    "submit",
+    agregarRolPersonalizado
+  );
+
+  dom.listaPrecioForm.addEventListener(
+    "submit",
+    agregarListaPrecio
+  );
+
+  dom.rubroForm.addEventListener(
+    "submit",
+    agregarRubro
+  );
+
+  dom.cancelarEdicionRubroButton.addEventListener(
+    "click",
+    cancelarEdicionRubro
+  );
+
+  dom.buscarRubroInput.addEventListener(
+    "input",
+    renderizarRubros
   );
 
   dom.zonaForm.addEventListener(
@@ -725,6 +1298,21 @@ function configurarEventos() {
     renderizarAuditoria
   );
 
+  [
+    dom.auditoriaFechaDesdeFiltro,
+    dom.auditoriaFechaHastaFiltro,
+    dom.auditoriaUsuarioFiltro,
+    dom.auditoriaModuloFiltro,
+    dom.auditoriaAccionFiltro
+  ].forEach(function (input) {
+    input.addEventListener("change", renderizarAuditoria);
+  });
+
+  dom.limpiarFiltrosAuditoriaButton.addEventListener(
+    "click",
+    limpiarFiltrosAuditoria
+  );
+
   dom.limpiarAuditoriaButton.addEventListener(
     "click",
     limpiarAuditoria
@@ -735,9 +1323,31 @@ function configurarEventos() {
     renderizarInformes
   );
 
+  [
+    dom.informesVendedorFiltro,
+    dom.informesZonaFiltro,
+    dom.informesClienteFiltro,
+    dom.informesRubroFiltro,
+    dom.informesEstadoFiltro
+  ].forEach(function (input) {
+    input.addEventListener("change", renderizarInformes);
+  });
+
   dom.informesMesActualButton.addEventListener(
     "click",
     mostrarInformesMesActual
+  );
+
+  dom.limpiarFiltrosInformesButton.addEventListener(
+    "click",
+    limpiarFiltrosInformes
+  );
+
+  dom.imprimirInformeButton.addEventListener(
+    "click",
+    function () {
+      window.print();
+    }
   );
 
   dom.resetDataButton.addEventListener(
@@ -752,16 +1362,23 @@ function configurarEventos() {
         return;
       }
 
-      localStorage.removeItem("clientes");
-      localStorage.removeItem("productos");
-      localStorage.removeItem("pedidos");
-      localStorage.removeItem("configuracion");
-      localStorage.removeItem("usuarioActual");
-      localStorage.removeItem("usuariosSistema");
-      localStorage.removeItem("auditoria");
-      localStorage.removeItem("zonas");
-      localStorage.removeItem("proveedores");
-      localStorage.removeItem("compras");
+      [
+        "clientes",
+        "productos",
+        "pedidos",
+        "configuracion",
+        "usuarioActual",
+        "usuariosSistema",
+        "auditoria",
+        "rubros",
+        "listasPrecios",
+        "zonas",
+        "proveedores",
+        "compras",
+        "informesMensuales"
+      ].forEach(function (nombreDeLista) {
+        dataStore.borrarLista(nombreDeLista);
+      });
 
       location.reload();
 
@@ -804,17 +1421,6 @@ function configurarEventos() {
 
   dom.pedidoFechaFiltro.addEventListener(
     "change",
-    function () {
-      if (dom.pedidoFechaFiltro.value) {
-        dom.pedidoMesFiltro.value = dom.pedidoFechaFiltro.value.slice(0, 7);
-      }
-
-      renderizarPedidos();
-    }
-  );
-
-  dom.pedidoMesFiltro.addEventListener(
-    "change",
     renderizarPedidos
   );
 
@@ -843,8 +1449,7 @@ function configurarEventos() {
     function () {
       dom.buscarPedidoTabla.value = "";
       dom.pedidoFechaFiltro.value = "";
-      dom.pedidoMesFiltro.value = "";
-      filtroEstadoPedidos = "TODOS";
+      filtroEstadoPedidos = "PENDIENTE";
       renderizarPedidos();
     }
   );
@@ -871,6 +1476,58 @@ function configurarEventos() {
       mostrarSeccionProducto(boton.dataset.productSection);
     });
   });
+
+  dom.stockScannerInput.addEventListener(
+    "keydown",
+    function (event) {
+      if (event.key !== "Enter") {
+        return;
+      }
+
+      event.preventDefault();
+      buscarProductoDesdeScannerStock();
+    }
+  );
+
+  dom.stockScannerInput.addEventListener(
+    "input",
+    actualizarVistaScannerStock
+  );
+
+  dom.stockQuickActionButtons.forEach(function (boton) {
+    boton.addEventListener("click", function () {
+      registrarMovimientoRapidoStock(boton.dataset.stockQuickAction);
+    });
+  });
+
+  [
+    dom.stockProductInput,
+    dom.stockMovementTypeInput,
+    dom.stockMovementQuantityInput
+  ].forEach(function (input) {
+    input.addEventListener("input", actualizarVistaMovimientoStock);
+    input.addEventListener("change", actualizarVistaMovimientoStock);
+  });
+
+  dom.stockMovementForm.addEventListener(
+    "submit",
+    registrarMovimientoManualStock
+  );
+
+  [
+    dom.priceUpdateRubroInput,
+    dom.priceUpdateProveedorInput,
+    dom.priceUpdateListaInput,
+    dom.priceUpdatePercentInput
+  ].forEach(function (input) {
+    input.addEventListener("input", actualizarVistaActualizacionPrecios);
+    input.addEventListener("change", actualizarVistaActualizacionPrecios);
+  });
+
+  dom.priceUpdateForm.addEventListener(
+    "submit",
+    aplicarActualizacionMasivaPrecios
+  );
 
   dom.clientStatusFilterButtons.forEach(function (boton) {
     boton.addEventListener("click", function () {
@@ -1035,6 +1692,55 @@ function configurarEventos() {
     }
   );
 
+  dom.entregaPedidoModal.addEventListener(
+    "click",
+    function (e) {
+      if (e.target === dom.entregaPedidoModal) {
+        cerrarEntregaPedidoModal();
+      }
+    }
+  );
+
+  dom.cerrarEntregaPedido.addEventListener(
+    "click",
+    cerrarEntregaPedidoModal
+  );
+
+  dom.cancelarEntregaPedidoButton.addEventListener(
+    "click",
+    cerrarEntregaPedidoModal
+  );
+
+  dom.entregaPagoInput.addEventListener(
+    "input",
+    actualizarVistaEntregaPedido
+  );
+
+  dom.entregaSinPagoButton.addEventListener(
+    "click",
+    function () {
+      dom.entregaPagoInput.value = 0;
+      actualizarVistaEntregaPedido();
+    }
+  );
+
+  dom.entregaPagoTotalButton.addEventListener(
+    "click",
+    function () {
+      if (!pedidoEntregaPendiente) {
+        return;
+      }
+
+      dom.entregaPagoInput.value = Number(pedidoEntregaPendiente.total) || 0;
+      actualizarVistaEntregaPedido();
+    }
+  );
+
+  dom.entregaPedidoForm.addEventListener(
+    "submit",
+    confirmarEntregaPedido
+  );
+
   dom.movimientosStockModal.addEventListener(
     "click",
     function (e) {
@@ -1061,17 +1767,21 @@ function iniciarApp() {
   cargarDatos();
 
   cargarConfiguracion();
+  cargarRolesPersonalizados();
   cargarUsuariosSistema();
   cargarUsuarioActual();
   cargarAuditoria();
   renderizarConfiguracion();
   renderizarUsuarioActual();
   renderizarUsuariosSistema();
+  renderizarListasPrecios();
+  renderizarRubros();
   renderizarZonas();
   renderizarProveedores();
   renderizarCompras();
   renderizarMovimientosGenerales();
   aplicarPermisosDeUsuario();
+  inicializarSidebar();
   configurarEventos();
   actualizarVistaBusqueda();
   renderizarClientes();

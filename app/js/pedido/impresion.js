@@ -11,11 +11,28 @@ function obtenerItemsParaImprimirPedido(pedido) {
         <td>${item.producto.nombre}</td>
         <td>${item.cantidad}</td>
         <td>${descuentoTexto}</td>
-        <td>${formatearDinero(item.producto.precio)}</td>
+        <td>${formatearDinero(typeof item.precioUnitario === "number" ? item.precioUnitario : item.producto.precio)}</td>
         <td>${formatearDinero(item.subtotal)}</td>
       </tr>
     `;
     }).join("");
+}
+
+function obtenerQrComprobanteHtml() {
+    if (!CONFIG.impresionMostrarQr || !CONFIG.impresionQrTexto) {
+        return "";
+    }
+
+    const textoQr =
+        encodeURIComponent(CONFIG.impresionQrTexto);
+
+    return `
+      <div class="qr-box">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${textoQr}" alt="QR de pago">
+        <strong>Pago QR</strong>
+        <span>${CONFIG.impresionQrTexto}</span>
+      </div>
+    `;
 }
 
 function imprimirPedido(pedidoParaImprimir) {
@@ -34,6 +51,15 @@ function imprimirPedido(pedidoParaImprimir) {
         return;
     }
 
+    const tituloComprobante =
+        CONFIG.impresionTitulo || CONFIG.empresa || "LV Sistema";
+
+    const subtituloComprobante =
+        CONFIG.impresionSubtitulo || "Distribuidora";
+
+    const pieComprobante =
+        CONFIG.impresionPie || "";
+
     ventana.document.write(`
     <!DOCTYPE html>
     <html lang="es">
@@ -50,6 +76,11 @@ function imprimirPedido(pedidoParaImprimir) {
         th { background: #f3f6fa; }
         .total { margin-top: 20px; text-align: right; font-size: 24px; font-weight: 800; }
         .box { border: 1px solid #d8e1ec; border-radius: 8px; padding: 14px; margin-top: 18px; }
+        .brand { text-align: right; }
+        .qr-box { display: grid; gap: 6px; justify-items: center; border: 1px solid #d8e1ec; border-radius: 8px; padding: 10px; margin-top: 10px; max-width: 160px; }
+        .qr-box img { width: 120px; height: 120px; }
+        .qr-box span { color: #667085; font-size: 12px; text-align: center; word-break: break-word; }
+        .footer { margin-top: 22px; color: #667085; font-size: 13px; text-align: center; }
       </style>
     </head>
     <body>
@@ -58,9 +89,12 @@ function imprimirPedido(pedidoParaImprimir) {
           <h1>Pedido #${pedidoParaImprimir.numero}</h1>
           <div class="muted">Fecha: ${pedidoParaImprimir.fecha}</div>
         </div>
-        <div>
-          <strong>LV Sistema</strong><br>
-          <span class="muted">Distribuidora</span>
+        <div class="brand">
+          <strong>${tituloComprobante}</strong><br>
+          <span class="muted">${subtituloComprobante}</span><br>
+          ${CONFIG.cuit ? `<span class="muted">CUIT: ${CONFIG.cuit}</span><br>` : ""}
+          ${CONFIG.whatsapp ? `<span class="muted">WhatsApp: ${CONFIG.whatsapp}</span><br>` : ""}
+          ${obtenerQrComprobanteHtml()}
         </div>
       </div>
 
@@ -92,6 +126,8 @@ function imprimirPedido(pedidoParaImprimir) {
         <strong>Observaciones</strong>
         ${observacionesHtml}
       </div>
+
+      ${pieComprobante ? `<div class="footer">${pieComprobante}</div>` : ""}
     </body>
     </html>
   `);

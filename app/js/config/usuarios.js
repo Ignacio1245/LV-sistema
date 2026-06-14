@@ -19,6 +19,149 @@ let usuarioActual = {
     rol: "SUPERADMIN"
 };
 
+const PERMISOS_ROL = [
+    "productos",
+    "rubros",
+    "zonas",
+    "proveedores",
+    "compras",
+    "movimientos",
+    "clientes",
+    "ventas",
+    "cuentaCorriente",
+    "configuracion",
+    "impresion",
+    "auditoria",
+    "informes"
+];
+
+function obtenerNombreRolDesdeTexto(texto) {
+    return normalizarTexto(texto)
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .toUpperCase();
+}
+
+function guardarRolesPersonalizados() {
+    const rolesPersonalizados = {};
+
+    Object.keys(ROLES).forEach(function (nombreRol) {
+        if (["SUPERADMIN", "ADMINISTRADOR", "VENDEDOR"].includes(nombreRol)) {
+            return;
+        }
+
+        rolesPersonalizados[nombreRol] = ROLES[nombreRol];
+    });
+
+    dataStore.guardarLista(
+        "rolesPersonalizados",
+        rolesPersonalizados
+    );
+}
+
+function cargarRolesPersonalizados() {
+    const rolesGuardados =
+        dataStore.leerLista("rolesPersonalizados");
+
+    if (!rolesGuardados) {
+        return;
+    }
+
+    const datosRoles =
+        rolesGuardados;
+
+    Object.keys(datosRoles).forEach(function (nombreRol) {
+        const permisos = {};
+
+        PERMISOS_ROL.forEach(function (permiso) {
+            permisos[permiso] = datosRoles[nombreRol][permiso] === true;
+        });
+
+        ROLES[nombreRol] = permisos;
+    });
+}
+
+function renderizarOpcionesRolesUsuario() {
+    if (!dom.usuarioNuevoRolInput) {
+        return;
+    }
+
+    const rolActual =
+        dom.usuarioNuevoRolInput.value || "VENDEDOR";
+
+    dom.usuarioNuevoRolInput.innerHTML =
+        Object.keys(ROLES).map(function (nombreRol) {
+            return `<option value="${nombreRol}">${nombreRol}</option>`;
+        }).join("");
+
+    dom.usuarioNuevoRolInput.value =
+        ROLES[rolActual] ? rolActual : "VENDEDOR";
+}
+
+function renderizarOpcionesVendedoresCliente() {
+    if (!dom.clientVendedorAsignadoInput) {
+        return;
+    }
+
+    const vendedorSeleccionado =
+        dom.clientVendedorAsignadoInput.value;
+
+    dom.clientVendedorAsignadoInput.innerHTML =
+        `<option value="">Seleccionar vendedor</option>` +
+        usuariosSistema.filter(function (usuario) {
+            return usuario.activo;
+        }).map(function (usuario) {
+            return `<option value="${usuario.nombre}">${usuario.nombre} | ${usuario.rol}</option>`;
+        }).join("");
+
+    const existeVendedor =
+        usuariosSistema.some(function (usuario) {
+            return usuario.activo && usuario.nombre === vendedorSeleccionado;
+        });
+
+    dom.clientVendedorAsignadoInput.value =
+        existeVendedor ? vendedorSeleccionado : "";
+}
+
+function agregarRolPersonalizado(event) {
+    event.preventDefault();
+
+    const nombreRol =
+        obtenerNombreRolDesdeTexto(dom.rolNombreInput.value);
+
+    if (nombreRol === "") {
+        alert("Ingrese un nombre para el rol.");
+        return;
+    }
+
+    if (ROLES[nombreRol]) {
+        alert("Ya existe un rol con ese nombre.");
+        return;
+    }
+
+    const permisos = {};
+
+    PERMISOS_ROL.forEach(function (permiso) {
+        permisos[permiso] = false;
+    });
+
+    dom.rolPermisosInputs.forEach(function (input) {
+        permisos[input.dataset.rolePermission] = input.checked;
+    });
+
+    ROLES[nombreRol] = permisos;
+    guardarRolesPersonalizados();
+    renderizarOpcionesRolesUsuario();
+
+    registrarAuditoria(
+        "Usuarios",
+        "Creo rol",
+        nombreRol
+    );
+
+    dom.rolForm.reset();
+}
+
 function obtenerSiguienteCodigoUsuario() {
     if (usuariosSistema.length === 0) {
         return 1;
@@ -33,20 +176,22 @@ function obtenerSiguienteCodigoUsuario() {
 }
 
 function guardarUsuariosSistema() {
-    localStorage.setItem(
+    dataStore.guardarLista(
         "usuariosSistema",
-        JSON.stringify(usuariosSistema)
+        usuariosSistema
     );
 }
 
 function cargarUsuariosSistema() {
-    const usuariosGuardados = localStorage.getItem("usuariosSistema");
+    const usuariosGuardados =
+        dataStore.leerLista("usuariosSistema");
 
     if (!usuariosGuardados) {
         return;
     }
 
-    const datosUsuarios = JSON.parse(usuariosGuardados);
+    const datosUsuarios =
+        usuariosGuardados;
 
     if (!Array.isArray(datosUsuarios)) {
         return;
@@ -63,20 +208,22 @@ function cargarUsuariosSistema() {
 }
 
 function guardarUsuarioActual() {
-    localStorage.setItem(
+    dataStore.guardarLista(
         "usuarioActual",
-        JSON.stringify(usuarioActual)
+        { ...usuarioActual }
     );
 }
 
 function cargarUsuarioActual() {
-    const usuarioGuardado = localStorage.getItem("usuarioActual");
+    const usuarioGuardado =
+        dataStore.leerLista("usuarioActual");
 
     if (!usuarioGuardado) {
         return;
     }
 
-    const datosUsuario = JSON.parse(usuarioGuardado);
+    const datosUsuario =
+        usuarioGuardado;
 
     const usuarioEncontrado =
         usuariosSistema.find(function (usuario) {
@@ -104,6 +251,9 @@ function cargarUsuarioActual() {
 }
 
 function renderizarUsuarioActual() {
+    renderizarOpcionesRolesUsuario();
+    renderizarOpcionesVendedoresCliente();
+
     if (dom.usuarioRolInput) {
         dom.usuarioRolInput.innerHTML =
             usuariosSistema.filter(function (usuario) {
@@ -202,6 +352,7 @@ function agregarUsuarioSistema(event) {
     );
     dom.usuarioForm.reset();
     renderizarUsuariosSistema();
+    renderizarOpcionesVendedoresCliente();
 }
 
 function usarUsuarioSistema(codigo) {
@@ -254,6 +405,7 @@ function cambiarEstadoUsuarioSistema(codigo) {
         usuario.codigo + " - " + usuario.nombre
     );
     renderizarUsuariosSistema();
+    renderizarOpcionesVendedoresCliente();
 }
 
 function eliminarUsuarioSistema(codigo) {
@@ -290,6 +442,7 @@ function eliminarUsuarioSistema(codigo) {
         usuario.codigo + " - " + usuario.nombre
     );
     renderizarUsuariosSistema();
+    renderizarOpcionesVendedoresCliente();
 }
 
 function tienePermiso(modulo){

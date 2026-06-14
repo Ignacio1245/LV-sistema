@@ -3,8 +3,7 @@ function obtenerSiguienteCodigoZona() {
     return 1;
   }
 
-  const codigos =
-    zonas.map(function (zona) {
+  const codigos = zonas.map(function (zona) {
       return Number(zona.codigo) || 0;
     });
 
@@ -22,11 +21,9 @@ function contarClientesPorZona(nombreZona) {
 }
 
 function asegurarZonaPorNombre(nombreZona) {
-  const nombreLimpio =
-    nombreZona && nombreZona.trim() !== "" ? nombreZona.trim() : "Sin zona";
+  const nombreLimpio = nombreZona && nombreZona.trim() !== "" ? nombreZona.trim() : "Sin zona";
 
-  const zonaExistente =
-    zonas.find(function (zona) {
+  const zonaExistente = zonas.find(function (zona) {
       return normalizarTexto(zona.nombre) === normalizarTexto(nombreLimpio);
     });
 
@@ -48,14 +45,25 @@ function asegurarZonaPorNombre(nombreZona) {
 }
 
 function renderizarOpcionesZonasActivas() {
-  if (!dom.zonasActivasLista) {
-    return;
-  }
-
-  dom.zonasActivasLista.innerHTML =
+  const opcionesZonas =
     zonas.filter(zonaActiva).map(function (zona) {
-      return `<option value="${zona.nombre}"></option>`;
+      return `<option value="${zona.nombre}">${zona.nombre}</option>`;
     }).join("");
+
+  if (dom.clientZoneInput) {
+    const zonaSeleccionada =
+      dom.clientZoneInput.value;
+
+    dom.clientZoneInput.innerHTML =
+      `<option value="">Seleccionar zona</option>` + opcionesZonas;
+
+    dom.clientZoneInput.value =
+      zonas.some(function (zona) {
+        return zonaActiva(zona) && zona.nombre === zonaSeleccionada;
+      })
+        ? zonaSeleccionada
+        : "";
+  }
 }
 
 function renderizarZonas() {

@@ -5,6 +5,7 @@ let pedidoActual = {
     observaciones: []
 };
 let pedidoEditando = null;
+let pedidoEntregaPendiente = null;
 
 function limpiarPedidoActual() {
     pedidoActual = {
@@ -154,7 +155,11 @@ function actualizarClientePedidoSeleccionado() {
     if (!cliente) {
         dom.selectedClientName.textContent = "Ninguno";
         dom.selectedClientDetails.textContent = "Elegilo para comenzar el pedido.";
+        if (dom.pedidoListaPreview) {
+            dom.pedidoListaPreview.textContent = "Lista 1";
+        }
         renderizarProductosHabitualesCliente();
+        renderizarCatalogoProductosPedido();
         return;
     }
 
@@ -165,7 +170,13 @@ function actualizarClientePedidoSeleccionado() {
         cliente.direccion + " | Zona: " + (cliente.zona || "Sin zona") +
         " | Saldo: " + formatearDinero(cliente.saldo || 0);
 
+    if (dom.pedidoListaPreview) {
+        dom.pedidoListaPreview.textContent =
+            cliente.listaPrecios || "Lista 1";
+    }
+
     renderizarProductosHabitualesCliente();
+    renderizarCatalogoProductosPedido();
 
 }
 
@@ -206,12 +217,37 @@ function normalizarDescuentoPedido(descuento) {
     return descuentoNumerico;
 }
 
+function obtenerListaPreciosPedidoActual() {
+    const cliente =
+        pedidoActual.cliente ||
+        clienteSeleccionado ||
+        buscarCliente(dom.clienteSearchInput.value);
+
+    return cliente && cliente.listaPrecios
+        ? cliente.listaPrecios
+        : "Lista 1";
+}
+
+function obtenerPrecioUnitarioItemPedido(item) {
+    if (typeof item.precioUnitario === "number") {
+        return item.precioUnitario;
+    }
+
+    return obtenerPrecioProductoPorLista(
+        item.producto,
+        item.listaPrecios || obtenerListaPreciosPedidoActual()
+    );
+}
+
 function calcularSubtotalItemPedido(producto, cantidad, descuentoPorcentaje) {
     const descuentoNormalizado =
         normalizarDescuentoPedido(descuentoPorcentaje);
 
+    const precioUnitario =
+        obtenerPrecioProductoPorLista(producto, obtenerListaPreciosPedidoActual());
+
     const subtotalSinDescuento =
-        producto.precio * cantidad;
+        precioUnitario * cantidad;
 
     const importeDescuento =
         subtotalSinDescuento * descuentoNormalizado / 100;
@@ -222,13 +258,16 @@ function calcularSubtotalItemPedido(producto, cantidad, descuentoPorcentaje) {
 function actualizarSubtotalItemPedido(item) {
     item.descuentoPorcentaje =
         normalizarDescuentoPedido(item.descuentoPorcentaje || 0);
+    item.listaPrecios =
+        item.listaPrecios || obtenerListaPreciosPedidoActual();
+    item.precioUnitario =
+        typeof item.precioUnitario === "number"
+            ? item.precioUnitario
+            : obtenerPrecioProductoPorLista(item.producto, item.listaPrecios);
 
     item.subtotal =
-        calcularSubtotalItemPedido(
-            item.producto,
-            item.cantidad,
-            item.descuentoPorcentaje
-        );
+        (item.precioUnitario * item.cantidad) -
+        ((item.precioUnitario * item.cantidad) * item.descuentoPorcentaje / 100);
 }
 
 function renderizarCatalogoProductosPedido() {
@@ -279,7 +318,8 @@ function renderizarCatalogoProductosPedido() {
       <div>
         <span class="product-code">#${producto.codigo}</span>
         <h4>${producto.nombre}</h4>
-        <p>${formatearDinero(producto.precio)}</p>
+        <p>${formatearDinero(obtenerPrecioProductoPorLista(producto, obtenerListaPreciosPedidoActual()))}</p>
+        <small>${obtenerListaPreciosPedidoActual()}</small>
         <small class="stock-pill ${estadoStock.clase}">${estadoStock.texto}</small>
       </div>
       <div class="product-card-footer">
@@ -346,10 +386,15 @@ function agregarItemPedido(producto, cantidad) {
 
     }
 
+    const listaPrecios =
+        obtenerListaPreciosPedidoActual();
+
     pedidoActual.items.push({
 
         producto: producto,
         cantidad: cantidad,
+        listaPrecios: listaPrecios,
+        precioUnitario: obtenerPrecioProductoPorLista(producto, listaPrecios),
         descuentoPorcentaje: 0,
         subtotal: calcularSubtotalItemPedido(producto, cantidad, 0)
 
@@ -486,7 +531,10 @@ function renderizarPedidoActual() {
           onchange="cambiarDescuentoProductoPedido(${item.producto.codigo}, this.value)"
         >
       </td>
-      <td>${formatearDinero(item.producto.precio)}</td>
+      <td>
+        ${formatearDinero(obtenerPrecioUnitarioItemPedido(item))}
+        <small>${item.listaPrecios || "Lista 1"}</small>
+      </td>
       <td>${formatearDinero(item.subtotal)}</td>
       <td>
         <button class="btn btn-secondary" onclick="quitarProductoDelPedidoActual(${item.producto.codigo})">
@@ -744,11 +792,6 @@ function renderizarPedidos() {
             ? dom.pedidoFechaFiltro.value
             : "";
 
-    const filtroMes =
-        dom.pedidoMesFiltro
-            ? dom.pedidoMesFiltro.value
-            : "";
-
     const pedidosFiltrados =
         pedidos.filter(function (pedido) {
             const numeroPedido =
@@ -777,23 +820,21 @@ function renderizarPedidos() {
                 codigoCliente.includes(textoBusqueda) ||
                 normalizarTexto(nombreCliente).includes(textoBusqueda) ||
                 normalizarTexto(pedido.estado).includes(textoBusqueda) ||
+                normalizarTexto(pedido.estadoCobro || "").includes(textoBusqueda) ||
                 normalizarTexto(pedido.fecha || "").includes(textoBusqueda) ||
                 normalizarTexto(formaPago).includes(textoBusqueda) ||
                 totalPedido.includes(textoBusqueda);
 
             const coincideEstado =
                 filtroEstado === "TODOS" ||
-                pedido.estado === filtroEstado;
+                pedido.estado === filtroEstado ||
+                pedido.estadoCobro === filtroEstado;
 
             const coincideFecha =
                 filtroFecha === "" ||
                 fechaPedidoFiltro === filtroFecha;
 
-            const coincideMes =
-                filtroMes === "" ||
-                fechaPedidoFiltro.slice(0, 7) === filtroMes;
-
-            return coincideBusqueda && coincideEstado && coincideFecha && coincideMes;
+            return coincideBusqueda && coincideEstado && coincideFecha;
         }).sort(function (primero, segundo) {
             return (segundo.numero || segundo.id) - (primero.numero || primero.id);
         });
@@ -841,6 +882,16 @@ function renderizarPedidos() {
 
       <td>
         ${obtenerTextoFormaPago(pedido.formaPago || "CUENTA_CORRIENTE")}
+        ${typeof pedido.importePagado === "number"
+                ? `<small class="payment-detail">
+            Pago: ${formatearDinero(pedido.importePagado)}
+            ${pedido.saldoPendiente > 0
+                    ? " | Saldo: " + formatearDinero(pedido.saldoPendiente)
+                    : ""}
+            | ${pedido.estadoCobro === "CUENTA_CORRIENTE" ? "Cuenta corriente" : "Cobrado"}
+          </small>`
+                : ""
+            }
       </td>
 
       <td>
@@ -851,6 +902,12 @@ function renderizarPedidos() {
         <span class="status ${pedido.estado.toLowerCase()}">
           ${pedido.estado}
         </span>
+        ${pedido.estadoCobro
+                ? `<small class="payment-detail">
+            ${pedido.estadoCobro === "CUENTA_CORRIENTE" ? "Cuenta corriente" : "Cobrado"}
+          </small>`
+                : ""
+            }
       </td>
 
       <td>
@@ -897,7 +954,7 @@ function renderizarPedidos() {
                 : ""
             }
 
-        ${pedido.estado === "ENTREGADO"
+        ${pedido.estado === "ENTREGADO" && typeof pedido.importePagado !== "number"
                 ? `
             <button class="btn btn-cobrado" onclick="cobrarPedido(${pedido.id})">
               Marcar cobrado
@@ -1028,6 +1085,8 @@ function atenderPedido(id) {
         });
 
         producto.stock -= item.cantidad;
+        actualizarEstadoAutomaticoPorStock(producto, true);
+        avisarStockMinimoSiCorresponde(producto);
 
     });
 
@@ -1047,6 +1106,7 @@ function atenderPedido(id) {
     renderizarMovimientosGenerales();
     actualizarStockTotal();
     actualizarDashboard();
+    verDetallePedido(pedido.id);
 
 }
 
@@ -1152,16 +1212,166 @@ function entregarPedido(id) {
 
     }
 
-    pedido.estado = "ENTREGADO";
+    pedidoEntregaPendiente = pedido;
 
+    dom.entregaPedidoResumen.innerHTML =
+        "<strong>Pedido #" + (pedido.numero || pedido.id) + "</strong>" +
+        "<span>Cliente: " + pedido.cliente.nombre + "</span>" +
+        "<span>Total: " + formatearDinero(pedido.total) + "</span>";
+
+    dom.entregaPagoInput.value =
+        Number(pedido.total) || 0;
+
+    actualizarVistaEntregaPedido();
+
+    dom.entregaPedidoModal.classList.remove("hidden");
+    dom.entregaPagoInput.focus();
+    dom.entregaPagoInput.select();
+
+}
+
+function cerrarEntregaPedidoModal() {
+
+    pedidoEntregaPendiente = null;
+
+    dom.entregaPedidoModal.classList.add("hidden");
+    dom.entregaPedidoForm.reset();
+
+    dom.entregaPedidoResumen.textContent =
+        "Selecciona un pedido atendido para entregar.";
+    dom.entregaSaldoPreview.textContent =
+        "Saldo pendiente: " + formatearDinero(0);
+    dom.entregaSaldoPreview.classList.remove(
+        "delivery-balance-ok",
+        "delivery-balance-debt",
+        "delivery-balance-error"
+    );
+
+}
+
+function actualizarVistaEntregaPedido() {
+
+    if (!pedidoEntregaPendiente) {
+        return;
+    }
+
+    const totalPedido =
+        Number(pedidoEntregaPendiente.total) || 0;
+    const importePagado =
+        Number(dom.entregaPagoInput.value);
+
+    dom.entregaSaldoPreview.classList.remove(
+        "delivery-balance-ok",
+        "delivery-balance-debt",
+        "delivery-balance-error"
+    );
+
+    if (Number.isNaN(importePagado) || importePagado < 0) {
+        dom.entregaSaldoPreview.textContent =
+            "Ingrese un importe valido. Puede ser 0.";
+        dom.entregaSaldoPreview.classList.add("delivery-balance-error");
+        return;
+    }
+
+    if (importePagado > totalPedido) {
+        dom.entregaSaldoPreview.textContent =
+            "El pago no puede superar el total del pedido.";
+        dom.entregaSaldoPreview.classList.add("delivery-balance-error");
+        return;
+    }
+
+    const saldoPendiente =
+        totalPedido - importePagado;
+
+    dom.entregaSaldoPreview.textContent =
+        saldoPendiente > 0
+            ? "Va a cuenta corriente: " + formatearDinero(saldoPendiente)
+            : "Queda cobrado completo.";
+
+    dom.entregaSaldoPreview.classList.add(
+        saldoPendiente > 0 ? "delivery-balance-debt" : "delivery-balance-ok"
+    );
+
+}
+
+function confirmarEntregaPedido(event) {
+
+    event.preventDefault();
+
+    if (!pedidoEntregaPendiente) {
+        return;
+    }
+
+    const pedido =
+        pedidoEntregaPendiente;
+    const totalPedido =
+        Number(pedido.total) || 0;
+    const importePagado =
+        Number(dom.entregaPagoInput.value);
+
+    if (Number.isNaN(importePagado) || importePagado < 0) {
+        alert("Ingrese un importe valido. Puede ser 0 si no pago.");
+        return;
+    }
+
+    if (importePagado > totalPedido) {
+        alert("El importe pagado no puede superar el total del pedido.");
+        return;
+    }
+
+    const saldoPendiente =
+        totalPedido - importePagado;
+
+    const cliente =
+        clientes.find(function (clienteGuardado) {
+            return clienteGuardado.codigo === pedido.cliente.codigo;
+        });
+
+    if (!cliente) {
+        alert("No se encontro el cliente del pedido.");
+        return;
+    }
+
+    pedido.fechaEntrega =
+        new Date().toLocaleDateString("es-AR");
+    pedido.importePagado =
+        importePagado;
+    pedido.saldoPendiente =
+        saldoPendiente;
+    pedido.estadoCobro =
+        saldoPendiente > 0 ? "CUENTA_CORRIENTE" : "COBRADO";
+    pedido.estado =
+        "ENTREGADO";
+
+    if (saldoPendiente > 0) {
+        cliente.saldo += saldoPendiente;
+
+        if (!cliente.historial) {
+            cliente.historial = [];
+        }
+
+        cliente.historial.push({
+            fecha: pedido.fechaEntrega,
+            tipo: "Pedido entregado a cuenta",
+            importe: saldoPendiente
+        });
+    }
+
+    guardarClientes();
     guardarPedidos();
 
     registrarAuditoria(
-        "Pedidos",
+        saldoPendiente > 0 ? "Cuenta corriente" : "Pedidos",
         "Entrego pedido",
-        "#" + (pedido.numero || pedido.id) + " | " + pedido.cliente.nombre
+        "#" + (pedido.numero || pedido.id) +
+        " | " + pedido.cliente.nombre +
+        " | Pago " + formatearDinero(importePagado) +
+        " | Saldo " + formatearDinero(saldoPendiente)
     );
 
+    cerrarEntregaPedidoModal();
+    renderizarClientes();
+    renderizarClientesConDeuda();
     renderizarPedidos();
     actualizarDashboard();
 
@@ -1195,7 +1405,9 @@ function cobrarPedido(id) {
         return;
     }
 
-    pedido.estado = "COBRADO";
+    pedido.estadoCobro = "COBRADO";
+    pedido.importePagado = Number(pedido.total) || 0;
+    pedido.saldoPendiente = 0;
 
     guardarPedidos();
 
@@ -1257,7 +1469,17 @@ function pasarACuentaCorriente(id) {
         return;
     }
 
-    cliente.saldo += pedido.total;
+    const importePendiente =
+        typeof pedido.saldoPendiente === "number"
+            ? pedido.saldoPendiente
+            : pedido.total;
+
+    if (importePendiente <= 0) {
+        alert("Este pedido no tiene saldo pendiente para pasar a cuenta.");
+        return;
+    }
+
+    cliente.saldo += importePendiente;
 
     if (!cliente.historial) {
 
@@ -1273,12 +1495,18 @@ function pasarACuentaCorriente(id) {
 
         tipo: "Pedido CC",
 
-        importe: pedido.total
+        importe: importePendiente
 
     });
 
-    pedido.estado =
+    pedido.estadoCobro =
         "CUENTA_CORRIENTE";
+    pedido.saldoPendiente =
+        importePendiente;
+
+    if (typeof pedido.importePagado !== "number") {
+        pedido.importePagado = 0;
+    }
 
     guardarClientes();
     guardarPedidos();
@@ -1286,7 +1514,7 @@ function pasarACuentaCorriente(id) {
     registrarAuditoria(
         "Cuenta corriente",
         "Paso pedido a cuenta",
-        "#" + (pedido.numero || pedido.id) + " | " + cliente.nombre + " | " + formatearDinero(pedido.total)
+        "#" + (pedido.numero || pedido.id) + " | " + cliente.nombre + " | " + formatearDinero(importePendiente)
     );
 
     renderizarClientes();
@@ -1356,7 +1584,7 @@ function verDetallePedido(id) {
         <td>${item.producto.nombre}</td>
         <td>${item.cantidad}</td>
         <td>${descuentoTexto}</td>
-        <td>${formatearDinero(item.producto.precio)}</td>
+        <td>${formatearDinero(obtenerPrecioUnitarioItemPedido(item))}</td>
         <td>${formatearDinero(item.subtotal)}</td>
       </tr>
     `;
@@ -1397,6 +1625,23 @@ function verDetallePedido(id) {
         <span>Forma de pago</span>
         <strong>${obtenerTextoFormaPago(pedido.formaPago || "CUENTA_CORRIENTE")}</strong>
       </div>
+      ${typeof pedido.importePagado === "number"
+            ? `
+        <div>
+          <span>Pago al entregar</span>
+          <strong>${formatearDinero(pedido.importePagado)}</strong>
+        </div>
+        <div>
+          <span>Saldo pendiente</span>
+          <strong>${formatearDinero(pedido.saldoPendiente || 0)}</strong>
+        </div>
+        <div>
+          <span>Estado de cobro</span>
+          <strong>${pedido.estadoCobro === "CUENTA_CORRIENTE" ? "Cuenta corriente" : "Cobrado"}</strong>
+        </div>
+      `
+            : ""
+        }
       <div>
         <span>Productos</span>
         <strong>${pedido.items.length} tipos | ${cantidadTotalUnidades} unidades</strong>
@@ -1469,6 +1714,10 @@ function editarPedido(id) {
             return {
                 producto: item.producto,
                 cantidad: item.cantidad,
+                listaPrecios: item.listaPrecios || "Lista 1",
+                precioUnitario: typeof item.precioUnitario === "number"
+                    ? item.precioUnitario
+                    : item.producto.precio,
                 descuentoPorcentaje: item.descuentoPorcentaje || 0,
                 subtotal: item.subtotal
             };

@@ -47,6 +47,7 @@ let productos = [
     nombre: "Azucar",
     precio: 11400,
     stock: 10,
+    rubro: "Alimentos",
     proveedor: "Sin proveedor",
     activo: true
   },
@@ -55,6 +56,7 @@ let productos = [
     nombre: "Aceite",
     precio: 9500,
     stock: 20,
+    rubro: "Alimentos",
     proveedor: "Sin proveedor",
     activo: true
   },
@@ -63,6 +65,7 @@ let productos = [
     nombre: "Yerba",
     precio: 7500,
     stock: 30,
+    rubro: "Alimentos",
     proveedor: "Sin proveedor",
     activo: true
   },
@@ -71,6 +74,7 @@ let productos = [
     nombre: "Harina",
     precio: 4000,
     stock: 40,
+    rubro: "Alimentos",
     proveedor: "Sin proveedor",
     activo: true
   }
@@ -118,3 +122,41 @@ let proveedores = [
 ];
 
 let compras = [];
+
+let listasPrecios = [
+  {
+    codigo: 1,
+    nombre: "Lista 1",
+    activo: true
+  },
+  {
+    codigo: 2,
+    nombre: "Lista 2",
+    activo: true
+  },
+  {
+    codigo: 3,
+    nombre: "Lista 3",
+    activo: true
+  },
+  {
+    codigo: 4,
+    nombre: "Lista 4",
+    activo: true
+  }
+];
+
+let rubros = [
+  {
+    codigo: 1,
+    nombre: "Alimentos",
+    descripcion: "Productos de almacen",
+    activo: true
+  },
+  {
+    codigo: 2,
+    nombre: "Sin rubro",
+    descripcion: "Productos sin clasificar",
+    activo: true
+  }
+];

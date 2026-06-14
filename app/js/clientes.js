@@ -38,6 +38,24 @@ function cambiarFiltroEstadoClientes(filtroNuevo) {
   renderizarClientes();
 }
 
+function obtenerDatosComercialesClienteDesdeFormulario() {
+  return {
+    razonSocial: dom.clientRazonSocialInput.value.trim(),
+    nombreFantasia: dom.clientNombreFantasiaInput.value.trim(),
+    localidad: dom.clientLocalidadInput.value.trim(),
+    codigoPostal: dom.clientCodigoPostalInput.value.trim(),
+    telefonoParticular: dom.clientTelefonoParticularInput.value.trim(),
+    telefonoMovil: dom.clientTelefonoMovilInput.value.trim(),
+    email: dom.clientEmailInput.value.trim(),
+    listaPrecios: dom.clientListaPreciosInput.value.trim(),
+    posicionZona: Number(dom.clientPosicionZonaInput.value) || 0,
+    vendedorAsignado: dom.clientVendedorAsignadoInput.value,
+    condicionIva: dom.clientCondicionIvaInput.value,
+    horarioAtencion: dom.clientHorarioAtencionInput.value.trim(),
+    observaciones: dom.clientObservacionesInput.value.trim()
+  };
+}
+
 function agregarCliente(event) {
   event.preventDefault();
 
@@ -45,7 +63,7 @@ function agregarCliente(event) {
   const nombre = dom.clientNameInput.value.trim();
   const telefono = dom.clientPhoneInput.value.trim() || "-";
   const direccion = dom.clientAddressInput.value.trim() || "-";
-  const zona = asegurarZonaPorNombre(dom.clientZoneInput.value);
+  const zona = dom.clientZoneInput.value;
 
   if (!Number.isInteger(codigo) || codigo < 0) {
     alert("El codigo del cliente debe ser un numero entero mayor o igual a 0.");
@@ -54,6 +72,11 @@ function agregarCliente(event) {
 
   if (nombre === "") {
     alert("El nombre del cliente es obligatorio.");
+    return;
+  }
+
+  if (zona === "") {
+    alert("Seleccione una zona creada.");
     return;
   }
 
@@ -74,7 +97,8 @@ function agregarCliente(event) {
     direccion: direccion,
     zona: zona,
     activo: true,
-    historial: []
+    historial: [],
+    ...obtenerDatosComercialesClienteDesdeFormulario()
   });
 
   dom.clientForm.reset();
@@ -197,6 +221,7 @@ function seleccionarCliente(cliente) {
   dom.clienteSearchResults.classList.add("hidden");
   actualizarVistaBusqueda();
   actualizarClientePedidoSeleccionado();
+  renderizarCatalogoProductosPedido();
 
   if (dom.productoSearchInput) {
     dom.productoSearchInput.focus();
@@ -233,7 +258,12 @@ function renderizarClientes() {
         textoBusqueda === "" ||
         String(cliente.codigo).includes(textoBusqueda) ||
         normalizarTexto(cliente.nombre).includes(textoBusqueda) ||
+        normalizarTexto(cliente.razonSocial || "").includes(textoBusqueda) ||
+        normalizarTexto(cliente.nombreFantasia || "").includes(textoBusqueda) ||
+        normalizarTexto(cliente.email || "").includes(textoBusqueda) ||
+        normalizarTexto(cliente.vendedorAsignado || "").includes(textoBusqueda) ||
         normalizarTexto(cliente.telefono || "").includes(textoBusqueda) ||
+        normalizarTexto(cliente.telefonoMovil || "").includes(textoBusqueda) ||
         normalizarTexto(cliente.direccion || "").includes(textoBusqueda) ||
         normalizarTexto(cliente.zona || "").includes(textoBusqueda);
 
@@ -272,9 +302,12 @@ function renderizarClientes() {
 
     row.innerHTML = `
       <td>${cliente.codigo}</td>
-      <td>${cliente.nombre}</td>
-      <td>${cliente.telefono}</td>
-      <td>${cliente.direccion}</td>
+      <td>
+        <strong>${cliente.nombre}</strong>
+        <small>${cliente.razonSocial || cliente.nombreFantasia || "-"}</small>
+      </td>
+      <td>${cliente.telefono}<br><small>${cliente.telefonoMovil || cliente.email || "-"}</small></td>
+      <td>${cliente.direccion}<br><small>${cliente.localidad || "-"}</small></td>
       <td>${cliente.zona || "Sin zona"}</td>
       <td>
         <span class="stock-pill ${estadoClase}">${estadoTexto}</span>

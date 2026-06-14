@@ -51,6 +51,9 @@ function buscarCoincidencias(lista, busqueda) {
   return lista.filter(function (item) {
     return (
       String(item.codigo).includes(texto) ||
+      normalizarTexto(item.codigoReal || "").includes(texto) ||
+      normalizarTexto(item.marca || "").includes(texto) ||
+      normalizarTexto(item.detalle || "").includes(texto) ||
       normalizarTexto(item.nombre).includes(texto)
     );
   }).slice(0, 5);
@@ -71,7 +74,20 @@ function buscarProducto(busqueda) {
       return producto.activo !== false;
     });
 
-  return buscarPorCodigoONombre(productosActivos, busqueda);
+  const texto =
+    normalizarTexto(busqueda || "");
+
+  if (texto === "") {
+    return null;
+  }
+
+  return productosActivos.find(function (producto) {
+    return String(producto.codigo) === texto ||
+      normalizarTexto(producto.codigoReal || "") === texto ||
+      normalizarTexto(producto.nombre || "").includes(texto) ||
+      normalizarTexto(producto.marca || "").includes(texto) ||
+      normalizarTexto(producto.detalle || "").includes(texto);
+  }) || null;
 }
 
 let clienteSeleccionado = null;
