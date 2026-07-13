@@ -1,7 +1,0 @@
-﻿/* Indice de estilos del sistema administrativo. Editar los archivos de css/admin por modulo. */
-@import url("admin/01-base-layout.css");
-@import url("admin/02-pedidos-ventas.css");
-@import url("admin/03-tablas-formularios.css");
-@import url("admin/04-modulos-admin.css");
-@import url("admin/05-responsive-print.css");
-@import url("admin/06-tema-final.css");
