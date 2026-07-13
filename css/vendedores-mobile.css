@@ -1,0 +1,984 @@
+.vendedores-mobile {
+  min-height: 100vh;
+  margin: 0;
+  padding-bottom: 92px;
+  color: #172033;
+  background: #edf2f7;
+  font-family: Arial, sans-serif;
+}
+
+.vendedores-mobile button,
+.vendedores-mobile input,
+.vendedores-mobile select,
+.vendedores-mobile textarea {
+  font: inherit;
+}
+
+.vendedores-mobile button {
+  border: 0;
+}
+
+.vendedores-oculto {
+  display: none !important;
+}
+
+.vendedores-login {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.vendedores-login-card {
+  display: grid;
+  gap: 14px;
+  width: min(420px, 100%);
+  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.11);
+}
+
+.vendedores-login-card h1 {
+  margin: 0;
+  color: #172033;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.vendedores-login-card label,
+.vendedores-panel label {
+  display: grid;
+  gap: 7px;
+  color: #243044;
+  font-weight: 900;
+}
+
+.vendedores-login-card input,
+.vendedores-panel input,
+.vendedores-panel select,
+.vendedores-panel textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: #172033;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.vendedores-login-card input:focus,
+.vendedores-panel input:focus,
+.vendedores-panel select:focus,
+.vendedores-panel textarea:focus {
+  border-color: #0ea5e9;
+  outline: 3px solid rgba(14, 165, 233, 0.18);
+}
+
+.vendedores-campo-bloqueado {
+  color: #475569;
+  background: #f1f5f9 !important;
+}
+
+.vendedores-panel textarea {
+  resize: vertical;
+}
+
+.vendedores-login-estado {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.vendedores-layout {
+  display: grid;
+  gap: 10px;
+  width: min(780px, 100%);
+  margin: 0 auto;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+.vendedores-encabezado,
+.vendedores-panel {
+  background: #ffffff;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.07);
+}
+
+.vendedores-encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+}
+
+.vendedores-encabezado h1,
+.vendedores-resumen h2,
+.vendedores-inicio h2,
+.vendedores-flujo-cabecera h2 {
+  margin: 0;
+  color: #172033;
+  letter-spacing: 0;
+}
+
+.vendedores-encabezado h1 {
+  font-size: 28px;
+}
+
+.vendedores-resumen h2 {
+  font-size: 21px;
+}
+
+.vendedores-inicio h2,
+.vendedores-flujo-cabecera h2 {
+  font-size: 22px;
+}
+
+.vendedores-etiqueta {
+  margin: 0 0 5px;
+  color: #65758b;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.vendedores-sesion {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.vendedores-estado {
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  color: #475569;
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: right;
+}
+
+.vendedores-salir,
+.vendedores-secundario,
+.vendedores-control-cantidad button {
+  color: #172033;
+  background: #e2e8f0;
+}
+
+.vendedores-salir {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.vendedores-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.vendedores-inicio {
+  gap: 14px;
+}
+
+.vendedores-modulos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.vendedores-modulo-card {
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #172033;
+  background: #f8fafc;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vendedores-modulo-card strong {
+  font-size: 20px;
+}
+
+.vendedores-modulo-card span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.vendedores-modulo-card.active {
+  color: #ffffff;
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.vendedores-modulo-card.active span {
+  color: #dbeafe;
+}
+
+.vendedores-flujo-cabecera {
+  display: grid;
+  gap: 2px;
+}
+
+.vendedores-resultados,
+.vendedores-productos,
+.vendedores-items {
+  display: grid;
+  gap: 8px;
+}
+
+.vendedores-opcion,
+.vendedores-producto,
+.vendedores-item {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  color: #172033;
+  background: #f8fafc;
+  text-align: left;
+  box-sizing: border-box;
+}
+
+button.vendedores-opcion,
+button.vendedores-producto,
+.vendedores-producto button {
+  cursor: pointer;
+}
+
+.vendedores-opcion:hover,
+.vendedores-producto:hover {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.vendedores-seleccion,
+.vendedores-vacio {
+  margin: 0;
+  padding: 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.vendedores-seleccion {
+  display: grid;
+  gap: 4px;
+}
+
+.vendedores-seleccion-activa {
+  border-style: solid;
+  border-color: #86efac;
+  color: #14532d;
+  background: #f0fdf4;
+}
+
+.vendedores-seleccion strong {
+  color: #172033;
+}
+
+.vendedores-seleccion span,
+.vendedores-seleccion small {
+  font-weight: 800;
+}
+
+.vendedores-producto strong,
+.vendedores-item strong {
+  font-size: 16px;
+}
+
+.vendedores-producto span,
+.vendedores-item span,
+.vendedores-item-detalle {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.vendedores-producto-meta,
+.vendedores-item-encabezado,
+.vendedores-resumen-titulo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.vendedores-item-encabezado {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 8px;
+}
+
+.vendedores-item-encabezado strong {
+  min-width: 0;
+}
+
+.vendedores-item-quitar {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: #991b1b;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.vendedores-cantidades-rapidas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.vendedores-cantidades-rapidas:empty {
+  display: none;
+}
+
+.vendedores-cantidades-rapidas button {
+  min-height: 38px;
+  border-radius: 8px;
+  color: #0f172a;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  font-weight: 900;
+}
+
+.vendedores-producto-controles {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.4fr) minmax(130px, 0.6fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.vendedores-producto-controles input,
+.vendedores-control-cantidad input {
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+  font-weight: 900;
+  text-align: center;
+}
+
+.vendedores-metricas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.vendedores-metricas span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #475569;
+  background: #eef2f7;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.vendedores-control-cantidad {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 46px;
+  gap: 8px;
+  align-items: center;
+}
+
+.vendedores-bonificacion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px;
+  grid-template-areas:
+    "label manual"
+    "options options";
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.vendedores-bonificacion-etiqueta {
+  grid-area: label;
+}
+
+.vendedores-bonificacion-opciones {
+  grid-area: options;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.vendedores-bonificacion-opciones button {
+  min-height: 34px;
+  border-radius: 8px;
+  color: #172033;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.vendedores-bonificacion-opciones button.active {
+  color: #ffffff;
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.vendedores-bonificacion input {
+  grid-area: manual;
+  min-height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #172033;
+  background: #ffffff;
+  font-weight: 900;
+  text-align: center;
+}
+
+.vendedores-control-cantidad button,
+.vendedores-acciones button,
+.vendedores-barra-pedido button {
+  min-height: 42px;
+  border-radius: 8px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.vendedores-control-cantidad input {
+  width: 100%;
+}
+
+.vendedores-acciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.25fr;
+  gap: 8px;
+}
+
+.vendedores-acciones-cliente {
+  grid-template-columns: 1fr;
+}
+
+.vendedores-principal {
+  color: #ffffff;
+  background: #16a34a;
+}
+
+.vendedores-principal:disabled,
+.vendedores-secundario:disabled,
+.vendedores-barra-pedido button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.vendedores-envio-estado {
+  margin: 0;
+  padding: 10px 12px;
+  color: #166534;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  font-weight: 900;
+}
+
+.vendedores-envio-estado:empty {
+  display: none;
+}
+
+.vendedores-texto-ayuda {
+  margin: 5px 0 0;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.vendedores-barra-pedido {
+  position: fixed;
+  right: max(8px, calc((100vw - 780px) / 2 + 8px));
+  bottom: 10px;
+  left: max(8px, calc((100vw - 780px) / 2 + 8px));
+  z-index: 40;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #111827;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.28);
+  box-sizing: border-box;
+}
+
+.vendedores-barra-pedido div {
+  display: grid;
+  gap: 2px;
+}
+
+.vendedores-barra-pedido span {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.vendedores-barra-pedido strong {
+  font-size: 20px;
+}
+
+.vendedores-barra-pedido button {
+  min-width: 136px;
+  padding: 0 14px;
+  color: #ffffff;
+  background: #16a34a;
+}
+
+@media (max-width: 560px) {
+  .vendedores-layout {
+    padding: 8px;
+  }
+
+  .vendedores-encabezado {
+    display: grid;
+  }
+
+  .vendedores-sesion {
+    justify-items: stretch;
+  }
+
+  .vendedores-estado {
+    text-align: left;
+  }
+
+  .vendedores-producto-meta,
+  .vendedores-item-encabezado,
+  .vendedores-resumen-titulo {
+    align-items: flex-start;
+  }
+
+  .vendedores-item-encabezado {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .vendedores-item-encabezado strong {
+    grid-column: 1 / -1;
+  }
+
+  .vendedores-producto-controles,
+  .vendedores-acciones,
+  .vendedores-modulos {
+    grid-template-columns: 1fr;
+  }
+
+  .vendedores-bonificacion {
+    grid-template-columns: minmax(0, 1fr) 76px;
+  }
+
+  .vendedores-barra-pedido {
+    right: 8px;
+    left: 8px;
+  }
+}
+
+/* Pulido final movil: pantalla de trabajo para vendedores */
+.vendedores-mobile {
+  --vm-bg: #eef3f8;
+  --vm-surface: #ffffff;
+  --vm-soft: #f6f9fc;
+  --vm-border: #cfdbe8;
+  --vm-text: #102033;
+  --vm-muted: #64748b;
+  --vm-primary: #0b8fc7;
+  --vm-primary-dark: #066f9f;
+  --vm-success: #159947;
+  --vm-warning: #fff4d6;
+  --vm-danger: #b42318;
+  padding-bottom: 102px;
+  background: var(--vm-bg);
+  color: var(--vm-text);
+  font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+  line-height: 1.38;
+}
+
+.vendedores-mobile button {
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.08s ease;
+}
+
+.vendedores-mobile button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.vendedores-layout {
+  gap: 12px;
+  padding: 12px;
+}
+
+.vendedores-login-card,
+.vendedores-encabezado,
+.vendedores-panel,
+.vendedores-modulo-card,
+.vendedores-opcion,
+.vendedores-producto,
+.vendedores-item,
+.vendedores-seleccion,
+.vendedores-vacio {
+  border: 1px solid var(--vm-border);
+  border-radius: 8px;
+  background: var(--vm-surface);
+  box-shadow: 0 1px 2px rgba(16, 32, 51, 0.06);
+}
+
+.vendedores-login-card {
+  padding: 22px;
+  box-shadow: 0 14px 34px rgba(16, 32, 51, 0.12);
+}
+
+.vendedores-login-card h1,
+.vendedores-encabezado h1,
+.vendedores-resumen h2,
+.vendedores-inicio h2,
+.vendedores-flujo-cabecera h2 {
+  color: #102033;
+  font-weight: 900;
+}
+
+.vendedores-login-card h1 {
+  font-size: 27px;
+}
+
+.vendedores-login-card button {
+  min-height: 44px;
+  border-radius: 7px;
+  background: var(--vm-success);
+  color: #ffffff;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.vendedores-login-card button:hover {
+  background: #107a38;
+}
+
+.vendedores-encabezado {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  align-items: center;
+  padding: 14px;
+}
+
+.vendedores-encabezado h1 {
+  font-size: 24px;
+}
+
+.vendedores-etiqueta {
+  color: var(--vm-primary-dark);
+  letter-spacing: 0.04em;
+}
+
+.vendedores-estado,
+.vendedores-login-estado,
+.vendedores-envio-estado {
+  border-radius: 8px;
+}
+
+.vendedores-estado {
+  min-height: 32px;
+  border-color: var(--vm-border);
+  background: #f8fbfe;
+  color: #45576d;
+}
+
+.vendedores-salir {
+  background: #eef2f6;
+  border: 1px solid #cbd6e2;
+}
+
+.vendedores-salir:hover,
+.vendedores-secundario:hover,
+.vendedores-control-cantidad button:hover {
+  background: #e1eaf3;
+}
+
+.vendedores-login-card input,
+.vendedores-panel input,
+.vendedores-panel select,
+.vendedores-panel textarea,
+.vendedores-producto-controles input,
+.vendedores-control-cantidad input,
+.vendedores-bonificacion input {
+  min-height: 44px;
+  border: 1px solid #bfccda;
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--vm-text);
+}
+
+.vendedores-login-card input:focus,
+.vendedores-panel input:focus,
+.vendedores-panel select:focus,
+.vendedores-panel textarea:focus,
+.vendedores-producto-controles input:focus,
+.vendedores-control-cantidad input:focus,
+.vendedores-bonificacion input:focus {
+  border-color: var(--vm-primary);
+  outline: 3px solid rgba(11, 143, 199, 0.16);
+}
+
+.vendedores-panel {
+  padding: 14px;
+}
+
+.vendedores-modulos {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.vendedores-modulo-card {
+  min-height: 86px;
+  padding: 13px;
+  background: #f8fbfe;
+}
+
+.vendedores-modulo-card strong {
+  font-size: 18px;
+}
+
+.vendedores-modulo-card span {
+  color: #5d6f85;
+}
+
+.vendedores-modulo-card.active {
+  background: var(--vm-primary);
+  border-color: var(--vm-primary);
+  color: #ffffff;
+}
+
+.vendedores-modulo-card.active span {
+  color: #e4f4fb;
+}
+
+.vendedores-flujo-cabecera {
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dde6ef;
+}
+
+.vendedores-opcion,
+.vendedores-producto,
+.vendedores-item {
+  padding: 13px;
+  background: #ffffff;
+}
+
+.vendedores-opcion:hover,
+.vendedores-producto:hover {
+  border-color: var(--vm-primary);
+  background: #f1f9fd;
+}
+
+.vendedores-seleccion,
+.vendedores-vacio {
+  background: #f8fbfe;
+}
+
+.vendedores-seleccion-activa {
+  border-color: #93d9ad;
+  background: #effaf3;
+  color: #115c2c;
+}
+
+.vendedores-producto strong,
+.vendedores-item strong {
+  color: #102033;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.vendedores-producto span,
+.vendedores-item span,
+.vendedores-item-detalle {
+  color: var(--vm-muted);
+}
+
+.vendedores-producto-meta {
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e4ebf2;
+}
+
+.vendedores-metricas span {
+  background: #edf3f8;
+  color: #45576d;
+}
+
+.vendedores-cantidades-rapidas {
+  gap: 8px;
+}
+
+.vendedores-cantidades-rapidas button {
+  min-height: 40px;
+  background: var(--vm-warning);
+  border: 1px solid #f4d187;
+  border-radius: 7px;
+  color: #5b3b05;
+}
+
+.vendedores-cantidades-rapidas button:hover {
+  background: #ffeab3;
+}
+
+.vendedores-producto-controles {
+  grid-template-columns: 104px minmax(0, 1fr);
+}
+
+.vendedores-bonificacion {
+  grid-template-columns: minmax(0, 1fr) 86px;
+  padding: 10px;
+  border: 1px solid #dce5ef;
+  border-radius: 8px;
+  background: #f8fbfe;
+}
+
+.vendedores-bonificacion-etiqueta {
+  color: #45576d;
+}
+
+.vendedores-bonificacion-opciones {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.vendedores-bonificacion-opciones button {
+  min-height: 38px;
+  border-radius: 7px;
+  background: #eef3f8;
+  border: 1px solid #d4dfeb;
+  color: #102033;
+}
+
+.vendedores-bonificacion-opciones button.active,
+.vendedores-bonificacion-opciones button:hover {
+  background: var(--vm-primary);
+  border-color: var(--vm-primary);
+  color: #ffffff;
+}
+
+.vendedores-control-cantidad {
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+}
+
+.vendedores-control-cantidad button,
+.vendedores-acciones button,
+.vendedores-barra-pedido button {
+  border-radius: 7px;
+}
+
+.vendedores-principal,
+.vendedores-barra-pedido button {
+  background: var(--vm-success);
+}
+
+.vendedores-principal:hover,
+.vendedores-barra-pedido button:hover {
+  background: #107a38;
+}
+
+.vendedores-item-encabezado {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.vendedores-item-quitar {
+  min-height: 34px;
+  background: #fff1f0;
+  border-color: #ffc7c2;
+  border-radius: 7px;
+  color: var(--vm-danger);
+}
+
+.vendedores-item-quitar:hover {
+  background: #ffe4e0;
+}
+
+.vendedores-envio-estado {
+  color: #116b34;
+  background: #e5f6eb;
+  border-color: #9bd6ae;
+}
+
+.vendedores-barra-pedido {
+  right: max(10px, calc((100vw - 780px) / 2 + 10px));
+  bottom: 10px;
+  left: max(10px, calc((100vw - 780px) / 2 + 10px));
+  min-height: 66px;
+  padding: 10px 12px;
+  border: 1px solid #26384d;
+  border-radius: 8px;
+  background: #111d2b;
+  box-shadow: 0 14px 34px rgba(16, 32, 51, 0.24);
+}
+
+.vendedores-barra-pedido span {
+  color: #b9c7d6;
+}
+
+.vendedores-barra-pedido strong {
+  font-size: 19px;
+}
+
+@media (max-width: 640px) {
+  .vendedores-layout {
+    padding: 9px;
+  }
+
+  .vendedores-encabezado {
+    display: grid;
+    position: static;
+  }
+
+  .vendedores-modulos {
+    grid-template-columns: 1fr;
+  }
+
+  .vendedores-producto-controles,
+  .vendedores-acciones {
+    grid-template-columns: 1fr;
+  }
+
+  .vendedores-bonificacion {
+    grid-template-columns: minmax(0, 1fr) 78px;
+    padding: 8px;
+  }
+
+  .vendedores-bonificacion-opciones {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vendedores-barra-pedido {
+    right: 8px;
+    left: 8px;
+    gap: 8px;
+  }
+
+  .vendedores-barra-pedido button {
+    min-width: 118px;
+  }
+}
