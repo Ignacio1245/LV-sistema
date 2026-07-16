@@ -1,9 +1,14 @@
--- Vacia datos operativos de Supabase sin borrar accesos.
--- Conserva roles, usuarios y configuracion_empresa para no perder el ingreso al sistema.
+-- RESETEO TOTAL DE DATOS DEL NEGOCIO
+-- Usar solo cuando quieras dejar la base operativa en cero antes de importar de nuevo.
+-- Borra productos, precios/listas, clientes, pedidos, cobranzas, stock, compras,
+-- proveedores, vendedores, rubros, zonas y auditoria.
+--
+-- IMPORTANTE: conserva roles, usuarios y configuracion_empresa para no perder
+-- el ingreso al sistema ni los accesos ya creados.
 -- Si alguna tabla todavia no existe, la saltea.
 
-do $$
-declare
+DO $$
+DECLARE
   tablas_operativas text[] := array[
     'pagos_cliente',
     'movimientos_stock',
@@ -22,18 +27,18 @@ declare
     'auditoria'
   ];
   tablas_existentes text;
-begin
-  select string_agg(format('%I.%I', schemaname, tablename), ', ')
-  into tablas_existentes
-  from pg_tables
-  where schemaname = 'public'
-    and tablename = any(tablas_operativas);
+BEGIN
+  SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
+  INTO tablas_existentes
+  FROM pg_tables
+  WHERE schemaname = 'public'
+    AND tablename = ANY(tablas_operativas);
 
-  if tablas_existentes is null then
-    raise notice 'No se encontraron tablas operativas para vaciar.';
-    return;
-  end if;
+  IF tablas_existentes IS NULL THEN
+    RAISE NOTICE 'No se encontraron tablas operativas para vaciar.';
+    RETURN;
+  END IF;
 
-  execute 'truncate table ' || tablas_existentes || ' restart identity cascade';
-  raise notice 'Datos operativos vaciados: %', tablas_existentes;
-end $$;
+  EXECUTE 'TRUNCATE TABLE ' || tablas_existentes || ' RESTART IDENTITY CASCADE';
+  RAISE NOTICE 'Datos operativos vaciados: %', tablas_existentes;
+END $$;

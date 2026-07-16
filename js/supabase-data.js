@@ -52,6 +52,15 @@ function obtenerTextoTiposSincronizacionPendientes() {
     .join(", ");
 }
 
+function sincronizacionCompletaEsRiesgosaPorGuardadoLocal(tipo, opciones) {
+  const tiposConGuardadoPuntual =
+    ["clientes", "productos", "pedidos"];
+
+  return opciones &&
+    opciones.origen === "guardadoLocal" &&
+    tiposConGuardadoPuntual.includes(tipo);
+}
+
 function actualizarBotonPendientesSiExiste() {
   if (typeof actualizarVistaBotonSincronizacionPendiente === "function") {
     actualizarVistaBotonSincronizacionPendiente();
@@ -151,12 +160,16 @@ function pausarSincronizacionAutomatica(accion) {
     });
 }
 
-function programarSincronizacionAutomatica(tipo) {
+function programarSincronizacionAutomatica(tipo, opciones) {
   if (
     !sincronizacionAutomaticaHabilitada ||
     sincronizacionAutomaticaPausada ||
     !haySesionSupabaseParaSincronizar()
   ) {
+    return;
+  }
+
+  if (sincronizacionCompletaEsRiesgosaPorGuardadoLocal(tipo, opciones)) {
     return;
   }
 
@@ -288,7 +301,9 @@ async function guardarClienteOperacionSupabase(cliente) {
     if (clienteGuardado && clienteGuardado.idSupabase) {
       cliente.idSupabase =
         clienteGuardado.idSupabase;
-      guardarClientes();
+      ejecutarSinProgramarSincronizacion(function () {
+        guardarClientes();
+      });
     }
 
     informarOperacionSupabase(
@@ -341,7 +356,9 @@ async function guardarProductoOperacionSupabase(producto) {
     if (productoGuardado && productoGuardado.idSupabase) {
       producto.idSupabase =
         productoGuardado.idSupabase;
-      guardarProductos();
+      ejecutarSinProgramarSincronizacion(function () {
+        guardarProductos();
+      });
     }
 
     informarOperacionSupabase(
@@ -444,7 +461,9 @@ async function guardarPedidoSupabaseConReintento(pedido) {
     try {
       if (!pedido.idSupabase) {
         await asegurarNumeroPedidoNuevoSupabase(pedido, pedido.numero);
-        guardarPedidos();
+        ejecutarSinProgramarSincronizacion(function () {
+          guardarPedidos();
+        });
       }
 
       return await guardarPedidoSupabase(pedido);
@@ -455,7 +474,9 @@ async function guardarPedidoSupabaseConReintento(pedido) {
 
       pedido.numero =
         (Number(pedido.numero) || 0) + 1;
-      guardarPedidos();
+      ejecutarSinProgramarSincronizacion(function () {
+        guardarPedidos();
+      });
     }
   }
 
@@ -479,7 +500,9 @@ async function guardarPedidoOperacionSupabase(pedido) {
         pedidoGuardado.idSupabase;
       pedido.numero =
         pedidoGuardado.numero || pedido.numero;
-      guardarPedidos();
+      ejecutarSinProgramarSincronizacion(function () {
+        guardarPedidos();
+      });
       renderizarPedidos();
       actualizarMenuPedidos();
       actualizarDashboard();
@@ -503,8 +526,11 @@ async function guardarPedidoOperacionSupabase(pedido) {
 
 async function guardarProductosPedidoOperacionSupabase(pedido) {
   if (!puedeGuardarOperacionEnSupabase() || !pedido || !Array.isArray(pedido.items)) {
-    return;
+    return true;
   }
+
+  let productosGuardados =
+    true;
 
   for (const item of pedido.items) {
     if (!item.producto) {
@@ -517,9 +543,16 @@ async function guardarProductosPedidoOperacionSupabase(pedido) {
       });
 
     if (productoLocal) {
-      await guardarProductoOperacionSupabase(productoLocal);
+      const productoGuardado =
+        await guardarProductoOperacionSupabase(productoLocal);
+
+      if (!productoGuardado) {
+        productosGuardados = false;
+      }
     }
   }
+
+  return productosGuardados;
 }
 
 async function guardarMovimientoCuentaOperacionSupabase(cliente, movimiento) {
@@ -1172,8 +1205,15 @@ async function cargarAdministracionDesdeSupabase() {
 
   if (Array.isArray(rolesSupabase)) {
     rolesSupabase.forEach(function (rol) {
-      ROLES[rol.nombre] = rol.permisos || {};
+      ROLES[rol.nombre] =
+        typeof obtenerPermisosRolSistema === "function"
+          ? obtenerPermisosRolSistema(rol.nombre, rol.permisos)
+          : rol.permisos || {};
     });
+
+    if (typeof asegurarPermisosRolesBaseSistema === "function") {
+      asegurarPermisosRolesBaseSistema();
+    }
   }
 
   if (Array.isArray(usuariosSupabase)) {

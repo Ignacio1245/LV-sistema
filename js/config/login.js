@@ -180,8 +180,15 @@ async function cargarAccesosParaLoginDesdeSupabase() {
         return;
       }
 
-      ROLES[rol.nombre] = rol.permisos || {};
+      ROLES[rol.nombre] =
+        typeof obtenerPermisosRolSistema === "function"
+          ? obtenerPermisosRolSistema(rol.nombre, rol.permisos)
+          : rol.permisos || {};
     });
+
+    if (typeof asegurarPermisosRolesBaseSistema === "function") {
+      asegurarPermisosRolesBaseSistema();
+    }
   }
 
   if (Array.isArray(usuariosSupabase) && usuariosSupabase.length > 0) {

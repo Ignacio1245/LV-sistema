@@ -37,15 +37,62 @@ const PERMISOS_ROL = [
     "informes"
 ];
 
+function rolEsSuperadmin(nombreRol) {
+    return String(nombreRol || "").trim().toUpperCase() === "SUPERADMIN";
+}
+
+function obtenerPermisosSuperadminSistema() {
+    const permisos = {};
+
+    PERMISOS_ROL.forEach(function (permiso) {
+        permisos[permiso] = true;
+    });
+
+    return permisos;
+}
+
+function obtenerPermisosRolSistema(nombreRol, permisosOrigen) {
+    if (rolEsSuperadmin(nombreRol)) {
+        return obtenerPermisosSuperadminSistema();
+    }
+
+    const permisos = {};
+    const permisosSeguros =
+        permisosOrigen && typeof permisosOrigen === "object" ? permisosOrigen : {};
+
+    PERMISOS_ROL.forEach(function (permiso) {
+        permisos[permiso] = permisosSeguros[permiso] === true;
+    });
+
+    return permisos;
+}
+
+function asegurarPermisosRolesBaseSistema() {
+    ROLES.SUPERADMIN = obtenerPermisosSuperadminSistema();
+}
+
 let usuarioEditandoCodigo = null;
 let filtroRolUsuariosSistema = "TODOS";
 let rolEditandoNombre = null;
+
+asegurarPermisosRolesBaseSistema();
 
 function obtenerNombreRolDesdeTexto(texto) {
     return normalizarTexto(texto)
         .replace(/[^a-z0-9]+/g, "_")
         .replace(/^_+|_+$/g, "")
         .toUpperCase();
+}
+
+function obtenerRolValidoUsuarioSistema(nombreRol) {
+    const rolNormalizado =
+        obtenerNombreRolDesdeTexto(nombreRol);
+
+    if (rolEsSuperadmin(rolNormalizado)) {
+        return "SUPERADMIN";
+    }
+
+    return ROLES[rolNormalizado] ? rolNormalizado : "VENDEDOR";
 }
 
 function guardarRolesPersonalizados() {
@@ -79,14 +126,15 @@ function cargarRolesPersonalizados() {
         rolesGuardados;
 
     Object.keys(datosRoles).forEach(function (nombreRol) {
-        const permisos = {};
+        if (rolEsSuperadmin(nombreRol)) {
+            ROLES[nombreRol] = obtenerPermisosSuperadminSistema();
+            return;
+        }
 
-        PERMISOS_ROL.forEach(function (permiso) {
-            permisos[permiso] = datosRoles[nombreRol][permiso] === true;
-        });
-
-        ROLES[nombreRol] = permisos;
+        ROLES[nombreRol] = obtenerPermisosRolSistema(nombreRol, datosRoles[nombreRol]);
     });
+
+    asegurarPermisosRolesBaseSistema();
 }
 
 function renderizarOpcionesRolesUsuario() {
@@ -159,6 +207,12 @@ async function agregarRolPersonalizado(event) {
         return;
     }
 
+    if (obtenerRolesBaseSistema().includes(nombreRol)) {
+        alert("Los roles base del sistema no se pueden modificar.");
+        cancelarEdicionRolSistema();
+        return;
+    }
+
     if (rolEditandoNombre === null && ROLES[nombreRol]) {
         alert("Ya existe un rol con ese nombre.");
         return;
@@ -188,7 +242,8 @@ async function agregarRolPersonalizado(event) {
         delete ROLES[rolEditandoNombre];
     }
 
-    ROLES[nombreRol] = permisos;
+    ROLES[nombreRol] = obtenerPermisosRolSistema(nombreRol, permisos);
+    asegurarPermisosRolesBaseSistema();
     guardarRolesPersonalizados();
     guardarUsuariosSistema();
     const rolGuardadoOnline =
@@ -251,7 +306,7 @@ function renderizarRolesSistema() {
                     <td>${permisos.length > 0 ? permisos.join(", ") : "Sin permisos"}</td>
                     <td>${esBase ? "Base" : "Personalizado"}</td>
                     <td>
-                        <button class="btn btn-secondary" onclick="editarRolSistema('${nombreRol}')">
+                        <button class="btn btn-secondary" onclick="editarRolSistema('${nombreRol}')" ${esBase ? "disabled" : ""}>
                             Editar
                         </button>
                         <button class="btn btn-danger" onclick="eliminarRolSistema('${nombreRol}')" ${esBase ? "disabled" : ""}>
@@ -288,6 +343,11 @@ function cancelarEdicionRolSistema() {
 function editarRolSistema(nombreRol) {
     if (!ROLES[nombreRol]) {
         alert("No se encontro el rol.");
+        return;
+    }
+
+    if (obtenerRolesBaseSistema().includes(nombreRol)) {
+        alert("Los roles base del sistema no se pueden editar.");
         return;
     }
 
@@ -432,7 +492,7 @@ function limpiarUsuariosSistemaDuplicados() {
             rolIdSupabase: usuario.rolIdSupabase || null,
             codigo: Number(usuario.codigo) || indice + 1,
             nombre: usuario.nombre || "Usuario",
-            rol: ROLES[usuario.rol] ? usuario.rol : "VENDEDOR",
+            rol: obtenerRolValidoUsuarioSistema(usuario.rol),
             email: usuario.email || "",
             activo: usuario.activo !== false
         };
@@ -493,7 +553,7 @@ function cargarUsuariosSistema() {
                 rolIdSupabase: usuario.rolIdSupabase || null,
                 codigo: Number(usuario.codigo) || indice + 1,
                 nombre: usuario.nombre || "Usuario",
-                rol: ROLES[usuario.rol] ? usuario.rol : "VENDEDOR",
+                rol: obtenerRolValidoUsuarioSistema(usuario.rol),
                 email: usuario.email || "",
                 activo: usuario.activo !== false
             };
@@ -741,7 +801,7 @@ function editarUsuarioSistema(codigo) {
     usuarioEditandoCodigo = codigo;
     dom.usuarioNombreInput.value = usuario.nombre || "";
     dom.usuarioEmailInput.value = usuario.email || "";
-    dom.usuarioNuevoRolInput.value = ROLES[usuario.rol] ? usuario.rol : "VENDEDOR";
+    dom.usuarioNuevoRolInput.value = obtenerRolValidoUsuarioSistema(usuario.rol);
 
     if (dom.usuarioPasswordInput) {
         dom.usuarioPasswordInput.value = "";
@@ -768,7 +828,7 @@ async function agregarUsuarioSistema(event) {
         dom.usuarioNombreInput.value.trim();
 
     const rol =
-        dom.usuarioNuevoRolInput.value;
+        obtenerRolValidoUsuarioSistema(dom.usuarioNuevoRolInput.value);
     const email =
         obtenerEmailInternoUsuarioSistema(dom.usuarioEmailInput.value);
     const password =
@@ -864,7 +924,7 @@ async function guardarEdicionUsuarioSistema(codigo, nombre, email, rol, password
         return;
     }
 
-    if (usuario.rol === "SUPERADMIN" && rol !== "SUPERADMIN" && contarSuperadminsActivos() <= 1) {
+    if (rolEsSuperadmin(usuario.rol) && !rolEsSuperadmin(rol) && contarSuperadminsActivos() <= 1) {
         alert("No podes cambiar el rol del ultimo SUPERADMIN activo.");
         return;
     }
@@ -960,7 +1020,7 @@ async function enviarRecuperacionUsuarioSistema(codigo) {
 
 function contarSuperadminsActivos() {
     return usuariosSistema.filter(function (usuario) {
-        return usuario.activo && usuario.rol === "SUPERADMIN";
+        return usuario.activo && rolEsSuperadmin(usuario.rol);
     }).length;
 }
 
@@ -984,7 +1044,7 @@ function cambiarEstadoUsuarioSistema(codigo) {
         return;
     }
 
-    if (usuario.activo && usuario.rol === "SUPERADMIN" && contarSuperadminsActivos() <= 1) {
+    if (usuario.activo && rolEsSuperadmin(usuario.rol) && contarSuperadminsActivos() <= 1) {
         alert("No podes desactivar el ultimo SUPERADMIN activo.");
         return;
     }
@@ -1022,7 +1082,7 @@ async function eliminarUsuarioSistema(codigo) {
         return;
     }
 
-    if (usuario.activo && usuario.rol === "SUPERADMIN" && contarSuperadminsActivos() <= 1) {
+    if (usuario.activo && rolEsSuperadmin(usuario.rol) && contarSuperadminsActivos() <= 1) {
         alert("No podes eliminar el ultimo SUPERADMIN activo.");
         return;
     }
@@ -1070,7 +1130,14 @@ async function eliminarUsuarioSistema(codigo) {
 }
 
 function tienePermiso(modulo){
-    const permisosDelRol = ROLES[usuarioActual.rol];
+    const rolActualNormalizado =
+        obtenerRolValidoUsuarioSistema(usuarioActual.rol);
+
+    if (rolEsSuperadmin(rolActualNormalizado)) {
+        return true;
+    }
+
+    const permisosDelRol = ROLES[rolActualNormalizado];
 
     if (!permisosDelRol) {
         return false;

@@ -1,3 +1,21 @@
+function normalizarNombreRolSupabase(nombreRol) {
+  return String(nombreRol || "")
+    .trim()
+    .replace(/[^a-z0-9]+/gi, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
+function obtenerNombreRolNormalizadoSupabase(nombreRol, rolRespaldo) {
+  const rolNormalizado =
+    normalizarNombreRolSupabase(nombreRol);
+
+  if (rolNormalizado) {
+    return rolNormalizado;
+  }
+
+  return rolRespaldo || "VENDEDOR";
+}
 function mapearProductoDesdeSupabase(producto) {
   if (!producto || typeof producto !== "object") {
     return null;
@@ -388,7 +406,7 @@ function mapearRolDesdeSupabase(rol) {
 
   return {
     idSupabase: rol.id,
-    nombre: rol.nombre,
+    nombre: obtenerNombreRolNormalizadoSupabase(rol.nombre),
     permisos: rol.permisos || {},
     activo: rol.activo !== false
   };
@@ -396,7 +414,7 @@ function mapearRolDesdeSupabase(rol) {
 
 function mapearRolParaSupabase(nombreRol, permisos) {
   return {
-    nombre: nombreRol,
+    nombre: obtenerNombreRolNormalizadoSupabase(nombreRol),
     permisos: permisos || {},
     activo: true
   };
@@ -408,9 +426,12 @@ function mapearUsuarioDesdeSupabase(usuario) {
   }
 
   const rol =
-    usuario.roles && usuario.roles.nombre
-      ? usuario.roles.nombre
-      : usuario.rol || "VENDEDOR";
+    obtenerNombreRolNormalizadoSupabase(
+      usuario.roles && usuario.roles.nombre
+        ? usuario.roles.nombre
+        : usuario.rol,
+      "VENDEDOR"
+    );
 
   return {
     idSupabase: usuario.id,

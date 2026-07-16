@@ -840,6 +840,26 @@
   width: fit-content;
 }
 
+.temporary-product-import {
+  display: grid;
+  gap: 12px;
+  margin-top: 6px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px dashed #93a4ba;
+  border-radius: 8px;
+}
+
+.temporary-product-import h4 {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.temporary-product-import span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .debt-row {
   display: flex;
   align-items: center;

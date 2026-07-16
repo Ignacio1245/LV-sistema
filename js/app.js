@@ -451,6 +451,10 @@ const dom = {
   productosImportacionTexto: document.querySelector("#productosImportacionTexto"),
   productosImportacionEstado: document.querySelector("#productosImportacionEstado"),
   importarProductosButton: document.querySelector("#importarProductosButton"),
+  productosTemporalNombresArchivo: document.querySelector("#productosTemporalNombresArchivo"),
+  productosTemporalPreciosArchivo: document.querySelector("#productosTemporalPreciosArchivo"),
+  productosTemporalEstado: document.querySelector("#productosTemporalEstado"),
+  productosTemporalButton: document.querySelector("#productosTemporalButton"),
   productosActivosResumen: document.querySelector("#productosActivosResumen"),
   productosInactivosResumen: document.querySelector("#productosInactivosResumen"),
   productosBajoStockResumen: document.querySelector("#productosBajoStockResumen"),
@@ -534,6 +538,12 @@ let vendedorEditando = null;
 let ultimaActualizacionOnlinePorCambioDeApartado = 0;
 let actualizandoDatosPorCambioDeApartado = false;
 const intervaloMinimoActualizacionApartado = 30000;
+let ultimaActualizacionOnlineClientes = 0;
+let actualizandoClientesOnline = false;
+const intervaloMinimoActualizacionClientes = 5000;
+let ultimaActualizacionOnlinePedidos = 0;
+let actualizandoPedidosOnline = false;
+const intervaloMinimoActualizacionPedidos = 5000;
 let ultimaPaginaVisibleSistema = "dashboard";
 
 function renderizarListaDashboard(contenedor, items, crearFila, mensajeVacio) {
@@ -1391,6 +1401,10 @@ function obtenerTextoUsuarioMovilVendedor(emailAcceso) {
   return email || "-";
 }
 
+function usuarioSistemaEsVendedorMovil(usuario) {
+  return String(usuario && usuario.rol ? usuario.rol : "").trim().toUpperCase() === "VENDEDOR";
+}
+
 async function guardarUsuarioMovilDeVendedor(nombreVendedor, emailAcceso, password, vendedorActivo) {
   if (!emailAcceso) {
     alert("Ingrese un usuario movil valido para el vendedor.");
@@ -1403,6 +1417,11 @@ async function guardarUsuarioMovilDeVendedor(nombreVendedor, emailAcceso, passwo
     !usuarioExistente;
   const passwordIngresado =
     String(password || "");
+
+  if (usuarioExistente && !usuarioSistemaEsVendedorMovil(usuarioExistente)) {
+    alert("Ese usuario ya existe con rol " + usuarioExistente.rol + ". Use otro usuario movil o cambie ese usuario a VENDEDOR desde Usuarios.");
+    return false;
+  }
 
   if (esUsuarioNuevo && passwordIngresado.length < 6) {
     alert("Para crear el acceso movil ingrese una clave de al menos 6 caracteres.");
@@ -1704,6 +1723,16 @@ function eliminarVendedor(codigo) {
     vendedoresSistema.filter(function (vendedorGuardado) {
       return vendedorGuardado.codigo !== codigo;
     });
+
+  const usuarioMovil =
+    obtenerUsuarioSistemaVendedorPorEmail(vendedor.email);
+
+  if (usuarioMovil && usuarioSistemaEsVendedorMovil(usuarioMovil)) {
+    usuarioMovil.activo = false;
+    guardarUsuariosSistema();
+    guardarUsuarioOperacionSupabase(usuarioMovil);
+    renderizarUsuariosSistema();
+  }
 
   guardarVendedoresSistema();
   eliminarVendedorOperacionSupabase(vendedor);
@@ -2112,8 +2141,182 @@ async function actualizarDatosOnlineAlCambiarApartado(nombrePagina) {
   }
 }
 
+function puedeActualizarClientesOnlineRapido(forzarActualizacion) {
+  if (actualizandoClientesOnline) {
+    return false;
+  }
+
+  if (
+    !forzarActualizacion &&
+    Date.now() - ultimaActualizacionOnlineClientes < intervaloMinimoActualizacionClientes
+  ) {
+    return false;
+  }
+
+  if (typeof sistemaAutenticado === "function" && !sistemaAutenticado()) {
+    return false;
+  }
+
+  if (typeof usuarioSupabaseAutenticado !== "function" || !usuarioSupabaseAutenticado()) {
+    return false;
+  }
+
+  if (typeof pedidoActualTieneDatos === "function" && pedidoActualTieneDatos()) {
+    return false;
+  }
+
+  return true;
+}
+
+async function actualizarClientesDesdeSupabaseRapido(motivo, forzarActualizacion) {
+  if (!puedeActualizarClientesOnlineRapido(forzarActualizacion)) {
+    return;
+  }
+
+  actualizandoClientesOnline = true;
+  ultimaActualizacionOnlineClientes = Date.now();
+
+  try {
+    actualizarEstadoSincronizacionSupabase(
+      "Actualizando clientes online...",
+      "sync-working"
+    );
+
+    if (typeof haySincronizacionPendiente === "function" &&
+        haySincronizacionPendiente() &&
+        typeof sincronizarCambiosPendientesSupabase === "function") {
+      await sincronizarCambiosPendientesSupabase();
+    }
+
+    const resultado =
+      typeof pausarSincronizacionAutomatica === "function"
+        ? await pausarSincronizacionAutomatica(cargarClientesDesdeSupabase)
+        : await cargarClientesDesdeSupabase();
+
+    renderizarClientes();
+    renderizarClientesConDeuda();
+    actualizarDashboard();
+
+    const erroresResultado =
+      obtenerErroresResultadoSupabase(resultado);
+
+    if (erroresResultado.length > 0) {
+      actualizarEstadoSincronizacionSupabase(
+        "Clientes actualizados con avisos: " + erroresResultado.join(" | "),
+        "sync-error"
+      );
+      return;
+    }
+
+    actualizarEstadoSincronizacionSupabase(
+      "Clientes online actualizados" + (motivo ? " al " + motivo : "") + ".",
+      "sync-ok"
+    );
+  } catch (error) {
+    console.error("No se pudieron actualizar clientes online:", error);
+    actualizarEstadoSincronizacionSupabase(
+      "No se pudieron actualizar clientes online.",
+      "sync-error"
+    );
+  } finally {
+    actualizandoClientesOnline = false;
+  }
+}
+
+function puedeActualizarPedidosOnlineRapido(forzarActualizacion) {
+  if (actualizandoPedidosOnline) {
+    return false;
+  }
+
+  if (
+    !forzarActualizacion &&
+    Date.now() - ultimaActualizacionOnlinePedidos < intervaloMinimoActualizacionPedidos
+  ) {
+    return false;
+  }
+
+  if (typeof sistemaAutenticado === "function" && !sistemaAutenticado()) {
+    return false;
+  }
+
+  if (typeof usuarioSupabaseAutenticado !== "function" || !usuarioSupabaseAutenticado()) {
+    return false;
+  }
+
+  if (typeof pedidoActualTieneDatos === "function" && pedidoActualTieneDatos()) {
+    return false;
+  }
+
+  return true;
+}
+
+async function actualizarPedidosDesdeSupabaseRapido(motivo, forzarActualizacion) {
+  if (!puedeActualizarPedidosOnlineRapido(forzarActualizacion)) {
+    return;
+  }
+
+  actualizandoPedidosOnline = true;
+  ultimaActualizacionOnlinePedidos = Date.now();
+
+  try {
+    actualizarEstadoSincronizacionSupabase(
+      "Actualizando pedidos online...",
+      "sync-working"
+    );
+
+    if (typeof haySincronizacionPendiente === "function" &&
+        haySincronizacionPendiente() &&
+        typeof sincronizarCambiosPendientesSupabase === "function") {
+      await sincronizarCambiosPendientesSupabase();
+    }
+
+    const resultado =
+      typeof pausarSincronizacionAutomatica === "function"
+        ? await pausarSincronizacionAutomatica(cargarPedidosDesdeSupabase)
+        : await cargarPedidosDesdeSupabase();
+
+    renderizarPedidos();
+    actualizarMenuPedidos();
+    actualizarDashboard();
+
+    const erroresResultado =
+      obtenerErroresResultadoSupabase(resultado);
+
+    if (erroresResultado.length > 0) {
+      actualizarEstadoSincronizacionSupabase(
+        "Pedidos actualizados con avisos: " + erroresResultado.join(" | "),
+        "sync-error"
+      );
+      return;
+    }
+
+    actualizarEstadoSincronizacionSupabase(
+      "Pedidos online actualizados" + (motivo ? " al " + motivo : "") + ".",
+      "sync-ok"
+    );
+  } catch (error) {
+    console.error("No se pudieron actualizar pedidos online:", error);
+    actualizarEstadoSincronizacionSupabase(
+      "No se pudieron actualizar pedidos online.",
+      "sync-error"
+    );
+  } finally {
+    actualizandoPedidosOnline = false;
+  }
+}
+
 function actualizarDatosOnlineAlVolverAlSistema() {
   if (document.hidden) {
+    return;
+  }
+
+  if (ultimaPaginaVisibleSistema === "clientes" || ultimaPaginaVisibleSistema === "cuenta") {
+    actualizarClientesDesdeSupabaseRapido("volver a Clientes", true);
+    return;
+  }
+
+  if (ultimaPaginaVisibleSistema === "ventas") {
+    actualizarPedidosDesdeSupabaseRapido("volver a Ventas", true);
     return;
   }
 
@@ -2762,6 +2965,7 @@ function mostrarPagina(nombre) {
     document.querySelector("#newSaleButton");
   if (nombre === "ventas") {
     dom.ventasPage.classList.remove("hidden");
+    actualizarPedidosDesdeSupabaseRapido("abrir Ventas", true);
     if (botonNuevoPedido) {
       botonNuevoPedido.style.display = "block";
     }
@@ -2773,6 +2977,7 @@ function mostrarPagina(nombre) {
   if (nombre === "clientes") {
     dom.clientesPage.classList.remove("hidden");
     mostrarSeccionCliente(seccionClienteInicial || "listado");
+    actualizarClientesDesdeSupabaseRapido("abrir Clientes", true);
   }
 
   if (nombre === "vendedores") {
@@ -3742,6 +3947,13 @@ function configurarEventos() {
     importarProductosDesdeTexto
   );
 
+  if (dom.productosTemporalButton) {
+    dom.productosTemporalButton.addEventListener(
+      "click",
+      corregirProductosDesdeArchivosTemporales
+    );
+  }
+
   dom.agregarPedidoButton.addEventListener(
     "click",
     agregarProductoAlPedidoActual
@@ -4054,3 +4266,4 @@ async function iniciarApp() {
 }
 
 iniciarApp();
+

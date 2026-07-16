@@ -747,6 +747,17 @@ function validarVendedoresMobileProduccion(raizProyecto) {
     errores.push("vendedores-mobile.js debe filtrar clientes asignados al vendedor");
   }
 
+  if (!vendedores.includes("insertarClienteNuevoSupabase") ||
+      !vendedores.includes("obtenerMayorCodigoClienteSupabase() + 1") ||
+      !vendedores.includes("refrescarDatosVendedorManteniendoCliente")) {
+    errores.push("vendedores-mobile.js debe crear clientes online, reintentar codigos y refrescar desde Supabase");
+  }
+
+  if (!vendedores.includes('String(marcaTiempo) + String(sufijoAleatorio).padStart(3, "0")') ||
+      !vendedores.includes("Supabase no confirmo la cobranza")) {
+    errores.push("cobranzas moviles deben usar codigo unico y exigir confirmacion Supabase");
+  }
+
   if (!repositorio.includes("obtenerUsuarioSistemaPorEmailSupabase")) {
     errores.push("supabase-repository.js debe poder leer el usuario actual por email");
   }
@@ -756,6 +767,32 @@ function validarVendedoresMobileProduccion(raizProyecto) {
   }
 }
 
+function validarRolesYPermisosAdministracion(raizProyecto) {
+  const usuariosPath =
+    path.join(raizProyecto, "js", "config", "usuarios.js");
+  const usuarios =
+    fs.readFileSync(usuariosPath, "utf8");
+  const errores = [];
+
+  if (!usuarios.includes("function obtenerRolValidoUsuarioSistema") ||
+      !usuarios.includes("rol: obtenerRolValidoUsuarioSistema(usuario.rol)")) {
+    errores.push("usuarios.js debe normalizar roles antes de aplicar permisos");
+  }
+
+  if (!usuarios.includes("rolEsSuperadmin(usuario.rol)") ||
+      !usuarios.includes("rolEsSuperadmin(rol)")) {
+    errores.push("usuarios.js debe proteger SUPERADMIN con comparacion normalizada");
+  }
+
+  if (!usuarios.includes("const rolActualNormalizado") ||
+      !usuarios.includes("rolEsSuperadmin(rolActualNormalizado)")) {
+    errores.push("tienePermiso debe permitir todo a SUPERADMIN normalizado");
+  }
+
+  if (errores.length > 0) {
+    throw new Error("Roles/permisos administrativos fragiles: " + errores.join(" | "));
+  }
+}
 function validarImportacionesRobustas(raizProyecto) {
   const productosAdminPath =
     path.join(raizProyecto, "js", "productos-admin.js");
@@ -781,8 +818,10 @@ function validarImportacionesRobustas(raizProyecto) {
 
   if (!productosAdmin.includes("guardarRubros();") ||
       !productosAdmin.includes("guardarProveedores();") ||
-      !productosAdmin.includes('programarSincronizacionAutomatica("datosBase")')) {
-    errores.push("importacion de productos debe guardar y sincronizar rubros/proveedores creados");
+      !productosAdmin.includes("sincronizarImportacionProductosAhora") ||
+      !productosAdmin.includes("marcarImportacionProductosPendiente") ||
+      !productosAdmin.includes("await sincronizarImportacionProductosAhora")) {
+    errores.push("importacion de productos debe guardar, marcar pendientes y subir a Supabase al terminar");
   }
 
   if (!clientes.includes("guardarZonas();") ||
@@ -1192,6 +1231,13 @@ function validarPedidosOperativos(raizProyecto) {
     errores.push("pedidos debe advertir antes de cerrar con un pedido sin guardar");
   }
 
+  if (!pedido.includes("function hayCambiosPendientesAntesDeSalir") ||
+      !pedido.includes("haySincronizacionPendiente") ||
+      !pedido.includes("guardandoPedidoEnCurso") ||
+      !pedido.includes("pedidosOperacionEnCurso.size > 0")) {
+    errores.push("pedidos debe advertir tambien por sincronizacion u operaciones en curso");
+  }
+
   if (!html.includes("pedidoRapidoModal") ||
       !html.includes("pedidoRapidoCantidadInput") ||
       !html.includes("pedidoRapidoBonificacionInput") ||
@@ -1573,6 +1619,12 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     errores.push("catalogo-whatsapp.js debe permitir cantidades editables y seguras");
   }
 
+  if (!catalogo.includes("function catalogoTienePedidoSinEnviar") ||
+      !catalogo.includes("pedidoCatalogoConfirmado") ||
+      !catalogo.includes('window.addEventListener("beforeunload", advertirSalidaCatalogoConPedido)')) {
+    errores.push("catalogo debe advertir antes de cerrar con carrito pendiente");
+  }
+
   if (!vendedores.includes("clienteAsignadoAlVendedorActual")) {
     errores.push("vendedores-mobile.js debe filtrar clientes asignados al vendedor");
   }
@@ -1590,6 +1642,11 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
       !vendedores.includes("pedidoVendedorEnCurso = true") ||
       !vendedores.includes("cobranzaVendedorEnCurso = true")) {
     errores.push("vendedores-mobile.js debe bloquear doble envio de pedido y cobranza");
+  }
+
+  if (!vendedores.includes("function vendedorTieneTrabajoSinCerrar") ||
+      !vendedores.includes('window.addEventListener("beforeunload", advertirSalidaVendedorConTrabajo)')) {
+    errores.push("vendedores debe advertir antes de cerrar con trabajo pendiente");
   }
 
   if (!vendedores.includes("function obtenerMensajeLoginVendedor") ||
@@ -1627,6 +1684,7 @@ validarEstilosSeparados(raiz);
 validarSincronizacionMultiEquipo(raiz);
 validarCatalogoPublicoProduccion(raiz);
 validarVendedoresMobileProduccion(raiz);
+validarRolesYPermisosAdministracion(raiz);
 validarImportacionesRobustas(raiz);
 validarBusquedaStockYCompras(raiz);
 validarDashboardAdministrativo(raiz);

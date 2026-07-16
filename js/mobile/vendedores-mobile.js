@@ -2,7 +2,9 @@ const telefonoVendedorDesdeUrl =
   new URLSearchParams(window.location.search).get("wsp") || "";
 const CLAVE_TELEFONO_VENDEDOR = "lv_vendedores_telefono_destino";
 const CLAVE_TELEFONO_CATALOGO_VENDEDOR = "lv_catalogo_telefono_destino";
+const CLAVE_CLIENTES_RECIENTES_VENDEDOR = "lv_vendedores_clientes_recientes";
 const PREFIJO_COBRANZA_PENDIENTE_VENDEDOR = "PENDIENTE_COBRANZA_VENDEDOR";
+const MAX_CLIENTES_RECIENTES_VENDEDOR = 6;
 
 let clientesVendedor = [];
 let productosVendedor = [];
@@ -11,8 +13,12 @@ let itemsPedidoVendedor = [];
 let usuarioSistemaVendedorActual = null;
 let moduloVendedorActual = "";
 let vendedorMovilAutorizado = true;
+let motivoBloqueoVendedorMovil = "";
 let pedidoVendedorEnCurso = false;
+let firmaUltimoPedidoMovilGuardado = "";
 let cobranzaVendedorEnCurso = false;
+let ultimosResultadosClientesVendedor = [];
+let ultimosResultadosProductosVendedor = [];
 
 const vendedorDom = {
   login: document.getElementById("vendedorLogin"),
@@ -23,9 +29,15 @@ const vendedorDom = {
   loginEstado: document.getElementById("vendedorLoginEstado"),
   estadoConexion: document.getElementById("vendedorEstadoConexion"),
   botonSalir: document.getElementById("vendedorBotonSalir"),
+  nombreEncabezado: document.getElementById("vendedorNombreEncabezado"),
+  metricaClientes: document.getElementById("vendedorMetricaClientes"),
+  metricaProductos: document.getElementById("vendedorMetricaProductos"),
+  metricaDeuda: document.getElementById("vendedorMetricaDeuda"),
+  metricaPedido: document.getElementById("vendedorMetricaPedido"),
   inicio: document.getElementById("vendedorInicio"),
   moduloVenta: document.getElementById("vendedorModuloVenta"),
   moduloClientes: document.getElementById("vendedorModuloClientes"),
+  moduloCatalogo: document.getElementById("vendedorModuloCatalogo"),
   seccionClientes: document.getElementById("vendedorSeccionClientes"),
   flujoPaso: document.getElementById("vendedorFlujoPaso"),
   flujoTitulo: document.getElementById("vendedorFlujoTitulo"),
@@ -33,9 +45,20 @@ const vendedorDom = {
   nombreVendedor: document.getElementById("vendedorNombre"),
   zonaCliente: document.getElementById("vendedorZonaCliente"),
   busquedaCliente: document.getElementById("vendedorBusquedaCliente"),
+  clientesRecientes: document.getElementById("vendedorClientesRecientes"),
   resultadosClientes: document.getElementById("vendedorResultadosClientes"),
   clienteSeleccionado: document.getElementById("vendedorClienteSeleccionado"),
+  botonNuevoCliente: document.getElementById("vendedorBotonNuevoCliente"),
+  nuevoClienteForm: document.getElementById("vendedorNuevoClienteForm"),
+  nuevoClienteNombre: document.getElementById("vendedorNuevoClienteNombre"),
+  nuevoClienteTelefono: document.getElementById("vendedorNuevoClienteTelefono"),
+  nuevoClienteDireccion: document.getElementById("vendedorNuevoClienteDireccion"),
+  nuevoClienteZona: document.getElementById("vendedorNuevoClienteZona"),
+  guardarNuevoCliente: document.getElementById("vendedorGuardarNuevoCliente"),
+  cancelarNuevoCliente: document.getElementById("vendedorCancelarNuevoCliente"),
+  nuevoClienteEstado: document.getElementById("vendedorNuevoClienteEstado"),
   seccionProductos: document.getElementById("vendedorSeccionProductos"),
+  seccionCatalogo: document.getElementById("vendedorSeccionCatalogo"),
   seccionPedido: document.getElementById("vendedorSeccionPedido"),
   seccionCobranza: document.getElementById("vendedorSeccionCobranza"),
   busquedaProducto: document.getElementById("vendedorBusquedaProducto"),
@@ -63,11 +86,24 @@ const vendedorDom = {
   cobranzaObservacion: document.getElementById("vendedorCobranzaObservacion"),
   botonCobrarSaldo: document.getElementById("vendedorBotonCobrarSaldo"),
   botonGuardarCobranza: document.getElementById("vendedorBotonGuardarCobranza"),
-  cobranzaEstado: document.getElementById("vendedorCobranzaEstado")
+  cobranzaEstado: document.getElementById("vendedorCobranzaEstado"),
+  botonEnviarCatalogoPanel: document.getElementById("vendedorBotonEnviarCatalogoPanel"),
+  botonCopiarCatalogo: document.getElementById("vendedorBotonCopiarCatalogo"),
+  catalogoEstado: document.getElementById("vendedorCatalogoEstado")
 };
 
 function vendedorUsaSupabaseConAuth() {
   return typeof supabaseAuthDisponible === "function" && supabaseAuthDisponible();
+}
+
+function vendedorPermiteModoPruebaLocal() {
+  const host =
+    window.location.hostname;
+
+  return window.location.protocol === "file:" ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "";
 }
 
 function normalizarUsuarioAccesoVendedor(usuario) {
@@ -124,6 +160,12 @@ function mostrarContenidoVendedor() {
 
 async function prepararSesionVendedor() {
   if (!vendedorUsaSupabaseConAuth()) {
+    if (!vendedorPermiteModoPruebaLocal()) {
+      vendedorDom.botonSalir.classList.add("vendedores-oculto");
+      mostrarLoginVendedor("No se pudo cargar el acceso online. Revisa la configuracion de Supabase.");
+      return false;
+    }
+
     vendedorDom.botonSalir.classList.add("vendedores-oculto");
     mostrarContenidoVendedor();
     return true;
@@ -154,6 +196,12 @@ async function iniciarSesionVendedorDesdeFormulario(evento) {
   evento.preventDefault();
 
   if (!vendedorUsaSupabaseConAuth()) {
+    if (!vendedorPermiteModoPruebaLocal()) {
+      vendedorDom.loginEstado.textContent =
+        "No se pudo cargar el acceso online. Revisa la configuracion de Supabase.";
+      return;
+    }
+
     mostrarContenidoVendedor();
     await cargarDatosVendedor();
     actualizarVistaVendedorDespuesDeCargarDatos();
@@ -181,7 +229,44 @@ async function iniciarSesionVendedorDesdeFormulario(evento) {
   }
 }
 
+function vendedorTieneTrabajoSinCerrar() {
+  const altaClienteVisible =
+    vendedorDom.nuevoClienteForm &&
+    !vendedorDom.nuevoClienteForm.classList.contains("vendedores-oculto");
+  const altaClienteConDatos =
+    altaClienteVisible &&
+    (
+      vendedorDom.nuevoClienteNombre.value.trim() !== "" ||
+      vendedorDom.nuevoClienteTelefono.value.trim() !== "" ||
+      vendedorDom.nuevoClienteDireccion.value.trim() !== "" ||
+      vendedorDom.nuevoClienteZona.value.trim() !== ""
+    );
+
+  return itemsPedidoVendedor.length > 0 ||
+    pedidoVendedorEnCurso ||
+    cobranzaVendedorEnCurso ||
+    altaClienteConDatos;
+}
+
+function advertirSalidaVendedorConTrabajo(evento) {
+  if (!vendedorTieneTrabajoSinCerrar()) {
+    return;
+  }
+
+  evento.preventDefault();
+  evento.returnValue = "";
+}
+
 async function cerrarSesionVendedor() {
+  if (vendedorTieneTrabajoSinCerrar()) {
+    const confirmar =
+      confirm("Hay un pedido, cobranza o cliente sin terminar. Salir igual?");
+
+    if (!confirmar) {
+      return;
+    }
+  }
+
   if (vendedorUsaSupabaseConAuth()) {
     await cerrarSesionSupabase();
   }
@@ -333,11 +418,16 @@ function clienteActivoVendedor(cliente) {
 
 function vendedorMovilEsCuentaDeVendedor() {
   return usuarioSistemaVendedorActual &&
-    usuarioSistemaVendedorActual.rol === "VENDEDOR";
+    String(usuarioSistemaVendedorActual.rol || "").trim().toUpperCase() === "VENDEDOR";
 }
 
 function vendedorMovilPuedeOperar() {
   return vendedorMovilAutorizado !== false;
+}
+
+function obtenerMotivoBloqueoVendedorMovil() {
+  return motivoBloqueoVendedorMovil ||
+    "Tu cuenta no esta habilitada como vendedor movil.";
 }
 
 function obtenerNombreVendedorCuentaActual() {
@@ -381,20 +471,39 @@ function obtenerAliasAsignacionVendedorActual() {
 
 function aplicarVendedorComercialDeCuenta(vendedoresDisponibles) {
   if (!usuarioSistemaVendedorActual || !Array.isArray(vendedoresDisponibles)) {
-    return;
+    vendedorMovilAutorizado = false;
+    motivoBloqueoVendedorMovil =
+      "No se pudo revisar el padron de vendedores.";
+    return false;
   }
 
   const emailSesion =
     normalizarTextoVendedor(usuarioSistemaVendedorActual.email || obtenerEmailSesionSupabase());
+  const nombreUsuario =
+    normalizarTextoVendedor(usuarioSistemaVendedorActual.nombre || "");
   const vendedorComercial =
     vendedoresDisponibles.find(function (vendedor) {
       return vendedor.activo !== false &&
-        normalizarTextoVendedor(vendedor.email || "") === emailSesion;
+        (
+          normalizarTextoVendedor(vendedor.email || "") === emailSesion ||
+          (
+            normalizarTextoVendedor(vendedor.email || "") === "" &&
+            normalizarTextoVendedor(vendedor.nombre || "") === nombreUsuario
+          )
+        );
     });
 
   if (vendedorComercial) {
     usuarioSistemaVendedorActual.vendedorComercial = vendedorComercial;
+    vendedorMovilAutorizado = true;
+    motivoBloqueoVendedorMovil = "";
+    return true;
   }
+
+  vendedorMovilAutorizado = false;
+  motivoBloqueoVendedorMovil =
+    "Tu usuario existe, pero no tiene un vendedor activo en Admin > Vendedores.";
+  return false;
 }
 
 function actualizarCampoVendedorSegunCuenta() {
@@ -403,12 +512,43 @@ function actualizarCampoVendedorSegunCuenta() {
 
   vendedorDom.nombreVendedor.value =
     nombreVendedor || "";
+  if (vendedorDom.nombreEncabezado) {
+    vendedorDom.nombreEncabezado.textContent =
+      nombreVendedor || "Vendedor";
+  }
   vendedorDom.nombreVendedor.readOnly =
     vendedorMovilEsCuentaDeVendedor();
   vendedorDom.nombreVendedor.classList.toggle(
     "vendedores-campo-bloqueado",
     vendedorMovilEsCuentaDeVendedor()
   );
+}
+
+function actualizarMetricasJornadaVendedor() {
+  const clientesConDeuda =
+    clientesVendedor.filter(function (cliente) {
+      return obtenerSaldoClienteVendedor(cliente) > 0;
+    }).length;
+
+  if (vendedorDom.metricaClientes) {
+    vendedorDom.metricaClientes.textContent =
+      String(clientesVendedor.length);
+  }
+
+  if (vendedorDom.metricaProductos) {
+    vendedorDom.metricaProductos.textContent =
+      String(productosVendedor.length);
+  }
+
+  if (vendedorDom.metricaDeuda) {
+    vendedorDom.metricaDeuda.textContent =
+      String(clientesConDeuda);
+  }
+
+  if (vendedorDom.metricaPedido) {
+    vendedorDom.metricaPedido.textContent =
+      formatearDineroVendedor(calcularTotalPedidoVendedor());
+  }
 }
 
 function clienteAsignadoAlVendedorActual(cliente) {
@@ -430,6 +570,7 @@ function clienteAsignadoAlVendedorActual(cliente) {
 async function cargarUsuarioSistemaVendedorActual() {
   usuarioSistemaVendedorActual = null;
   vendedorMovilAutorizado = true;
+  motivoBloqueoVendedorMovil = "";
 
   if (!vendedorUsaSupabaseConAuth() || !usuarioSupabaseAutenticado()) {
     return;
@@ -443,6 +584,24 @@ async function cargarUsuarioSistemaVendedorActual() {
 
   if (!usuarioSistemaVendedorActual) {
     vendedorMovilAutorizado = false;
+    motivoBloqueoVendedorMovil =
+      "Usuario no encontrado en administracion.";
+    actualizarCampoVendedorSegunCuenta();
+    return;
+  }
+
+  if (usuarioSistemaVendedorActual.activo === false) {
+    vendedorMovilAutorizado = false;
+    motivoBloqueoVendedorMovil =
+      "Tu usuario esta desactivado en administracion.";
+    actualizarCampoVendedorSegunCuenta();
+    return;
+  }
+
+  if (!vendedorMovilEsCuentaDeVendedor()) {
+    vendedorMovilAutorizado = false;
+    motivoBloqueoVendedorMovil =
+      "Tu usuario no tiene rol VENDEDOR.";
   }
 
   actualizarCampoVendedorSegunCuenta();
@@ -457,7 +616,7 @@ async function cargarDatosVendedor() {
         clientesVendedor = [];
         productosVendedor = [];
         vendedorDom.estadoConexion.textContent =
-          "Usuario sin permiso movil";
+          obtenerMotivoBloqueoVendedorMovil();
         return;
       }
 
@@ -472,6 +631,15 @@ async function cargarDatosVendedor() {
 
       aplicarVendedorComercialDeCuenta(resultado[2]);
       actualizarCampoVendedorSegunCuenta();
+
+      if (!vendedorMovilPuedeOperar()) {
+        clientesVendedor = [];
+        productosVendedor = [];
+        vendedorDom.estadoConexion.textContent =
+          obtenerMotivoBloqueoVendedorMovil();
+        mostrarLoginVendedor(obtenerMotivoBloqueoVendedorMovil());
+        return;
+      }
 
       clientesVendedor =
         resultado[0]
@@ -566,6 +734,88 @@ function obtenerClientesZonaVendedor() {
   return clientesVendedor.filter(clienteCoincideZonaVendedor);
 }
 
+function obtenerCodigosClientesRecientesVendedor() {
+  try {
+    const codigos =
+      JSON.parse(localStorage.getItem(CLAVE_CLIENTES_RECIENTES_VENDEDOR) || "[]");
+
+    return Array.isArray(codigos)
+      ? codigos.map(function (codigo) {
+        return String(codigo);
+      })
+      : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function guardarClienteRecienteVendedor(cliente) {
+  if (!cliente || cliente.codigo === undefined || cliente.codigo === null) {
+    return;
+  }
+
+  const codigoCliente =
+    String(cliente.codigo);
+  const codigos =
+    obtenerCodigosClientesRecientesVendedor()
+      .filter(function (codigo) {
+        return codigo !== codigoCliente;
+      });
+
+  codigos.unshift(codigoCliente);
+  localStorage.setItem(
+    CLAVE_CLIENTES_RECIENTES_VENDEDOR,
+    JSON.stringify(codigos.slice(0, MAX_CLIENTES_RECIENTES_VENDEDOR))
+  );
+}
+
+function obtenerClientesRecientesVendedor() {
+  const codigos =
+    obtenerCodigosClientesRecientesVendedor();
+
+  return codigos
+    .map(function (codigo) {
+      return clientesVendedor.find(function (cliente) {
+        return String(cliente.codigo) === codigo;
+      });
+    })
+    .filter(Boolean)
+    .filter(clienteCoincideZonaVendedor);
+}
+
+function renderizarClientesRecientesVendedor() {
+  if (!vendedorDom.clientesRecientes) {
+    return;
+  }
+
+  const busqueda =
+    vendedorDom.busquedaCliente.value.trim();
+  const clientesRecientes =
+    busqueda === "" ? obtenerClientesRecientesVendedor() : [];
+
+  vendedorDom.clientesRecientes.innerHTML = "";
+
+  if (clientesRecientes.length === 0) {
+    vendedorDom.clientesRecientes.classList.add("vendedores-oculto");
+    return;
+  }
+
+  vendedorDom.clientesRecientes.classList.remove("vendedores-oculto");
+  vendedorDom.clientesRecientes.innerHTML =
+    "<span>Recientes</span>";
+
+  clientesRecientes.forEach(function (cliente) {
+    const botonCliente = document.createElement("button");
+    botonCliente.type = "button";
+    botonCliente.textContent =
+      cliente.codigo + " - " + cliente.nombre;
+    botonCliente.addEventListener("click", function () {
+      seleccionarClienteVendedor(cliente);
+    });
+    vendedorDom.clientesRecientes.appendChild(botonCliente);
+  });
+}
+
 function actualizarFlujoVendedor() {
   const hayCliente =
     Boolean(clienteSeleccionadoVendedor);
@@ -573,13 +823,18 @@ function actualizarFlujoVendedor() {
     moduloVendedorActual === "venta";
   const estaEnClientes =
     moduloVendedorActual === "clientes";
+  const estaEnCatalogo =
+    moduloVendedorActual === "catalogo";
   const hayModulo =
-    estaEnVenta || estaEnClientes;
+    estaEnVenta || estaEnClientes || estaEnCatalogo;
 
   vendedorDom.seccionClientes.classList.toggle("vendedores-oculto", !hayModulo);
   vendedorDom.seccionProductos.classList.toggle("vendedores-oculto", !(estaEnVenta && hayCliente));
   vendedorDom.seccionPedido.classList.toggle("vendedores-oculto", !(estaEnVenta && hayCliente));
   vendedorDom.seccionCobranza.classList.toggle("vendedores-oculto", !(estaEnClientes && hayCliente));
+  if (vendedorDom.seccionCatalogo) {
+    vendedorDom.seccionCatalogo.classList.toggle("vendedores-oculto", !(estaEnCatalogo && hayCliente));
+  }
   vendedorDom.barraPedido.classList.toggle("vendedores-oculto", !(estaEnVenta && hayCliente));
 
   if (vendedorDom.moduloVenta) {
@@ -590,9 +845,13 @@ function actualizarFlujoVendedor() {
     vendedorDom.moduloClientes.classList.toggle("active", estaEnClientes);
   }
 
+  if (vendedorDom.moduloCatalogo) {
+    vendedorDom.moduloCatalogo.classList.toggle("active", estaEnCatalogo);
+  }
+
   if (vendedorDom.flujoPaso) {
     vendedorDom.flujoPaso.textContent =
-      estaEnVenta ? "Venta" : estaEnClientes ? "Clientes" : "Paso 1";
+      estaEnVenta ? "Venta" : estaEnClientes ? "Cobranza" : estaEnCatalogo ? "Catalogo" : "Paso 1";
   }
 
   if (vendedorDom.flujoTitulo) {
@@ -601,16 +860,26 @@ function actualizarFlujoVendedor() {
         ? "Buscar cliente para vender"
         : estaEnClientes
           ? "Buscar cliente para cobrar"
-          : "Buscar cliente";
+          : estaEnCatalogo
+            ? "Buscar cliente para enviar catalogo"
+            : "Buscar cliente";
   }
 
   vendedorDom.botonEnviarCatalogo.disabled =
     !hayCliente;
+  if (vendedorDom.botonEnviarCatalogoPanel) {
+    vendedorDom.botonEnviarCatalogoPanel.disabled =
+      !hayCliente;
+  }
+  if (vendedorDom.botonCopiarCatalogo) {
+    vendedorDom.botonCopiarCatalogo.disabled =
+      !hayCliente;
+  }
 }
 
 function seleccionarModuloVendedor(modulo) {
   const moduloNuevo =
-    modulo === "clientes" ? "clientes" : "venta";
+    modulo === "clientes" ? "clientes" : modulo === "catalogo" ? "catalogo" : "venta";
 
   if (moduloVendedorActual !== moduloNuevo) {
     moduloVendedorActual =
@@ -634,11 +903,15 @@ function reiniciarClientePorCambioZona() {
   vendedorDom.clienteSeleccionado.classList.remove("vendedores-seleccion-activa");
   vendedorDom.clienteSeleccionado.textContent = "Sin cliente seleccionado";
   vendedorDom.estadoEnvio.textContent = "";
+  if (vendedorDom.catalogoEstado) {
+    vendedorDom.catalogoEstado.textContent = "";
+  }
   vendedorDom.cobranzaEstado.textContent = "";
   vendedorDom.cobranzaImporte.value = "";
   vendedorDom.cobranzaComprobante.value = "";
   vendedorDom.cobranzaObservacion.value = "";
   renderizarItemsPedidoVendedor();
+  renderizarClientesRecientesVendedor();
   actualizarVistaCobranzaVendedor();
   actualizarFlujoVendedor();
 }
@@ -668,11 +941,15 @@ function limpiarClienteSeleccionadoPorBusqueda() {
   vendedorDom.clienteSeleccionado.classList.remove("vendedores-seleccion-activa");
   vendedorDom.clienteSeleccionado.textContent = "Sin cliente seleccionado";
   vendedorDom.estadoEnvio.textContent = "";
+  if (vendedorDom.catalogoEstado) {
+    vendedorDom.catalogoEstado.textContent = "";
+  }
   vendedorDom.cobranzaEstado.textContent = "";
   vendedorDom.cobranzaImporte.value = "";
   vendedorDom.cobranzaComprobante.value = "";
   vendedorDom.cobranzaObservacion.value = "";
   renderizarItemsPedidoVendedor();
+  renderizarClientesRecientesVendedor();
   actualizarVistaCobranzaVendedor();
   actualizarFlujoVendedor();
 }
@@ -682,12 +959,270 @@ function cambiarBusquedaClienteVendedor() {
   renderizarResultadosClientesVendedor();
 }
 
+function obtenerZonaSugeridaNuevoClienteVendedor() {
+  const zonaFormulario =
+    vendedorDom.nuevoClienteZona ? vendedorDom.nuevoClienteZona.value.trim() : "";
+
+  if (zonaFormulario !== "") {
+    return zonaFormulario;
+  }
+
+  if (vendedorDom.zonaCliente && vendedorDom.zonaCliente.value) {
+    return vendedorDom.zonaCliente.value;
+  }
+
+  if (
+    usuarioSistemaVendedorActual &&
+    usuarioSistemaVendedorActual.vendedorComercial &&
+    usuarioSistemaVendedorActual.vendedorComercial.zona
+  ) {
+    return usuarioSistemaVendedorActual.vendedorComercial.zona;
+  }
+
+  return "Sin zona";
+}
+
+function mostrarAltaRapidaClienteVendedor() {
+  if (!vendedorDom.nuevoClienteForm) {
+    return;
+  }
+
+  const busquedaActual =
+    vendedorDom.busquedaCliente.value.trim();
+
+  vendedorDom.nuevoClienteForm.classList.remove("vendedores-oculto");
+  vendedorDom.nuevoClienteNombre.value =
+    /^\d+\s*-/.test(busquedaActual) ? "" : busquedaActual;
+  vendedorDom.nuevoClienteZona.value =
+    obtenerZonaSugeridaNuevoClienteVendedor();
+  vendedorDom.nuevoClienteEstado.textContent = "";
+  vendedorDom.nuevoClienteNombre.focus();
+}
+
+function ocultarAltaRapidaClienteVendedor() {
+  if (!vendedorDom.nuevoClienteForm) {
+    return;
+  }
+
+  vendedorDom.nuevoClienteForm.classList.add("vendedores-oculto");
+  vendedorDom.nuevoClienteForm.reset();
+  vendedorDom.nuevoClienteEstado.textContent = "";
+}
+
+function esErrorCodigoClienteDuplicadoVendedor(error) {
+  const mensaje =
+    String(error && error.message ? error.message : "");
+
+  return error &&
+    (error.code === "23505" ||
+      mensaje.includes("clientes_codigo") ||
+      mensaje.includes("duplicate key"));
+}
+
+async function obtenerSiguienteCodigoClienteVendedor() {
+  const mayorCodigoLocal =
+    clientesVendedor.reduce(function (mayor, cliente) {
+      return Math.max(mayor, Number(cliente.codigo) || 0);
+    }, 0);
+
+  if (
+    vendedorUsaSupabaseConAuth() &&
+    usuarioSupabaseAutenticado() &&
+    typeof obtenerMayorCodigoClienteSupabase === "function"
+  ) {
+    const mayorCodigoOnline =
+      await obtenerMayorCodigoClienteSupabase();
+
+    return Math.max(mayorCodigoLocal, mayorCodigoOnline) + 1;
+  }
+
+  return mayorCodigoLocal + 1;
+}
+
+function crearClienteMovilParaSupabase(codigoCliente) {
+  const nombre =
+    vendedorDom.nuevoClienteNombre.value.trim();
+  const telefono =
+    vendedorDom.nuevoClienteTelefono.value.trim();
+  const direccion =
+    vendedorDom.nuevoClienteDireccion.value.trim();
+  const zona =
+    obtenerZonaSugeridaNuevoClienteVendedor();
+
+  return {
+    codigo: codigoCliente,
+    nombre: nombre,
+    saldo: 0,
+    telefono: telefono || "-",
+    direccion: direccion || "-",
+    zona: zona || "Sin zona",
+    activo: true,
+    historial: [],
+    listaPrecios: "Lista 1",
+    vendedorAsignado: obtenerNombreVendedorCuentaActual() || "",
+    observaciones: "Creado desde vendedores movil"
+  };
+}
+
+async function guardarClienteMovilEnSupabase(clienteNuevo) {
+  if (
+    !vendedorUsaSupabaseConAuth() ||
+    !usuarioSupabaseAutenticado() ||
+    typeof insertarClienteNuevoSupabase !== "function"
+  ) {
+    throw new Error("Sin sesion online. Inicia sesion nuevamente.");
+  }
+
+  let clienteParaGuardar =
+    { ...clienteNuevo };
+
+  for (let intento = 1; intento <= 5; intento += 1) {
+    try {
+      const clienteGuardado =
+        await insertarClienteNuevoSupabase(clienteParaGuardar);
+
+      if (!clienteGuardado || !clienteGuardado.idSupabase) {
+        throw new Error("Supabase no confirmo el alta del cliente.");
+      }
+
+      return clienteGuardado;
+    } catch (error) {
+      if (!esErrorCodigoClienteDuplicadoVendedor(error) || intento === 5) {
+        throw error;
+      }
+
+      const siguienteCodigoOnline =
+        typeof obtenerMayorCodigoClienteSupabase === "function"
+          ? await obtenerMayorCodigoClienteSupabase() + 1
+          : clienteParaGuardar.codigo + 1;
+
+      clienteParaGuardar = {
+        ...clienteParaGuardar,
+        codigo: Math.max(clienteParaGuardar.codigo + 1, siguienteCodigoOnline)
+      };
+    }
+  }
+
+  throw new Error("No se pudo reservar codigo de cliente.");
+}
+
+function agregarClienteCreadoAVistaVendedor(clienteCreado) {
+  const indiceExistente =
+    clientesVendedor.findIndex(function (cliente) {
+      return Number(cliente.codigo) === Number(clienteCreado.codigo);
+    });
+
+  if (indiceExistente >= 0) {
+    clientesVendedor[indiceExistente] = clienteCreado;
+  } else {
+    clientesVendedor.push(clienteCreado);
+  }
+
+  clientesVendedor.sort(function (clienteA, clienteB) {
+    return (Number(clienteA.codigo) || 0) - (Number(clienteB.codigo) || 0);
+  });
+}
+
+function buscarClienteVendedorPorReferencia(clienteReferencia) {
+  if (!clienteReferencia) {
+    return null;
+  }
+
+  return clientesVendedor.find(function (cliente) {
+    if (clienteReferencia.idSupabase && cliente.idSupabase === clienteReferencia.idSupabase) {
+      return true;
+    }
+
+    return Number(cliente.codigo) === Number(clienteReferencia.codigo);
+  }) || null;
+}
+
+async function refrescarDatosVendedorManteniendoCliente(clienteReferencia) {
+  if (!vendedorUsaSupabaseConAuth() || !usuarioSupabaseAutenticado()) {
+    return null;
+  }
+
+  try {
+    await cargarDatosVendedor();
+    const clienteActualizado =
+      buscarClienteVendedorPorReferencia(clienteReferencia);
+
+    actualizarVistaVendedorDespuesDeCargarDatos();
+
+    if (clienteActualizado) {
+      seleccionarClienteVendedor(clienteActualizado);
+    }
+
+    return clienteActualizado;
+  } catch (error) {
+    console.warn("No se pudo refrescar datos moviles desde Supabase:", error);
+    return null;
+  }
+}
+
+async function crearClienteDesdeVendedorMovil(evento) {
+  evento.preventDefault();
+
+  if (!vendedorMovilPuedeOperar()) {
+    alert(obtenerMotivoBloqueoVendedorMovil());
+    return;
+  }
+
+  const nombre =
+    vendedorDom.nuevoClienteNombre.value.trim();
+
+  if (nombre === "") {
+    vendedorDom.nuevoClienteEstado.textContent =
+      "Ingrese el nombre del cliente.";
+    vendedorDom.nuevoClienteNombre.focus();
+    return;
+  }
+
+  if (vendedorDom.guardarNuevoCliente) {
+    vendedorDom.guardarNuevoCliente.disabled = true;
+  }
+
+  try {
+    vendedorDom.nuevoClienteEstado.textContent =
+      "Guardando cliente online...";
+
+    const codigoCliente =
+      await obtenerSiguienteCodigoClienteVendedor();
+    const clienteNuevo =
+      crearClienteMovilParaSupabase(codigoCliente);
+    const clienteGuardado =
+      await guardarClienteMovilEnSupabase(clienteNuevo);
+
+    agregarClienteCreadoAVistaVendedor(clienteGuardado);
+    ocultarAltaRapidaClienteVendedor();
+    renderizarZonasClientesVendedor();
+    renderizarResultadosClientesVendedor();
+    actualizarMetricasJornadaVendedor();
+    seleccionarClienteVendedor(clienteGuardado);
+    await refrescarDatosVendedorManteniendoCliente(clienteGuardado);
+
+    vendedorDom.estadoConexion.textContent =
+      "Cliente creado online: " + clienteGuardado.codigo;
+  } catch (error) {
+    console.error("No se pudo crear cliente desde vendedor movil:", error);
+    vendedorDom.nuevoClienteEstado.textContent =
+      "No se pudo guardar online: " + (error.message || "error");
+  } finally {
+    if (vendedorDom.guardarNuevoCliente) {
+      vendedorDom.guardarNuevoCliente.disabled = false;
+    }
+  }
+}
+
 function actualizarVistaVendedorDespuesDeCargarDatos() {
   renderizarZonasClientesVendedor();
+  renderizarClientesRecientesVendedor();
   renderizarResultadosClientesVendedor();
   renderizarItemsPedidoVendedor();
   renderizarResultadosProductosVendedor();
   actualizarVistaCobranzaVendedor();
+  actualizarCampoVendedorSegunCuenta();
+  actualizarMetricasJornadaVendedor();
   actualizarFlujoVendedor();
 }
 
@@ -826,17 +1361,38 @@ function renderizarResultadosClientesVendedor() {
       })
       .slice(0, 12);
 
+  ultimosResultadosClientesVendedor =
+    coincidencias;
   vendedorDom.resultadosClientes.innerHTML = "";
+  renderizarClientesRecientesVendedor();
 
   if (clientesVendedor.length === 0) {
     vendedorDom.resultadosClientes.innerHTML =
-      "<p class=\"vendedores-vacio\">No tenes clientes asignados para mostrar.</p>";
+      "<div class=\"vendedores-vacio\">" +
+      "<p>No tenes clientes asignados para mostrar.</p>" +
+      "<button type=\"button\" class=\"vendedores-principal\" data-crear-cliente-vendedor>Crear primer cliente</button>" +
+      "</div>";
+    const botonCrearPrimerCliente =
+      vendedorDom.resultadosClientes.querySelector("[data-crear-cliente-vendedor]");
+
+    if (botonCrearPrimerCliente) {
+      botonCrearPrimerCliente.addEventListener("click", mostrarAltaRapidaClienteVendedor);
+    }
     return;
   }
 
   if (coincidencias.length === 0) {
     vendedorDom.resultadosClientes.innerHTML =
-      "<p class=\"vendedores-vacio\">No hay clientes con ese codigo o nombre.</p>";
+      "<div class=\"vendedores-vacio\">" +
+      "<p>No hay clientes con ese codigo o nombre.</p>" +
+      "<button type=\"button\" class=\"vendedores-principal\" data-crear-cliente-vendedor>Crear cliente</button>" +
+      "</div>";
+    const botonCrearCliente =
+      vendedorDom.resultadosClientes.querySelector("[data-crear-cliente-vendedor]");
+
+    if (botonCrearCliente) {
+      botonCrearCliente.addEventListener("click", mostrarAltaRapidaClienteVendedor);
+    }
     return;
   }
 
@@ -844,9 +1400,17 @@ function renderizarResultadosClientesVendedor() {
     const botonCliente = document.createElement("button");
     botonCliente.type = "button";
     botonCliente.className = "vendedores-opcion";
+    const saldoCliente =
+      obtenerSaldoClienteVendedor(cliente);
+    const claseSaldo =
+      saldoCliente > 0 ? " deuda" : saldoCliente < 0 ? " favor" : "";
     botonCliente.innerHTML =
+      "<div class=\"vendedores-opcion-principal\">" +
       "<strong>" + escaparTextoVendedor(cliente.codigo) + " - " + escaparTextoVendedor(cliente.nombre) + "</strong>" +
-      "<span>" + escaparTextoVendedor(cliente.direccion || "Sin direccion") + " | " + escaparTextoVendedor(cliente.zona || "Sin zona") + "</span>";
+      "<span class=\"vendedores-chip" + claseSaldo + "\">" + escaparTextoVendedor(obtenerTextoSaldoVendedor(saldoCliente)) + "</span>" +
+      "</div>" +
+      "<span>" + escaparTextoVendedor(cliente.direccion || "Sin direccion") + "</span>" +
+      "<small>" + escaparTextoVendedor(cliente.zona || "Sin zona") + " | " + escaparTextoVendedor(cliente.listaPrecios || "Lista 1") + "</small>";
     botonCliente.addEventListener("click", function () {
       seleccionarClienteVendedor(cliente);
     });
@@ -856,12 +1420,15 @@ function renderizarResultadosClientesVendedor() {
 
 function seleccionarClienteVendedor(cliente) {
   clienteSeleccionadoVendedor = cliente;
+  ocultarAltaRapidaClienteVendedor();
+  guardarClienteRecienteVendedor(cliente);
   if (vendedorDom.zonaCliente) {
     vendedorDom.zonaCliente.value =
       obtenerZonaClienteVendedor(cliente);
   }
   vendedorDom.busquedaCliente.value = cliente.codigo + " - " + cliente.nombre;
   vendedorDom.resultadosClientes.innerHTML = "";
+  renderizarClientesRecientesVendedor();
   vendedorDom.clienteSeleccionado.classList.add("vendedores-seleccion-activa");
   vendedorDom.clienteSeleccionado.innerHTML =
     "<strong>" + escaparTextoVendedor(cliente.codigo) + " - " + escaparTextoVendedor(cliente.nombre) + "</strong>" +
@@ -878,6 +1445,43 @@ function seleccionarClienteVendedor(cliente) {
   if (moduloVendedorActual === "clientes") {
     vendedorDom.cobranzaImporte.focus();
   }
+
+  if (moduloVendedorActual === "catalogo" && vendedorDom.botonEnviarCatalogoPanel) {
+    vendedorDom.botonEnviarCatalogoPanel.focus();
+  }
+}
+
+function seleccionarPrimerClienteVendedor(evento) {
+  if (evento.key !== "Enter") {
+    return;
+  }
+
+  if (ultimosResultadosClientesVendedor.length === 0) {
+    return;
+  }
+
+  evento.preventDefault();
+  seleccionarClienteVendedor(ultimosResultadosClientesVendedor[0]);
+}
+
+function agregarPrimerProductoVendedor(evento) {
+  if (evento.key !== "Enter") {
+    return;
+  }
+
+  if (!clienteSeleccionadoVendedor || ultimosResultadosProductosVendedor.length === 0) {
+    return;
+  }
+
+  evento.preventDefault();
+  const producto =
+    ultimosResultadosProductosVendedor[0];
+
+  agregarProductoPedidoVendedor(
+    producto,
+    obtenerIncrementoCantidadVendedor(producto),
+    obtenerDescuentoPredeterminadoVendedor(producto)
+  );
 }
 
 function crearControlBonificacionVendedor(valorInicial, alCambiar) {
@@ -926,6 +1530,11 @@ function crearControlBonificacionVendedor(valorInicial, alCambiar) {
     opciones.appendChild(boton);
   });
 
+  input.addEventListener("input", function () {
+    marcarActiva();
+    alCambiar(input.value);
+  });
+
   input.addEventListener("change", function () {
     input.value = String(normalizarDescuentoVendedor(input.value));
     marcarActiva();
@@ -945,6 +1554,7 @@ function crearControlBonificacionVendedor(valorInicial, alCambiar) {
 
 function renderizarResultadosProductosVendedor() {
   if (!clienteSeleccionadoVendedor) {
+    ultimosResultadosProductosVendedor = [];
     vendedorDom.resultadosProductos.innerHTML =
       "<p class=\"vendedores-vacio\">Elegi un cliente para armar el pedido.</p>";
     return;
@@ -963,6 +1573,8 @@ function renderizarResultadosProductosVendedor() {
       })
       .slice(0, busqueda === "" ? 8 : 12);
 
+  ultimosResultadosProductosVendedor =
+    coincidencias;
   vendedorDom.resultadosProductos.innerHTML = "";
 
   if (coincidencias.length === 0) {
@@ -976,10 +1588,22 @@ function renderizarResultadosProductosVendedor() {
   coincidencias.forEach(function (producto) {
     const tarjetaProducto = document.createElement("article");
     tarjetaProducto.className = "vendedores-producto";
+    const itemEnPedido =
+      buscarItemPedidoVendedor(producto);
     const descuentoSugerido =
-      obtenerDescuentoPredeterminadoVendedor(producto);
+      itemEnPedido
+        ? itemEnPedido.descuentoPorcentaje
+        : obtenerDescuentoPredeterminadoVendedor(producto);
+    if (itemEnPedido) {
+      tarjetaProducto.classList.add("vendedores-producto-en-pedido");
+    }
     tarjetaProducto.innerHTML =
+      "<div class=\"vendedores-producto-cabeza\">" +
       "<strong>" + escaparTextoVendedor(producto.codigo) + " - " + escaparTextoVendedor(producto.nombre) + "</strong>" +
+      (itemEnPedido
+        ? "<span class=\"vendedores-chip pedido\">En pedido: " + escaparTextoVendedor(formatearCantidadVendedor(producto, itemEnPedido.cantidad)) + "</span>"
+        : "") +
+      "</div>" +
       "<span>" + escaparTextoVendedor(producto.marca || producto.rubro || "Sin rubro") + "</span>" +
       "<div class=\"vendedores-producto-meta\">" +
       "<span>Stock: " + escaparTextoVendedor(formatearCantidadVendedor(producto, obtenerStockVendedor(producto))) + "</span>" +
@@ -987,7 +1611,18 @@ function renderizarResultadosProductosVendedor() {
       "</div>";
 
     const controlBonificacionProducto =
-      crearControlBonificacionVendedor(descuentoSugerido, function () {});
+      crearControlBonificacionVendedor(descuentoSugerido, function (descuentoNuevo) {
+        const itemActual =
+          buscarItemPedidoVendedor(producto);
+
+        if (!itemActual) {
+          return;
+        }
+
+        itemActual.descuentoPorcentaje =
+          normalizarDescuentoVendedor(descuentoNuevo);
+        renderizarItemsPedidoVendedor();
+      });
 
     const cantidadesRapidas = document.createElement("div");
     cantidadesRapidas.className = "vendedores-cantidades-rapidas";
@@ -1183,6 +1818,157 @@ function calcularCantidadTotalPedidoVendedor() {
   }, 0);
 }
 
+function crearFirmaPedidoVendedorActual() {
+  if (!clienteSeleccionadoVendedor || itemsPedidoVendedor.length === 0) {
+    return "";
+  }
+
+  const itemsFirma =
+    itemsPedidoVendedor.map(function (itemPedido) {
+      return [
+        Number(itemPedido.producto.codigo) || 0,
+        Number(itemPedido.cantidad) || 0,
+        normalizarDescuentoVendedor(itemPedido.descuentoPorcentaje || 0),
+        Number(obtenerPrecioProductoVendedor(itemPedido.producto)) || 0
+      ].join(":");
+    }).join("|");
+
+  return [
+    Number(clienteSeleccionadoVendedor.codigo) || 0,
+    vendedorDom.formaPago.value || "CUENTA_CORRIENTE",
+    vendedorDom.observacion.value.trim(),
+    Math.round(calcularTotalPedidoVendedor() * 100),
+    itemsFirma
+  ].join("||");
+}
+
+async function refrescarDatosPedidoVendedorAntesDeEnviar() {
+  if (
+    !vendedorUsaSupabaseConAuth() ||
+    !usuarioSupabaseAutenticado() ||
+    typeof obtenerClientesSupabase !== "function" ||
+    typeof obtenerProductosSupabase !== "function"
+  ) {
+    return true;
+  }
+
+  const totalAnterior =
+    calcularTotalPedidoVendedor();
+  const codigosProductosPedido =
+    itemsPedidoVendedor.map(function (itemPedido) {
+      return Number(itemPedido.producto.codigo) || 0;
+    });
+
+  vendedorDom.estadoEnvio.textContent =
+    "Actualizando clientes, precios y stock...";
+
+  const resultado =
+    await Promise.all([
+      obtenerClientesSupabase(),
+      obtenerProductosSupabase()
+    ]);
+
+  const clientesActualizados =
+    resultado[0]
+      .filter(clienteActivoVendedor)
+      .filter(clienteAsignadoAlVendedorActual);
+  const productosActualizados =
+    resultado[1].filter(productoDisponibleVendedor);
+
+  const clienteActualizado =
+    clientesActualizados.find(function (cliente) {
+      return clienteSeleccionadoVendedor &&
+        Number(cliente.codigo) === Number(clienteSeleccionadoVendedor.codigo);
+    });
+
+  clientesVendedor =
+    clientesActualizados;
+  productosVendedor =
+    productosActualizados;
+
+  if (!clienteActualizado) {
+    clienteSeleccionadoVendedor = null;
+    itemsPedidoVendedor = [];
+    actualizarVistaVendedorDespuesDeCargarDatos();
+    vendedorDom.estadoEnvio.textContent =
+      "El cliente ya no esta activo o asignado a tu cuenta. Buscalo de nuevo.";
+    return false;
+  }
+
+  clienteSeleccionadoVendedor =
+    clienteActualizado;
+
+  const avisos = [];
+  const itemsActualizados = [];
+
+  itemsPedidoVendedor.forEach(function (itemPedido) {
+    const productoActualizado =
+      productosActualizados.find(function (producto) {
+        return Number(producto.codigo) === Number(itemPedido.producto.codigo);
+      });
+
+    if (!productoActualizado) {
+      avisos.push(itemPedido.producto.nombre + " ya no esta disponible.");
+      return;
+    }
+
+    const cantidadMaxima =
+      obtenerCantidadMaximaVendedor(productoActualizado);
+
+    if (cantidadMaxima <= 0) {
+      avisos.push(productoActualizado.nombre + " quedo sin stock.");
+      return;
+    }
+
+    let cantidadFinal =
+      normalizarCantidadVendedor(productoActualizado, itemPedido.cantidad);
+
+    if (cantidadFinal > cantidadMaxima) {
+      cantidadFinal =
+        cantidadMaxima;
+      avisos.push(productoActualizado.nombre + " bajo stock disponible a " + formatearNumeroVendedor(cantidadMaxima) + ".");
+    }
+
+    itemsActualizados.push({
+      producto: productoActualizado,
+      cantidad: cantidadFinal,
+      descuentoPorcentaje: normalizarDescuentoVendedor(itemPedido.descuentoPorcentaje || 0)
+    });
+  });
+
+  itemsPedidoVendedor =
+    itemsActualizados;
+
+  const totalActualizado =
+    calcularTotalPedidoVendedor();
+  const cambioTotal =
+    Math.abs(totalAnterior - totalActualizado) > 0.01;
+  const faltanProductos =
+    itemsPedidoVendedor.length !== codigosProductosPedido.length;
+
+  actualizarVistaVendedorDespuesDeCargarDatos();
+
+  if (avisos.length > 0 || cambioTotal || faltanProductos) {
+    const detalleCambio =
+      cambioTotal
+        ? " Total anterior " + formatearDineroVendedor(totalAnterior) + ", ahora " + formatearDineroVendedor(totalActualizado) + "."
+        : "";
+
+    vendedorDom.estadoEnvio.textContent =
+      "Datos actualizados. Revisa el pedido y toca Enviar otra vez." + detalleCambio;
+
+    if (avisos.length > 0) {
+      alert("Se actualizaron datos antes de enviar:\n" + avisos.join("\n"));
+    }
+
+    return false;
+  }
+
+  vendedorDom.estadoEnvio.textContent =
+    "Datos verificados online.";
+  return true;
+}
+
 function actualizarResumenVisualPedidoVendedor() {
   const totalPedido =
     calcularTotalPedidoVendedor();
@@ -1212,6 +1998,8 @@ function actualizarResumenVisualPedidoVendedor() {
     !tieneItems;
   vendedorDom.botonBarraWhatsapp.disabled =
     !tieneItems;
+
+  actualizarMetricasJornadaVendedor();
 }
 
 function renderizarItemsPedidoVendedor() {
@@ -1370,21 +2158,15 @@ function actualizarVistaCobranzaVendedor() {
   }
 }
 
-function obtenerSiguienteCodigoPagoVendedor(cliente) {
-  const historial =
-    Array.isArray(cliente && cliente.historial)
-      ? cliente.historial
-      : [];
-  const codigos =
-    historial.map(function (movimiento) {
-      return Number(movimiento.codigoPago) || 0;
-    });
+function obtenerSiguienteCodigoPagoVendedor() {
+  const marcaTiempo =
+    Date.now();
+  const sufijoAleatorio =
+    Math.floor(Math.random() * 1000);
 
-  if (codigos.length === 0) {
-    return Date.now();
-  }
-
-  return Math.max.apply(null, codigos) + 1;
+  return Number(
+    String(marcaTiempo) + String(sufijoAleatorio).padStart(3, "0")
+  );
 }
 
 function obtenerTextoMedioCobranzaVendedor(medioPago) {
@@ -1482,7 +2264,14 @@ async function guardarCobranzaVendedor() {
     const movimiento =
       crearMovimientoCobranzaVendedor(cliente, importe);
 
-    await guardarMovimientoCuentaSupabase(cliente, movimiento);
+    const cobranzaGuardada =
+      await guardarMovimientoCuentaSupabase(cliente, movimiento);
+
+    if (!cobranzaGuardada || !cobranzaGuardada.idSupabase) {
+      throw new Error("Supabase no confirmo la cobranza.");
+    }
+
+    await refrescarDatosVendedorManteniendoCliente(cliente);
 
     vendedorDom.cobranzaEstado.textContent =
       "Cobranza enviada. El admin la aprueba desde Cuenta corriente.";
@@ -1589,13 +2378,43 @@ async function copiarCatalogoVendedor(mensajeCatalogo) {
     await navigator.clipboard.writeText(mensajeCatalogo);
     vendedorDom.estadoEnvio.textContent =
       "Catalogo copiado.";
+    if (vendedorDom.catalogoEstado) {
+      vendedorDom.catalogoEstado.textContent =
+        "Catalogo copiado.";
+    }
     return;
   }
 
   window.prompt("Copia el catalogo:", mensajeCatalogo);
 }
 
+async function copiarLinkCatalogoVendedor() {
+  const linkCatalogo =
+    obtenerUrlCatalogoVendedor();
+
+  guardarTelefonoDestinoVendedor();
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(linkCatalogo);
+    if (vendedorDom.catalogoEstado) {
+      vendedorDom.catalogoEstado.textContent =
+        "Link copiado.";
+    }
+    vendedorDom.estadoEnvio.textContent =
+      "Link de catalogo copiado.";
+    return;
+  }
+
+  window.prompt("Copia el link del catalogo:", linkCatalogo);
+}
+
 async function enviarCatalogoVendedor() {
+  if (!clienteSeleccionadoVendedor) {
+    alert("Selecciona un cliente para enviar catalogo.");
+    vendedorDom.busquedaCliente.focus();
+    return;
+  }
+
   const mensajeCatalogo =
     construirMensajeCatalogoVendedor();
   const telefonoCliente =
@@ -1610,6 +2429,10 @@ async function enviarCatalogoVendedor() {
     window.open(enlaceWhatsapp, "_blank", "noopener");
     vendedorDom.estadoEnvio.textContent =
       "Catalogo abierto para " + clienteSeleccionadoVendedor.nombre + ".";
+    if (vendedorDom.catalogoEstado) {
+      vendedorDom.catalogoEstado.textContent =
+        "Catalogo abierto para " + clienteSeleccionadoVendedor.nombre + ".";
+    }
     return;
   }
 
@@ -1621,6 +2444,10 @@ async function enviarCatalogoVendedor() {
       });
       vendedorDom.estadoEnvio.textContent =
         "Catalogo compartido.";
+      if (vendedorDom.catalogoEstado) {
+        vendedorDom.catalogoEstado.textContent =
+          "Catalogo compartido.";
+      }
       return;
     } catch (error) {
       if (error && error.name === "AbortError") {
@@ -1843,15 +2670,44 @@ async function enviarPedidoWhatsappVendedor() {
 
   pedidoVendedorEnCurso = true;
   vendedorDom.estadoEnvio.textContent =
-    "Guardando pedido...";
+    "Preparando pedido...";
   vendedorDom.botonWhatsapp.disabled =
     true;
   vendedorDom.botonBarraWhatsapp.disabled =
     true;
 
   try {
+    const datosVerificados =
+      await refrescarDatosPedidoVendedorAntesDeEnviar();
+
+    if (!datosVerificados) {
+      return;
+    }
+
+    if (!validarPedidoVendedor()) {
+      return;
+    }
+
+    const firmaPedidoActual =
+      crearFirmaPedidoVendedorActual();
+
+    if (firmaPedidoActual && firmaPedidoActual === firmaUltimoPedidoMovilGuardado) {
+      vendedorDom.estadoEnvio.textContent =
+        "Este pedido ya estaba guardado online. Abriendo WhatsApp...";
+      abrirWhatsappPedidoVendedor();
+      return;
+    }
+
+    vendedorDom.estadoEnvio.textContent =
+      "Guardando pedido...";
+
     const resultadoGuardado =
       await guardarPedidoMovilEnSupabase();
+
+    if (resultadoGuardado.guardado) {
+      firmaUltimoPedidoMovilGuardado =
+        firmaPedidoActual || crearFirmaPedidoVendedorActual();
+    }
 
     vendedorDom.estadoEnvio.textContent =
       resultadoGuardado.guardado
@@ -1881,6 +2737,7 @@ async function enviarPedidoWhatsappVendedor() {
 function limpiarPedidoVendedor() {
   clienteSeleccionadoVendedor = null;
   itemsPedidoVendedor = [];
+  firmaUltimoPedidoMovilGuardado = "";
   vendedorDom.busquedaCliente.value = "";
   vendedorDom.busquedaProducto.value = "";
   vendedorDom.resultadosClientes.innerHTML = "";
@@ -1893,7 +2750,11 @@ function limpiarPedidoVendedor() {
   vendedorDom.cobranzaComprobante.value = "";
   vendedorDom.cobranzaObservacion.value = "";
   vendedorDom.cobranzaEstado.textContent = "";
+  if (vendedorDom.catalogoEstado) {
+    vendedorDom.catalogoEstado.textContent = "";
+  }
   renderizarItemsPedidoVendedor();
+  renderizarClientesRecientesVendedor();
   renderizarResultadosProductosVendedor();
   actualizarVistaCobranzaVendedor();
   actualizarFlujoVendedor();
@@ -1922,16 +2783,36 @@ vendedorDom.moduloVenta.addEventListener("click", function () {
 vendedorDom.moduloClientes.addEventListener("click", function () {
   seleccionarModuloVendedor("clientes");
 });
+vendedorDom.moduloCatalogo.addEventListener("click", function () {
+  seleccionarModuloVendedor("catalogo");
+});
 vendedorDom.zonaCliente.addEventListener("change", cambiarZonaClienteVendedor);
 vendedorDom.busquedaCliente.addEventListener("input", cambiarBusquedaClienteVendedor);
+vendedorDom.busquedaCliente.addEventListener("keydown", seleccionarPrimerClienteVendedor);
+if (vendedorDom.botonNuevoCliente) {
+  vendedorDom.botonNuevoCliente.addEventListener("click", mostrarAltaRapidaClienteVendedor);
+}
+if (vendedorDom.nuevoClienteForm) {
+  vendedorDom.nuevoClienteForm.addEventListener("submit", crearClienteDesdeVendedorMovil);
+}
+if (vendedorDom.cancelarNuevoCliente) {
+  vendedorDom.cancelarNuevoCliente.addEventListener("click", ocultarAltaRapidaClienteVendedor);
+}
 vendedorDom.busquedaProducto.addEventListener("input", renderizarResultadosProductosVendedor);
+vendedorDom.busquedaProducto.addEventListener("keydown", agregarPrimerProductoVendedor);
 vendedorDom.telefonoDestino.addEventListener("input", guardarTelefonoDestinoVendedor);
 vendedorDom.botonLimpiar.addEventListener("click", limpiarPedidoVendedor);
 vendedorDom.botonCopiar.addEventListener("click", copiarPedidoVendedor);
 vendedorDom.botonWhatsapp.addEventListener("click", enviarPedidoWhatsappVendedor);
 vendedorDom.botonBarraWhatsapp.addEventListener("click", enviarPedidoWhatsappVendedor);
 vendedorDom.botonEnviarCatalogo.addEventListener("click", enviarCatalogoVendedor);
+vendedorDom.botonEnviarCatalogoPanel.addEventListener("click", enviarCatalogoVendedor);
+vendedorDom.botonCopiarCatalogo.addEventListener("click", copiarLinkCatalogoVendedor);
 vendedorDom.botonCobrarSaldo.addEventListener("click", completarCobranzaConSaldoVendedor);
 vendedorDom.botonGuardarCobranza.addEventListener("click", guardarCobranzaVendedor);
+window.addEventListener("beforeunload", advertirSalidaVendedorConTrabajo);
 
 iniciarVendedoresMobile();
+
+
+

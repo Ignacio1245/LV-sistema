@@ -29,8 +29,19 @@ function pedidoActualTieneDatos() {
         pedidoEditando !== null;
 }
 
+function hayCambiosPendientesAntesDeSalir() {
+    const hayPedidoSinGuardar =
+        pedidoActualTieneDatos();
+    const hayPendientesOnline =
+        typeof haySincronizacionPendiente === "function" && haySincronizacionPendiente();
+    const hayOperacionEnCurso =
+        guardandoPedidoEnCurso || pedidosOperacionEnCurso.size > 0;
+
+    return hayPedidoSinGuardar || hayPendientesOnline || hayOperacionEnCurso;
+}
+
 function advertirSalidaConPedidoSinGuardar(event) {
-    if (!pedidoActualTieneDatos()) {
+    if (!hayCambiosPendientesAntesDeSalir()) {
         return;
     }
 
@@ -139,9 +150,9 @@ function borrarPedidoActual() {
     renderizarPedidoActual();
 }
 
-function guardarYAtenderPedidoActual() {
+async function guardarYAtenderPedidoActual() {
     const pedidoGuardado =
-        guardarPedido();
+        guardarPedido(undefined, { omitirGuardadoSupabase: true });
 
     if (!pedidoGuardado) {
         return;
@@ -152,7 +163,118 @@ function guardarYAtenderPedidoActual() {
         return;
     }
 
-    atenderPedido(pedidoGuardado.id);
+    await atenderPedido(pedidoGuardado.id);
+}
+
+function pedidoPuedeRefrescarDatosOnline() {
+    return typeof supabaseEstaConfigurado === "function" &&
+        supabaseEstaConfigurado() &&
+        typeof usuarioSupabaseAutenticado === "function" &&
+        usuarioSupabaseAutenticado();
+}
+
+function resultadoCargaTieneErrorPedido(resultado) {
+    return resultado && resultado.error;
+}
+
+function pedidoDebeConfirmarGuardadoOnline() {
+    return typeof puedeGuardarOperacionEnSupabase === "function" &&
+        puedeGuardarOperacionEnSupabase();
+}
+
+function avisarPedidoSinConfirmacionOnline(accion) {
+    if (!pedidoDebeConfirmarGuardadoOnline()) {
+        return;
+    }
+
+    alert(
+        accion + " quedo guardado localmente, pero Supabase no confirmo todo. " +
+        "Actualiza datos y revisa la conexion antes de seguir operando."
+    );
+}
+
+function obtenerPedidoLocalPorId(idPedido) {
+    return pedidos.find(function (pedidoGuardado) {
+        return pedidoGuardado.id === idPedido;
+    }) || null;
+}
+
+function pedidoTieneRegistroOnline(idPedido) {
+    const pedidoLocal =
+        obtenerPedidoLocalPorId(idPedido);
+
+    return pedidoLocal && pedidoLocal.idSupabase;
+}
+
+async function refrescarPedidosOnlineSiCorresponde(idPedido, errores) {
+    if (!pedidoTieneRegistroOnline(idPedido) || typeof cargarPedidosDesdeSupabase !== "function") {
+        return;
+    }
+
+    const resultadoPedidos =
+        await cargarPedidosDesdeSupabase();
+
+    if (resultadoCargaTieneErrorPedido(resultadoPedidos)) {
+        errores.push(resultadoPedidos.error);
+    }
+}
+
+async function refrescarDatosOnlineAntesDeAtenderPedido(idPedido) {
+    if (!pedidoPuedeRefrescarDatosOnline()) {
+        return true;
+    }
+
+    const errores = [];
+
+    await refrescarPedidosOnlineSiCorresponde(idPedido, errores);
+
+    if (typeof cargarProductosDesdeSupabase === "function") {
+        const resultadoProductos =
+            await cargarProductosDesdeSupabase();
+
+        if (resultadoCargaTieneErrorPedido(resultadoProductos)) {
+            errores.push(resultadoProductos.error);
+        }
+    }
+
+    if (errores.length === 0) {
+        return true;
+    }
+
+    return confirm(
+        "No se pudo actualizar pedidos/stock desde Supabase antes de atender.\n" +
+        "Si continuas, podrias usar datos viejos.\n\n" +
+        "Continuar igual?"
+    );
+}
+
+async function refrescarDatosOnlineAntesDeOperacionPedido(idPedido) {
+    if (!pedidoPuedeRefrescarDatosOnline()) {
+        return true;
+    }
+
+    const errores = [];
+
+    await refrescarPedidosOnlineSiCorresponde(idPedido, errores);
+
+    if (typeof cargarClientesDesdeSupabase === "function") {
+        const resultadoClientes =
+            await cargarClientesDesdeSupabase();
+
+        if (resultadoCargaTieneErrorPedido(resultadoClientes)) {
+            errores.push(resultadoClientes.error);
+        }
+    }
+
+    if (errores.length === 0) {
+        return true;
+    }
+
+    alert(
+        "No se pudo actualizar pedidos/clientes desde Supabase.\n" +
+        "Actualiza datos y volve a intentar."
+    );
+    return false;
 }
 
 function actualizarClientePedidoSeleccionado() {
@@ -885,7 +1007,7 @@ function renderizarPedidoActual() {
 
 }
 
-function guardarPedido(estadoPedido) {
+function guardarPedido(estadoPedido, opcionesGuardado) {
     if (!tienePermiso("ventas")) {
         alert("Tu rol no tiene permiso para guardar pedidos.");
         return null;
@@ -905,6 +1027,8 @@ function guardarPedido(estadoPedido) {
             : pedidoEditando && pedidoEditando.estado !== "BORRADOR"
                 ? pedidoEditando.estado
                 : "PENDIENTE";
+    const omitirGuardadoSupabase =
+        opcionesGuardado && opcionesGuardado.omitirGuardadoSupabase === true;
 
     pedidoActual.cliente =
         clienteSeleccionado ||
@@ -980,7 +1104,9 @@ function guardarPedido(estadoPedido) {
             estadoFinal;
 
         guardarPedidos();
-        guardarPedidoOperacionSupabase(pedidoGuardado);
+        if (!omitirGuardadoSupabase) {
+            guardarPedidoOperacionSupabase(pedidoGuardado);
+        }
 
         registrarAuditoria(
             "Pedidos",
@@ -1053,7 +1179,9 @@ function guardarPedido(estadoPedido) {
     pedidos.unshift(nuevoPedido);
 
     guardarPedidos();
-    guardarPedidoOperacionSupabase(nuevoPedido);
+    if (!omitirGuardadoSupabase) {
+        guardarPedidoOperacionSupabase(nuevoPedido);
+    }
 
     registrarAuditoria(
         "Pedidos",
@@ -1410,7 +1538,7 @@ function exportarPedidosCsv() {
     );
 }
 
-function atenderPedido(id) {
+async function atenderPedido(id) {
     if (!tienePermiso("ventas")) {
         alert("Tu rol no tiene permiso para atender pedidos.");
         return;
@@ -1423,6 +1551,13 @@ function atenderPedido(id) {
     pedidosOperacionEnCurso.add(claveOperacion);
 
     try {
+    const datosActualizados =
+        await refrescarDatosOnlineAntesDeAtenderPedido(id);
+
+    if (!datosActualizados) {
+        return;
+    }
+
     const pedido =
         pedidos.find(function (p) {
 
@@ -1548,8 +1683,17 @@ function atenderPedido(id) {
 
     guardarPedidos();
     guardarProductos();
-    guardarProductosPedidoOperacionSupabase(pedido);
-    guardarPedidoOperacionSupabase(pedido);
+    const productosGuardadosOnline =
+        await guardarProductosPedidoOperacionSupabase(pedido);
+    const pedidoGuardadoOnline =
+        await guardarPedidoOperacionSupabase(pedido);
+
+    if (
+        pedidoDebeConfirmarGuardadoOnline() &&
+        (!productosGuardadosOnline || !pedidoGuardadoOnline)
+    ) {
+        avisarPedidoSinConfirmacionOnline("El pedido atendido");
+    }
 
     registrarAuditoria(
         "Pedidos",
@@ -1766,7 +1910,7 @@ function actualizarVistaEntregaPedido() {
 
 }
 
-function confirmarEntregaPedido(event) {
+async function confirmarEntregaPedido(event) {
 
     if (event && typeof event.preventDefault === "function") {
         event.preventDefault();
@@ -1781,7 +1925,7 @@ function confirmarEntregaPedido(event) {
         return;
     }
 
-    const pedido =
+    let pedido =
         pedidoEntregaPendiente;
 
     if (pedido.estado !== "ATENDIDO") {
@@ -1801,112 +1945,152 @@ function confirmarEntregaPedido(event) {
     pedidosOperacionEnCurso.add(claveOperacion);
 
     try {
-    const totalPedido =
-        Number(pedido.total) || 0;
-    const importePagado =
-        Number(dom.entregaPagoInput.value);
+        const datosActualizados =
+            await refrescarDatosOnlineAntesDeOperacionPedido(pedido.id);
 
-    if (Number.isNaN(importePagado) || importePagado < 0) {
-        alert("Ingrese un importe valido. Puede ser 0 si no pago.");
-        return;
-    }
+        if (!datosActualizados) {
+            return;
+        }
 
-    if (importePagado > totalPedido) {
-        alert("El importe pagado no puede superar el total del pedido.");
-        return;
-    }
+        pedido =
+            obtenerPedidoLocalPorId(pedido.id);
 
-    const saldoPendiente =
-        totalPedido - importePagado;
+        if (!pedido || pedido.estado !== "ATENDIDO") {
+            alert("Este pedido ya no esta atendido. Actualiza el listado y revisa el estado.");
+            cerrarEntregaPedidoModal();
+            return;
+        }
 
-    const cliente =
-        clientes.find(function (clienteGuardado) {
-            if (!pedido.cliente) {
-                return false;
+        pedidoEntregaPendiente =
+            pedido;
+
+        const totalPedido =
+            Number(pedido.total) || 0;
+        const importePagado =
+            Number(dom.entregaPagoInput.value);
+
+        if (Number.isNaN(importePagado) || importePagado < 0) {
+            alert("Ingrese un importe valido. Puede ser 0 si no pago.");
+            return;
+        }
+
+        if (importePagado > totalPedido) {
+            alert("El importe pagado no puede superar el total del pedido.");
+            return;
+        }
+
+        const saldoPendiente =
+            totalPedido - importePagado;
+
+        const cliente =
+            clientes.find(function (clienteGuardado) {
+                if (!pedido.cliente) {
+                    return false;
+                }
+
+                return clienteGuardado.codigo === pedido.cliente.codigo;
+            });
+
+        if (!cliente) {
+            alert("No se encontro el cliente del pedido.");
+            return;
+        }
+
+        pedido.fechaEntrega =
+            new Date().toLocaleDateString("es-AR");
+        pedido.importePagado =
+            importePagado;
+        pedido.saldoPendiente =
+            saldoPendiente;
+        pedido.estadoCobro =
+            saldoPendiente > 0 ? "CUENTA_CORRIENTE" : "COBRADO";
+        pedido.estado =
+            "ENTREGADO";
+
+        cliente.saldo =
+            Number(cliente.saldo) || 0;
+
+        if (!cliente.historial) {
+            cliente.historial = [];
+        }
+
+        let movimientosCuentaGuardadosOnline = true;
+
+        if (importePagado > 0) {
+            const movimientoPagoEntrega = {
+                fecha: pedido.fechaEntrega,
+                tipo: "Pago al entregar pedido #" + (pedido.numero || pedido.id),
+                importe: -importePagado
+            };
+
+            cliente.historial.push(movimientoPagoEntrega);
+            const movimientoPagoGuardadoOnline =
+                await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoPagoEntrega);
+
+            if (pedidoDebeConfirmarGuardadoOnline() && !movimientoPagoGuardadoOnline) {
+                movimientosCuentaGuardadosOnline = false;
             }
+        }
 
-            return clienteGuardado.codigo === pedido.cliente.codigo;
-        });
+        if (saldoPendiente > 0) {
+            cliente.saldo += saldoPendiente;
+            const movimientoCuenta = {
+                fecha: pedido.fechaEntrega,
+                tipo: "Pedido entregado a cuenta #" + (pedido.numero || pedido.id),
+                importe: saldoPendiente
+            };
 
-    if (!cliente) {
-        alert("No se encontro el cliente del pedido.");
-        return;
-    }
+            cliente.historial.push(movimientoCuenta);
+            const movimientoCuentaGuardadoOnline =
+                await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
 
-    pedido.fechaEntrega =
-        new Date().toLocaleDateString("es-AR");
-    pedido.importePagado =
-        importePagado;
-    pedido.saldoPendiente =
-        saldoPendiente;
-    pedido.estadoCobro =
-        saldoPendiente > 0 ? "CUENTA_CORRIENTE" : "COBRADO";
-    pedido.estado =
-        "ENTREGADO";
+            if (pedidoDebeConfirmarGuardadoOnline() && !movimientoCuentaGuardadoOnline) {
+                movimientosCuentaGuardadosOnline = false;
+            }
+        }
 
-    cliente.saldo =
-        Number(cliente.saldo) || 0;
+        guardarClientes();
+        guardarPedidos();
+        const clienteGuardadoOnline =
+            await guardarClienteOperacionSupabase(cliente);
+        const pedidoGuardadoOnline =
+            await guardarPedidoOperacionSupabase(pedido);
 
-    if (!cliente.historial) {
-        cliente.historial = [];
-    }
+        if (
+            pedidoDebeConfirmarGuardadoOnline() &&
+            (!clienteGuardadoOnline || !pedidoGuardadoOnline || !movimientosCuentaGuardadosOnline)
+        ) {
+            avisarPedidoSinConfirmacionOnline("La entrega");
+        }
 
-    if (importePagado > 0) {
-        const movimientoPagoEntrega = {
-            fecha: pedido.fechaEntrega,
-            tipo: "Pago al entregar pedido #" + (pedido.numero || pedido.id),
-            importe: -importePagado
-        };
+        registrarAuditoria(
+            saldoPendiente > 0 ? "Cuenta corriente" : "Pedidos",
+            "Entrego pedido",
+            "#" + (pedido.numero || pedido.id) +
+            " | " + pedido.cliente.nombre +
+            " | Pago " + formatearDinero(importePagado) +
+            " | Saldo " + formatearDinero(saldoPendiente)
+        );
 
-        cliente.historial.push(movimientoPagoEntrega);
-        guardarMovimientoCuentaOperacionSupabase(cliente, movimientoPagoEntrega);
-    }
-
-    if (saldoPendiente > 0) {
-        cliente.saldo += saldoPendiente;
-        const movimientoCuenta = {
-            fecha: pedido.fechaEntrega,
-            tipo: "Pedido entregado a cuenta #" + (pedido.numero || pedido.id),
-            importe: saldoPendiente
-        };
-
-        cliente.historial.push(movimientoCuenta);
-        guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
-    }
-
-    guardarClientes();
-    guardarPedidos();
-    guardarClienteOperacionSupabase(cliente);
-    guardarPedidoOperacionSupabase(pedido);
-
-    registrarAuditoria(
-        saldoPendiente > 0 ? "Cuenta corriente" : "Pedidos",
-        "Entrego pedido",
-        "#" + (pedido.numero || pedido.id) +
-        " | " + pedido.cliente.nombre +
-        " | Pago " + formatearDinero(importePagado) +
-        " | Saldo " + formatearDinero(saldoPendiente)
-    );
-
-    cerrarEntregaPedidoModal();
-    renderizarClientes();
-    renderizarClientesConDeuda();
-    renderizarPedidos();
-    actualizarDashboard();
-    verDetallePedido(pedido.id);
+        cerrarEntregaPedidoModal();
+        renderizarClientes();
+        renderizarClientesConDeuda();
+        renderizarPedidos();
+        actualizarDashboard();
+        verDetallePedido(pedido.id);
     } finally {
         pedidosOperacionEnCurso.delete(claveOperacion);
     }
 
 }
 
-function cobrarPedido(id) {
+async function cobrarPedido(id) {
     if (!tienePermiso("ventas")) {
         alert("Tu rol no tiene permiso para cobrar pedidos.");
         return;
     }
 
-    const pedido =
+    let pedido =
         pedidos.find(function (pedidoGuardado) {
             return pedidoGuardado.id === id;
         });
@@ -1939,6 +2123,32 @@ function cobrarPedido(id) {
     pedidosOperacionEnCurso.add(claveOperacion);
 
     try {
+        const datosActualizados =
+            await refrescarDatosOnlineAntesDeOperacionPedido(pedido.id);
+
+        if (!datosActualizados) {
+            return;
+        }
+
+        pedido =
+            obtenerPedidoLocalPorId(id);
+
+        if (!pedido) {
+            return;
+        }
+
+        if (pedido.estado !== "ENTREGADO") {
+            alert("Solo se pueden cobrar pedidos entregados.");
+            return;
+        }
+
+        if (
+            pedido.estadoCobro === "CUENTA_CORRIENTE" &&
+            Number(pedido.saldoPendiente) > 0
+        ) {
+            alert("Este pedido ya esta en cuenta corriente. Registra el pago desde Cuenta cliente.");
+            return;
+        }
         const confirmar =
             confirm("Marcar este pedido como cobrado?");
 
@@ -1951,7 +2161,12 @@ function cobrarPedido(id) {
         pedido.saldoPendiente = 0;
 
         guardarPedidos();
-        guardarPedidoOperacionSupabase(pedido);
+        const pedidoGuardadoOnline =
+            await guardarPedidoOperacionSupabase(pedido);
+
+        if (pedidoDebeConfirmarGuardadoOnline() && !pedidoGuardadoOnline) {
+            avisarPedidoSinConfirmacionOnline("El cobro");
+        }
 
         registrarAuditoria(
             "Pedidos",
@@ -1968,13 +2183,13 @@ function cobrarPedido(id) {
     }
 }
 
-function pasarACuentaCorriente(id) {
+async function pasarACuentaCorriente(id) {
     if (!tienePermiso("cuentaCorriente")) {
         alert("Tu rol no tiene permiso para pasar pedidos a cuenta corriente.");
         return;
     }
 
-    const pedido =
+    let pedido =
         pedidos.find(function (pedidoGuardado) {
             return pedidoGuardado.id === id;
         });
@@ -2009,6 +2224,34 @@ function pasarACuentaCorriente(id) {
     pedidosOperacionEnCurso.add(claveOperacion);
 
     try {
+        const datosActualizados =
+            await refrescarDatosOnlineAntesDeOperacionPedido(pedido.id);
+
+        if (!datosActualizados) {
+            return;
+        }
+
+        pedido =
+            obtenerPedidoLocalPorId(id);
+
+        if (!pedido) {
+            return;
+        }
+
+        if (pedido.estado !== "ENTREGADO") {
+            alert("Solo se puede pasar a cuenta corriente un pedido entregado.");
+            return;
+        }
+
+        if (pedido.estadoCobro === "CUENTA_CORRIENTE") {
+            alert("Este pedido ya esta en cuenta corriente.");
+            return;
+        }
+
+        if (!pedido.cliente) {
+            alert("Este pedido no tiene cliente asignado. No se puede pasar a cuenta corriente.");
+            return;
+        }
         const confirmar =
             confirm("Pasar este pedido a cuenta corriente?");
 
@@ -2060,9 +2303,19 @@ function pasarACuentaCorriente(id) {
 
         guardarClientes();
         guardarPedidos();
-        guardarClienteOperacionSupabase(cliente);
-        guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
-        guardarPedidoOperacionSupabase(pedido);
+        const clienteGuardadoOnline =
+            await guardarClienteOperacionSupabase(cliente);
+        const movimientoGuardadoOnline =
+            await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
+        const pedidoGuardadoOnline =
+            await guardarPedidoOperacionSupabase(pedido);
+
+        if (
+            pedidoDebeConfirmarGuardadoOnline() &&
+            (!clienteGuardadoOnline || !movimientoGuardadoOnline || !pedidoGuardadoOnline)
+        ) {
+            avisarPedidoSinConfirmacionOnline("El pase a cuenta corriente");
+        }
 
         registrarAuditoria(
             "Cuenta corriente",
@@ -2079,13 +2332,13 @@ function pasarACuentaCorriente(id) {
     }
 }
 
-function cancelarPedido(id) {
+async function cancelarPedido(id) {
     if (!tienePermiso("ventas")) {
         alert("Tu rol no tiene permiso para cancelar pedidos.");
         return;
     }
 
-    const pedido =
+    let pedido =
         pedidos.find(function (pedidoGuardado) {
             return pedidoGuardado.id === id;
         });
@@ -2113,7 +2366,12 @@ function cancelarPedido(id) {
         pedido.estado = "CANCELADO";
 
         guardarPedidos();
-        guardarPedidoOperacionSupabase(pedido);
+        const pedidoGuardadoOnline =
+            await guardarPedidoOperacionSupabase(pedido);
+
+        if (pedidoDebeConfirmarGuardadoOnline() && !pedidoGuardadoOnline) {
+            avisarPedidoSinConfirmacionOnline("La cancelacion");
+        }
 
         registrarAuditoria(
             "Pedidos",
@@ -2324,7 +2582,7 @@ function reabrirPedidoAtendidoDesdeDetalle(id) {
     reabrirPedidoAtendido(id);
 }
 
-function reabrirPedidoAtendido(id) {
+async function reabrirPedidoAtendido(id) {
     if (!tienePermiso("ventas")) {
         alert("Tu rol no tiene permiso para reabrir pedidos.");
         return;
@@ -2370,8 +2628,17 @@ function reabrirPedidoAtendido(id) {
 
     guardarPedidos();
     guardarProductos();
-    guardarProductosPedidoOperacionSupabase(pedido);
-    guardarPedidoOperacionSupabase(pedido);
+    const productosGuardadosOnline =
+        await guardarProductosPedidoOperacionSupabase(pedido);
+    const pedidoGuardadoOnline =
+        await guardarPedidoOperacionSupabase(pedido);
+
+    if (
+        pedidoDebeConfirmarGuardadoOnline() &&
+        (!productosGuardadosOnline || !pedidoGuardadoOnline)
+    ) {
+        avisarPedidoSinConfirmacionOnline("El pedido reabierto");
+    }
 
     registrarAuditoria(
         "Pedidos",
@@ -2499,3 +2766,7 @@ function eliminarPedido(id){
   actualizarDashboard();
 
 }
+
+
+
+

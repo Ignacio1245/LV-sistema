@@ -62,6 +62,25 @@ async function obtenerClientesSupabase() {
     .filter(Boolean);
 }
 
+async function obtenerMayorCodigoClienteSupabase() {
+  const { data, error } =
+    await supabaseClient
+      .from("clientes")
+      .select("codigo")
+      .order("codigo", { ascending: false })
+      .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data || data.length === 0) {
+    return 0;
+  }
+
+  return Number(data[0].codigo) || 0;
+}
+
 async function guardarProductoSupabase(producto) {
   const productoSupabase =
     mapearProductoParaSupabase(producto);
@@ -92,6 +111,24 @@ async function guardarClienteSupabase(cliente) {
 
   const { data, error } =
     await consulta.select().single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data ? mapearClienteDesdeSupabase(data) : null;
+}
+
+async function insertarClienteNuevoSupabase(cliente) {
+  const clienteSupabase =
+    mapearClienteParaSupabase(cliente);
+
+  const { data, error } =
+    await supabaseClient
+      .from("clientes")
+      .insert(clienteSupabase)
+      .select()
+      .single();
 
   if (error) {
     throw error;
@@ -467,18 +504,31 @@ async function obtenerUsuarioSistemaPorEmailSupabase(email) {
 }
 
 async function obtenerRolIdSupabase(nombreRol) {
+  const nombreRolNormalizado =
+    typeof normalizarNombreRolSupabase === "function"
+      ? normalizarNombreRolSupabase(nombreRol)
+      : String(nombreRol || "").trim().toUpperCase();
+
   const { data, error } =
     await supabaseClient
       .from("roles")
-      .select("id")
-      .eq("nombre", nombreRol)
-      .maybeSingle();
+      .select("id, nombre");
 
   if (error) {
     throw error;
   }
 
-  return data ? data.id : null;
+  const rolEncontrado =
+    (data || []).find(function (rol) {
+      const nombreGuardado =
+        typeof normalizarNombreRolSupabase === "function"
+          ? normalizarNombreRolSupabase(rol.nombre)
+          : String(rol.nombre || "").trim().toUpperCase();
+
+      return nombreGuardado === nombreRolNormalizado;
+    });
+
+  return rolEncontrado ? rolEncontrado.id : null;
 }
 
 async function guardarUsuarioSupabase(usuario) {

@@ -1,4 +1,4 @@
-﻿/* Tema final activo: colores, sidebar, panel principal y ajustes finales */
+/* Tema final activo: colores, sidebar, panel principal y ajustes finales */
 /* Ajuste operativo final: tablas comodas, acciones compactas y colores sobrios */
 :root {
   --primary: #2563eb;
@@ -1756,5 +1756,55 @@ table .danger-button {
 
   .topbar {
     margin: 0 -10px 14px;
+  }
+}
+
+/* Pulido final de entrega: foco visible, estados y lectura en tablas */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid rgba(14, 116, 144, 0.22);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px rgba(14, 116, 144, 0.28);
+}
+
+button:disabled,
+.btn:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  filter: saturate(0.8);
+}
+
+.table-wrapper tbody tr,
+.data-table tbody tr,
+table tbody tr {
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.table-wrapper tbody tr:hover,
+.data-table tbody tr:hover,
+table tbody tr:hover {
+  background: #f7fbff;
+}
+
+.empty-table,
+.dashboard-empty {
+  border-radius: 6px;
+  color: #5f7187;
+  background: #f8fbfe;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

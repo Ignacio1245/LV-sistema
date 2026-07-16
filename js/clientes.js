@@ -1,4 +1,4 @@
-let filtroEstadoClientes = "activos";
+﻿let filtroEstadoClientes = "activos";
 let clienteEditando = null;
 let cobranzasPendientesVendedor = [];
 let cobranzasVendedorEnProceso = {};
@@ -1076,7 +1076,7 @@ async function cargarCobranzasPendientesVendedor() {
         "Inicia sesion online para ver cobranzas de vendedores.";
     }
     renderizarCobranzasPendientesVendedor();
-    return;
+    return false;
   }
 
   if (typeof obtenerPagosClienteSupabase !== "function") {
@@ -1084,7 +1084,7 @@ async function cargarCobranzasPendientesVendedor() {
       dom.cobranzasPendientesVendedorEstado.textContent =
         "No esta disponible la lectura de pagos de Supabase.";
     }
-    return;
+    return false;
   }
 
   if (dom.cobranzasPendientesVendedorEstado) {
@@ -1107,13 +1107,49 @@ async function cargarCobranzasPendientesVendedor() {
     }
 
     renderizarCobranzasPendientesVendedor();
+    return true;
   } catch (error) {
     console.error("No se pudieron cargar cobranzas pendientes:", error);
     if (dom.cobranzasPendientesVendedorEstado) {
       dom.cobranzasPendientesVendedorEstado.textContent =
         "No se pudieron cargar cobranzas: " + (error.message || "error");
     }
+    return false;
   }
+}
+
+function resultadoCargaCuentaTieneError(resultado) {
+  return resultado && resultado.error;
+}
+
+async function refrescarDatosAntesDeResolverCobranzaVendedor() {
+  const errores = [];
+
+  if (typeof cargarClientesDesdeSupabase === "function") {
+    const resultadoClientes =
+      await cargarClientesDesdeSupabase();
+
+    if (resultadoCargaCuentaTieneError(resultadoClientes)) {
+      errores.push(resultadoClientes.error);
+    }
+  }
+
+  const cobranzasActualizadas =
+    await cargarCobranzasPendientesVendedor();
+
+  if (!cobranzasActualizadas) {
+    errores.push("No se pudieron actualizar cobranzas pendientes.");
+  }
+
+  if (errores.length === 0) {
+    return true;
+  }
+
+  alert(
+    "No se pudo actualizar cuenta corriente antes de resolver la cobranza.\n" +
+    "Actualiza datos y volve a intentar."
+  );
+  return false;
 }
 
 function obtenerCobranzaPendientePorId(idSupabase) {
@@ -1132,6 +1168,13 @@ async function aprobarCobranzaVendedor(idSupabase) {
 
   if (!tienePermiso("cuentaCorriente")) {
     alert("Tu rol no tiene permiso para aprobar cobranzas.");
+    return;
+  }
+
+  const datosActualizados =
+    await refrescarDatosAntesDeResolverCobranzaVendedor();
+
+  if (!datosActualizados) {
     return;
   }
 
@@ -1191,18 +1234,21 @@ async function aprobarCobranzaVendedor(idSupabase) {
     saldoPosterior: saldoPosterior
   };
 
+  let pagoMarcadoAprobado = false;
+
   try {
     cliente.saldo =
       saldoPosterior;
     cliente.historial =
       historialAnterior.concat([movimientoCuenta]);
 
-    await guardarClienteSupabase(cliente);
     await actualizarPagoClienteSupabase({
       ...pago,
       medioPago: "PAGO_CLIENTE",
       observacion: movimientoCuenta.tipo
     });
+    pagoMarcadoAprobado = true;
+    await guardarClienteSupabase(cliente);
 
     guardarClientes();
     renderizarClientes();
@@ -1216,6 +1262,13 @@ async function aprobarCobranzaVendedor(idSupabase) {
     await cargarCobranzasPendientesVendedor();
   } catch (error) {
     console.error("No se pudo aprobar cobranza:", error);
+    if (pagoMarcadoAprobado) {
+      try {
+        await actualizarPagoClienteSupabase(pago);
+      } catch (errorReversion) {
+        console.error("No se pudo volver la cobranza a pendiente:", errorReversion);
+      }
+    }
     cliente.saldo =
       saldoAnterior;
     cliente.historial =
@@ -1237,6 +1290,13 @@ async function rechazarCobranzaVendedor(idSupabase) {
 
   if (!tienePermiso("cuentaCorriente")) {
     alert("Tu rol no tiene permiso para rechazar cobranzas.");
+    return;
+  }
+
+  const datosActualizados =
+    await refrescarDatosAntesDeResolverCobranzaVendedor();
+
+  if (!datosActualizados) {
     return;
   }
 
@@ -1783,6 +1843,29 @@ function aplicarNotaCreditoEnCobroPedido(pedido, importeCredito, totalAnteriorPe
     saldoAFavor: saldoAFavor
   };
 }
+async function obtenerClienteActualizadoParaPago(codigoCliente) {
+  if (
+    typeof usuarioSupabaseAutenticado === "function" &&
+    usuarioSupabaseAutenticado() &&
+    typeof cargarClientesDesdeSupabase === "function"
+  ) {
+    const resultadoClientes =
+      await cargarClientesDesdeSupabase();
+
+    if (resultadoCargaCuentaTieneError(resultadoClientes)) {
+      alert(
+        "No se pudo actualizar la cuenta del cliente.\n" +
+        "Actualiza datos y volve a intentar."
+      );
+      return null;
+    }
+  }
+
+  return clientes.find(function (clienteGuardado) {
+    return clienteGuardado.codigo === codigoCliente;
+  }) || null;
+}
+
 function actualizarVistaPagoCliente() {
   if (!dom.pagoClienteResultado) {
     return;
@@ -1837,7 +1920,7 @@ function abrirRegistroPagoCliente(codigo) {
   dom.pagoImporteInput.select();
 }
 
-function registrarPagoDesdeFormulario(event) {
+async function registrarPagoDesdeFormulario(event) {
   event.preventDefault();
 
   if (!tienePermiso("cuentaCorriente")) {
@@ -1860,7 +1943,7 @@ function registrarPagoDesdeFormulario(event) {
   }
 
   const pagoRegistrado =
-    registrarPago(cliente.codigo, importe);
+    await registrarPago(cliente.codigo, importe);
 
   if (pagoRegistrado) {
     dom.registrarPagoForm.reset();
@@ -1878,7 +1961,7 @@ function renderizarProductosNotaCredito() {
   if (!pedido || !Array.isArray(pedido.items) || pedido.items.length === 0) {
     dom.notaCreditoProductosTable.innerHTML = `
       <tr>
-        <td colspan="5" class="empty-table">Elegí cliente y pedido para ver productos.</td>
+        <td colspan="5" class="empty-table">ElegÃ­ cliente y pedido para ver productos.</td>
       </tr>
     `;
     dom.notaCreditoImporteInput.value = "";
@@ -2345,13 +2428,13 @@ function verHistorialCliente(codigo) {
 
   dom.estadoCuentaModal.classList.remove("hidden");
 }
-function registrarPago(codigo, importeDirecto) {
+async function registrarPago(codigo, importeDirecto) {
   if (!tienePermiso("cuentaCorriente")) {
     alert("Tu rol no tiene permiso para registrar pagos.");
     return false;
   }
 
-  const cliente = clientes.find(function (c) {
+  let cliente = clientes.find(function (c) {
     return c.codigo === codigo;
   });
   if (!cliente) {
@@ -2361,13 +2444,29 @@ function registrarPago(codigo, importeDirecto) {
   cliente.saldo =
     Number(cliente.saldo) || 0;
 
-  if (cliente.saldo <= 0) {
-    alert("Este cliente no tiene saldo pendiente.");
+  if (importeDirecto === undefined) {
+    if (cliente.saldo <= 0) {
+      alert("Este cliente no tiene saldo pendiente.");
+      return false;
+    }
+
+    abrirRegistroPagoCliente(codigo);
     return false;
   }
 
-  if (importeDirecto === undefined) {
-    abrirRegistroPagoCliente(codigo);
+  const clienteActualizado =
+    await obtenerClienteActualizadoParaPago(codigo);
+
+  if (!clienteActualizado) {
+    return false;
+  }
+
+  cliente = clienteActualizado;
+  cliente.saldo =
+    Number(cliente.saldo) || 0;
+
+  if (cliente.saldo <= 0) {
+    alert("Este cliente ya no tiene saldo pendiente.");
     return false;
   }
 
@@ -2465,3 +2564,7 @@ function registrarPago(codigo, importeDirecto) {
     finalizarOperacionCuentaCorriente(claveOperacion);
   }
 }
+
+
+
+

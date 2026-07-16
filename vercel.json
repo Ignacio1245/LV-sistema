@@ -7,11 +7,23 @@
       "destination": "/index.html"
     },
     {
+      "source": "/admin/",
+      "destination": "/index.html"
+    },
+    {
       "source": "/vendedores",
       "destination": "/vendedores.html"
     },
     {
+      "source": "/vendedores/",
+      "destination": "/vendedores.html"
+    },
+    {
       "source": "/catalogo",
+      "destination": "/catalogo.html"
+    },
+    {
+      "source": "/catalogo/",
       "destination": "/catalogo.html"
     }
   ]

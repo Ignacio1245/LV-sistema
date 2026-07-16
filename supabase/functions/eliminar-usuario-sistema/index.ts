@@ -16,6 +16,17 @@ function responderJson(body: Record<string, unknown>, status = 200) {
   });
 }
 
+function usuarioPuedeAdministrarAccesos(usuarioSistema: any) {
+  const rolSistema =
+    Array.isArray(usuarioSistema?.roles) ? usuarioSistema.roles[0] : usuarioSistema?.roles;
+  const nombreRol =
+    String(rolSistema?.nombre || "").trim().toUpperCase();
+  const permisos =
+    rolSistema?.permisos || {};
+
+  return nombreRol === "SUPERADMIN" || permisos.configuracion === true;
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -77,9 +88,7 @@ Deno.serve(async (request) => {
     return responderJson({ error: "Tu email no esta habilitado como usuario del sistema." }, 403);
   }
 
-  const permisos = usuarioSistema.roles?.permisos || {};
-
-  if (permisos.configuracion !== true) {
+  if (!usuarioPuedeAdministrarAccesos(usuarioSistema)) {
     return responderJson({ error: "No tenes permiso para eliminar accesos." }, 403);
   }
 

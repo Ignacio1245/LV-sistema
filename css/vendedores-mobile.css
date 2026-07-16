@@ -300,6 +300,22 @@ button.vendedores-producto,
   font-weight: 800;
 }
 
+.vendedores-alta-cliente {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed #94a3b8;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.vendedores-alta-cliente h3 {
+  margin: 0;
+  color: #172033;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
 .vendedores-producto strong,
 .vendedores-item strong {
   font-size: 16px;
@@ -980,5 +996,328 @@ button.vendedores-producto,
 
   .vendedores-barra-pedido button {
     min-width: 118px;
+  }
+}
+
+/* Vendedores Pro: flujo rapido de calle */
+.vendedores-mobile {
+  --vm-ink: #0d1b2a;
+  --vm-panel: #ffffff;
+  --vm-line: #c9d7e6;
+  --vm-blue: #087ead;
+  --vm-blue-dark: #075f86;
+  --vm-green: #138a3d;
+  --vm-red: #b42318;
+  --vm-amber: #8a5b08;
+  background: #eaf0f6;
+}
+
+.vendedores-layout {
+  width: min(860px, 100%);
+  gap: 10px;
+}
+
+.vendedores-encabezado {
+  top: 0;
+  border-color: #bfd0df;
+  background: #101f30;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(16, 32, 51, 0.18);
+}
+
+.vendedores-encabezado h1,
+.vendedores-encabezado .vendedores-etiqueta {
+  color: #ffffff;
+}
+
+.vendedores-estado {
+  background: #1c3147;
+  border-color: #36516c;
+  color: #e8f4ff;
+}
+
+.vendedores-salir {
+  background: #eef3f8;
+  color: #102033;
+}
+
+.vendedores-jornada {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vendedores-jornada article {
+  display: grid;
+  gap: 4px;
+  min-height: 66px;
+  padding: 10px;
+  border: 1px solid var(--vm-line);
+  border-radius: 8px;
+  background: #f8fbfe;
+}
+
+.vendedores-jornada span {
+  color: #5c6f84;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.vendedores-jornada strong {
+  color: var(--vm-ink);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.vendedores-modulos {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.vendedores-modulo-card {
+  min-height: 78px;
+  border-color: var(--vm-line);
+  background: #ffffff;
+}
+
+.vendedores-modulo-card strong {
+  font-size: 17px;
+}
+
+.vendedores-modulo-card span {
+  font-size: 12px;
+}
+
+.vendedores-modulo-card.active {
+  background: var(--vm-blue);
+  border-color: var(--vm-blue);
+}
+
+.vendedores-flujo-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.vendedores-recientes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid #dbe5ef;
+  border-radius: 8px;
+  background: #f8fbfe;
+}
+
+.vendedores-recientes > span {
+  color: #63758a;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.vendedores-recientes button {
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid #c7d7e6;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #102033;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.vendedores-opcion-principal,
+.vendedores-producto-cabeza {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.vendedores-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #e8f2fb;
+  color: #075f86 !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+  white-space: nowrap;
+}
+
+.vendedores-chip.deuda {
+  background: #fff1d6;
+  color: var(--vm-amber) !important;
+}
+
+.vendedores-chip.favor,
+.vendedores-chip.pedido {
+  background: #e5f6eb;
+  color: #116b34 !important;
+}
+
+.vendedores-opcion small {
+  color: #6c7f94;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.vendedores-producto {
+  gap: 9px;
+  border-left: 4px solid transparent;
+}
+
+.vendedores-producto-en-pedido {
+  border-left-color: var(--vm-green);
+  background: #fbfffc;
+}
+
+.vendedores-producto-meta {
+  padding: 8px 0;
+}
+
+.vendedores-cantidades-rapidas button {
+  background: #fff7e8;
+  border-color: #edc779;
+}
+
+.vendedores-bonificacion {
+  grid-template-columns: minmax(0, 1fr) 78px;
+  padding: 8px;
+}
+
+.vendedores-bonificacion-opciones {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.vendedores-producto-controles {
+  grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.vendedores-principal {
+  background: var(--vm-green);
+}
+
+.vendedores-principal:hover {
+  background: #0f7333;
+}
+
+.vendedores-catalogo-panel {
+  border-top: 4px solid var(--vm-blue);
+}
+
+.vendedores-acciones-catalogo {
+  grid-template-columns: 1fr 1fr;
+}
+
+.vendedores-barra-pedido {
+  border-color: #21364f;
+  background: #0f1d2d;
+}
+
+@media (max-width: 640px) {
+  .vendedores-layout {
+    padding: 8px;
+  }
+
+  .vendedores-encabezado {
+    display: grid;
+    gap: 10px;
+    position: sticky;
+  }
+
+  .vendedores-sesion {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+
+  .vendedores-jornada {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vendedores-modulos {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .vendedores-modulo-card {
+    min-height: 72px;
+    padding: 9px;
+  }
+
+  .vendedores-modulo-card strong {
+    font-size: 15px;
+  }
+
+  .vendedores-modulo-card span {
+    font-size: 11px;
+  }
+
+  .vendedores-opcion-principal,
+  .vendedores-producto-cabeza,
+  .vendedores-resumen-titulo {
+    display: grid;
+  }
+
+  .vendedores-chip {
+    width: fit-content;
+  }
+
+  .vendedores-producto-controles,
+  .vendedores-acciones,
+  .vendedores-acciones-catalogo {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Pulido final mobile: tacto, foco y salida visual segura */
+.vendedores-mobile * {
+  -webkit-tap-highlight-color: rgba(8, 126, 173, 0.16);
+}
+
+.vendedores-mobile button:focus-visible,
+.vendedores-mobile input:focus-visible,
+.vendedores-mobile select:focus-visible,
+.vendedores-mobile textarea:focus-visible,
+.vendedores-mobile a:focus-visible {
+  outline: 3px solid rgba(8, 126, 173, 0.24);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px rgba(8, 126, 173, 0.32);
+}
+
+.vendedores-mobile button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  filter: saturate(0.82);
+}
+
+.vendedores-opcion,
+.vendedores-producto,
+.vendedores-modulo-card {
+  transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
+}
+
+.vendedores-opcion:active,
+.vendedores-producto:active,
+.vendedores-modulo-card:active {
+  transform: translateY(1px);
+}
+
+.vendedores-barra-pedido {
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vendedores-mobile *,
+  .vendedores-mobile *::before,
+  .vendedores-mobile *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

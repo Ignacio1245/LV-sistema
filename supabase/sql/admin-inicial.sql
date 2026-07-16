@@ -32,7 +32,7 @@ insert into usuarios (codigo, nombre, email, rol_id, activo)
 select
   1,
   'Administrador',
-  'CAMBIAR_EMAIL_ADMIN@empresa.com',
+  'ignaciovas11@gmail.com',
   roles.id,
   true
 from roles

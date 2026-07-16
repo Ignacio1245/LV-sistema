@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LV Sistema</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/styles.css?v=20260713-estilo2">
+  <link rel="stylesheet" href="css/styles.css?v=20260715-pulido1">
 </head>
 
 <body class="login-required">
@@ -560,7 +560,7 @@
                   </thead>
                   <tbody id="notaCreditoProductosTable">
                     <tr>
-                      <td colspan="5" class="empty-table">Elegí cliente y pedido para ver productos.</td>
+                      <td colspan="5" class="empty-table">ElegÃ­ cliente y pedido para ver productos.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -702,7 +702,7 @@
                 <span>Ultimas compras</span>
               </div>
               <div id="productosHabitualesCliente" class="frequent-products-list">
-                <p>Elegí un cliente para ver sus productos habituales.</p>
+                <p>ElegÃ­ un cliente para ver sus productos habituales.</p>
               </div>
             </div>
 
@@ -1944,6 +1944,32 @@
               <button class="secondary-button" id="importarProductosButton" type="button">
                 Importar productos
               </button>
+
+              <div class="temporary-product-import">
+                <div>
+                  <p class="eyebrow">Temporal</p>
+                  <h4>Corregir productos con dos CSV</h4>
+                  <span>Usalo para cruzar el archivo de nombres/rubros con el archivo de precios por codigo.</span>
+                </div>
+
+                <div class="form-grid">
+                  <label>
+                    CSV nombres, rubros y marcas
+                    <input id="productosTemporalNombresArchivo" type="file" accept=".csv,text/csv">
+                  </label>
+                  <label>
+                    CSV precios y listas
+                    <input id="productosTemporalPreciosArchivo" type="file" accept=".csv,text/csv">
+                  </label>
+                </div>
+
+                <div class="sync-status" id="productosTemporalEstado">
+                  No borra pedidos, clientes ni cuentas. Actualiza productos existentes y crea los faltantes con stock 0.
+                </div>
+                <button class="secondary-button" id="productosTemporalButton" type="button">
+                  Temporal: corregir nombres y precios
+                </button>
+              </div>
             </div>
 
             <div class="price-update-panel hidden" id="productosPreciosBloque">
@@ -2125,7 +2151,7 @@
               </label>
 
               <label>
-                Contraseña provisoria
+                ContraseÃ±a provisoria
                 <input id="usuarioPasswordInput" type="password" placeholder="Minimo 6 caracteres" autocomplete="new-password">
               </label>
 
@@ -2674,7 +2700,7 @@
           <section class="report-card" data-report-panel="comparativo">
             <div class="report-card-header">
               <h4>Comparativo anual de ventas</h4>
-              <span>Mes a mes contra el año anterior, con cantidad, facturacion y variacion.</span>
+              <span>Mes a mes contra el aÃ±o anterior, con cantidad, facturacion y variacion.</span>
             </div>
 
             <div class="table-wrapper">
@@ -3315,27 +3341,27 @@
   <script src="js/helpers.js?v=20260621-export1"></script>
 
   <!-- Modulos administrativos principales -->
-  <script src="js/clientes.js?v=20260712-seguro1"></script>
+  <script src="js/clientes.js?v=20260714-pagosonline1"></script>
   <script src="js/rubros.js?v=20260620-supabase1"></script>
   <script src="js/zonas.js?v=20260620-supabase1"></script>
   <script src="js/proveedores.js?v=20260712-cierre2"></script>
   <script src="js/compras.js?v=20260621-costos2"></script>
   <script src="js/movimientos.js?v=20260620-stock1"></script>
   <script src="js/productos.js?v=20260626-stockseguro1"></script>
-  <script src="js/productos-admin.js?v=20260706-listas1"></script>
+  <script src="js/productos-admin.js?v=20260714-importsync1"></script>
 
   <!-- Persistencia local y repositorio Supabase -->
   <script src="js/data-store.js?v=20260626-local1"></script>
-  <script src="js/storage.js?v=20260626-base1"></script>
-  <script src="js/database/supabase-mappers.js?v=20260621-compras1"></script>
-  <script src="js/database/supabase-repository.js?v=20260713-conectado1"></script>
-  <script src="js/supabase-data.js?v=20260704-cobranzas1"></script>
+  <script src="js/storage.js?v=20260714-simultaneo1"></script>
+  <script src="js/database/supabase-mappers.js?v=20260714-roles1"></script>
+  <script src="js/database/supabase-repository.js?v=20260714-roles1"></script>
+  <script src="js/supabase-data.js?v=20260714-confirmasupa1"></script>
 
   <!-- Configuracion, usuarios y permisos -->
   <script src="js/config/configuracion.js?v=20260618-loginfix2"></script>
   <script src="js/config/permisos.js?v=20260618-loginfix2"></script>
-  <script src="js/config/usuarios.js?v=20260713-loginclave1"></script>
-  <script src="js/config/login.js?v=20260713-loginclave1"></script>
+  <script src="js/config/usuarios.js?v=20260714-rolesfix1"></script>
+  <script src="js/config/login.js?v=20260713-superadmin1"></script>
 
   <!-- Control administrativo -->
   <script src="js/auditoria.js?v=20260621-export1"></script>
@@ -3343,13 +3369,18 @@
   <script src="js/respaldo.js?v=20260712-seguro1"></script>
 
   <!-- Pedidos y comprobantes -->
-  <script src="js/pedido.js?v=20260712-seguro2"></script>
+  <script src="js/pedido.js?v=20260715-salida1"></script>
   <script src="js/pedido/habituales.js?v=20260618-loginfix2"></script>
   <script src="js/pedido/observaciones.js?v=20260618-entrega3"></script>
   <script src="js/pedido/impresion.js?v=20260620-notacredito1"></script>
 
   <!-- Inicializacion de pantalla y eventos -->
-  <script src="js/app.js?v=20260712-cierre3"></script>
+  <script src="js/app.js?v=20260714-pedidosonline1"></script>
 </body>
 
 </html>
+
+
+
+
+

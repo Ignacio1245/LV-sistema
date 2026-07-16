@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vendedores - Pedido movil</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/styles.css?v=20260713-estilo1">
-  <link rel="stylesheet" href="css/vendedores-mobile.css?v=20260713-estilo1">
+  <link rel="stylesheet" href="css/styles.css?v=20260715-pulido1">
+  <link rel="stylesheet" href="css/vendedores-mobile.css?v=20260715-pulido1">
 </head>
 <body class="vendedores-mobile">
   <section id="vendedorLogin" class="vendedores-login vendedores-oculto" aria-labelledby="vendedorLoginTitulo">
@@ -30,7 +30,7 @@
     <header class="vendedores-encabezado">
       <div>
         <p class="vendedores-etiqueta">Ventas moviles</p>
-        <h1>Vendedor</h1>
+        <h1 id="vendedorNombreEncabezado">Vendedor</h1>
       </div>
       <div class="vendedores-sesion">
         <span id="vendedorEstadoConexion" class="vendedores-estado">Cargando...</span>
@@ -43,14 +43,36 @@
         <p class="vendedores-etiqueta">Trabajo de calle</p>
         <h2>Elegir tarea</h2>
       </div>
+      <div class="vendedores-jornada" aria-label="Resumen de jornada">
+        <article>
+          <span>Clientes</span>
+          <strong id="vendedorMetricaClientes">0</strong>
+        </article>
+        <article>
+          <span>Productos</span>
+          <strong id="vendedorMetricaProductos">0</strong>
+        </article>
+        <article>
+          <span>Con deuda</span>
+          <strong id="vendedorMetricaDeuda">0</strong>
+        </article>
+        <article>
+          <span>Pedido</span>
+          <strong id="vendedorMetricaPedido">$0</strong>
+        </article>
+      </div>
       <div class="vendedores-modulos">
         <button id="vendedorModuloVenta" type="button" class="vendedores-modulo-card" data-vendedor-modulo="venta">
           <strong>Venta</strong>
           <span>Cliente y pedido</span>
         </button>
         <button id="vendedorModuloClientes" type="button" class="vendedores-modulo-card" data-vendedor-modulo="clientes">
-          <strong>Clientes</strong>
+          <strong>Cobrar</strong>
           <span>Deuda y cobranza</span>
+        </button>
+        <button id="vendedorModuloCatalogo" type="button" class="vendedores-modulo-card" data-vendedor-modulo="catalogo">
+          <strong>Catalogo</strong>
+          <span>Link por WhatsApp</span>
         </button>
       </div>
     </section>
@@ -74,11 +96,41 @@
         Cliente
         <input id="vendedorBusquedaCliente" type="search" placeholder="Codigo o nombre del cliente">
       </label>
+      <div id="vendedorClientesRecientes" class="vendedores-recientes"></div>
       <div id="vendedorResultadosClientes" class="vendedores-resultados"></div>
       <div id="vendedorClienteSeleccionado" class="vendedores-seleccion">Sin cliente seleccionado</div>
       <div class="vendedores-acciones vendedores-acciones-cliente">
+        <button id="vendedorBotonNuevoCliente" type="button" class="vendedores-secundario">Nuevo cliente</button>
         <button id="vendedorBotonEnviarCatalogo" type="button" class="vendedores-secundario">Enviar catalogo</button>
       </div>
+
+      <form id="vendedorNuevoClienteForm" class="vendedores-alta-cliente vendedores-oculto">
+        <div>
+          <p class="vendedores-etiqueta">Alta rapida</p>
+          <h3>Crear cliente</h3>
+        </div>
+        <label>
+          Nombre
+          <input id="vendedorNuevoClienteNombre" type="text" autocomplete="organization" placeholder="Nombre o razon social">
+        </label>
+        <label>
+          Telefono
+          <input id="vendedorNuevoClienteTelefono" type="tel" inputmode="tel" placeholder="Telefono o WhatsApp">
+        </label>
+        <label>
+          Direccion
+          <input id="vendedorNuevoClienteDireccion" type="text" autocomplete="street-address" placeholder="Direccion">
+        </label>
+        <label>
+          Zona
+          <input id="vendedorNuevoClienteZona" type="text" placeholder="Zona">
+        </label>
+        <div class="vendedores-acciones">
+          <button id="vendedorGuardarNuevoCliente" type="submit" class="vendedores-principal">Guardar cliente</button>
+          <button id="vendedorCancelarNuevoCliente" type="button" class="vendedores-secundario">Cancelar</button>
+        </div>
+        <p id="vendedorNuevoClienteEstado" class="vendedores-envio-estado"></p>
+      </form>
     </section>
 
     <section id="vendedorSeccionProductos" class="vendedores-panel vendedores-oculto">
@@ -87,6 +139,20 @@
         <input id="vendedorBusquedaProducto" type="search" placeholder="Codigo, producto, marca o rubro">
       </label>
       <div id="vendedorResultadosProductos" class="vendedores-productos"></div>
+    </section>
+
+    <section id="vendedorSeccionCatalogo" class="vendedores-panel vendedores-catalogo-panel vendedores-oculto">
+      <div class="vendedores-resumen-titulo">
+        <div>
+          <h2>Catalogo</h2>
+          <p class="vendedores-texto-ayuda">Se envia al WhatsApp del cliente si tiene telefono cargado.</p>
+        </div>
+      </div>
+      <div class="vendedores-acciones vendedores-acciones-catalogo">
+        <button id="vendedorBotonEnviarCatalogoPanel" type="button" class="vendedores-principal">Enviar por WhatsApp</button>
+        <button id="vendedorBotonCopiarCatalogo" type="button" class="vendedores-secundario">Copiar link</button>
+      </div>
+      <p id="vendedorCatalogoEstado" class="vendedores-envio-estado"></p>
     </section>
 
     <section id="vendedorSeccionPedido" class="vendedores-panel vendedores-resumen vendedores-oculto">
@@ -182,9 +248,12 @@
   <script src="js/data.js"></script>
   <script src="js/helpers.js"></script>
   <script src="js/productos.js"></script>
-  <script src="js/database/supabase-mappers.js"></script>
-  <script src="js/database/supabase-repository.js?v=20260713-conectado1"></script>
+  <script src="js/database/supabase-mappers.js?v=20260714-roles1"></script>
+  <script src="js/database/supabase-repository.js?v=20260714-roles1"></script>
   <script src="js/supabase-auth.js?v=20260713-loginclave1"></script>
-  <script src="js/mobile/vendedores-mobile.js?v=20260713-loginclave1"></script>
+  <script src="js/mobile/vendedores-mobile.js?v=20260715-salida1"></script>
 </body>
 </html>
+
+
+

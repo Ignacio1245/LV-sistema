@@ -565,3 +565,31 @@
     border-top: 4px solid var(--cat-primary);
   }
 }
+/* Accesibilidad final catalogo */
+.catalogo-publico button:focus-visible,
+.catalogo-publico a:focus-visible {
+  outline: 3px solid rgba(11, 143, 199, 0.28);
+  outline-offset: 2px;
+}
+
+.catalogo-control-cantidad button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.catalogo-producto button:disabled,
+.catalogo-acciones button:disabled,
+.catalogo-control-cantidad button:disabled {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalogo-publico *,
+  .catalogo-publico *::before,
+  .catalogo-publico *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

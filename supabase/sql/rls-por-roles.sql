@@ -31,7 +31,10 @@ as $$
     where lower(trim(usuarios.email)) = lower(trim(coalesce(auth.jwt() ->> 'email', '')))
       and usuarios.activo = true
       and roles.activo = true
-      and coalesce((roles.permisos ->> nombre_permiso)::boolean, false) = true
+      and (
+        upper(trim(roles.nombre)) = 'SUPERADMIN'
+        or coalesce((roles.permisos ->> nombre_permiso)::boolean, false) = true
+      )
   );
 $$;
 

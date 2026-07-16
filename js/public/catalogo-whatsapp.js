@@ -5,6 +5,7 @@ const CLAVE_TELEFONO_CATALOGO = "lv_catalogo_telefono_destino";
 let productosCatalogo = [];
 let carritoCatalogo = [];
 let pedidoCatalogoEnCurso = false;
+let pedidoCatalogoConfirmado = false;
 
 const catalogoDom = {
   estadoConexion: document.getElementById("catalogoEstadoConexion"),
@@ -269,6 +270,10 @@ function formatearCantidadCatalogo(producto, cantidad) {
   return String(Math.floor(Number(cantidad) || 0));
 }
 
+function marcarCarritoCatalogoPendiente() {
+  pedidoCatalogoConfirmado = false;
+}
+
 function agregarProductoAlCarrito(producto, cantidad) {
   const itemExistente =
     buscarItemCarrito(producto);
@@ -292,6 +297,7 @@ function agregarProductoAlCarrito(producto, cantidad) {
     });
   }
 
+  marcarCarritoCatalogoPendiente();
   renderizarCarritoCatalogo();
 }
 
@@ -315,6 +321,7 @@ function cambiarCantidadCarrito(producto, cambio) {
       Math.min(obtenerCantidadMaximaProducto(producto), itemExistente.cantidad);
   }
 
+  marcarCarritoCatalogoPendiente();
   renderizarCarritoCatalogo();
 }
 
@@ -338,6 +345,7 @@ function establecerCantidadCarrito(producto, cantidad) {
       Math.min(obtenerCantidadMaximaProducto(producto), cantidadNormalizada);
   }
 
+  marcarCarritoCatalogoPendiente();
   renderizarCarritoCatalogo();
 }
 
@@ -527,6 +535,26 @@ function validarPedidoCatalogo() {
   return true;
 }
 
+function catalogoTienePedidoSinEnviar() {
+  return pedidoCatalogoEnCurso || (carritoCatalogo.length > 0 && !pedidoCatalogoConfirmado);
+}
+
+function advertirSalidaCatalogoConPedido(evento) {
+  if (!catalogoTienePedidoSinEnviar()) {
+    return;
+  }
+
+  evento.preventDefault();
+  evento.returnValue = "";
+  return "";
+}
+
+function marcarFormularioCatalogoPendiente() {
+  if (carritoCatalogo.length > 0) {
+    pedidoCatalogoConfirmado = false;
+  }
+}
+
 async function copiarPedidoCatalogo() {
   if (!validarPedidoCatalogo()) {
     return;
@@ -585,6 +613,7 @@ async function enviarPedidoPorWhatsapp(evento) {
         : "Pedido listo para WhatsApp.";
 
     window.open(enlaceWhatsapp, "_blank", "noopener");
+    pedidoCatalogoConfirmado = true;
   } catch (error) {
     console.warn("No se pudo guardar pedido de catalogo en admin:", error);
     const abrirIgual =
@@ -594,6 +623,7 @@ async function enviarPedidoPorWhatsapp(evento) {
       catalogoDom.estadoConexion.textContent =
         "Pedido no guardado en admin. WhatsApp abierto.";
       window.open(enlaceWhatsapp, "_blank", "noopener");
+      pedidoCatalogoConfirmado = true;
     } else {
       catalogoDom.estadoConexion.textContent =
         "Pedido no enviado. Revisa conexion o Supabase.";
@@ -617,5 +647,10 @@ catalogoDom.busquedaProducto.addEventListener("input", renderizarProductosCatalo
 catalogoDom.telefonoDestino.addEventListener("input", guardarTelefonoDestinoCatalogo);
 catalogoDom.formularioCliente.addEventListener("submit", enviarPedidoPorWhatsapp);
 catalogoDom.botonCopiarPedido.addEventListener("click", copiarPedidoCatalogo);
+[catalogoDom.nombreCliente, catalogoDom.direccionCliente, catalogoDom.telefonoDestino, catalogoDom.comentarioCliente]
+  .forEach(function (controlFormulario) {
+    controlFormulario.addEventListener("input", marcarFormularioCatalogoPendiente);
+  });
+window.addEventListener("beforeunload", advertirSalidaCatalogoConPedido);
 
 iniciarCatalogoWhatsapp();

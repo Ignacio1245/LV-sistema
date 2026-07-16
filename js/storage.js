@@ -24,7 +24,7 @@ function guardarClientes() {
         return;
     }
 
-    programarSincronizacionAutomatica("clientes");
+    programarSincronizacionAutomatica("clientes", { origen: "guardadoLocal" });
 }
 
 function guardarProductos() {
@@ -37,7 +37,7 @@ function guardarProductos() {
         return;
     }
 
-    programarSincronizacionAutomatica("productos");
+    programarSincronizacionAutomatica("productos", { origen: "guardadoLocal" });
 }
 
 function guardarPedidos() {
@@ -50,7 +50,7 @@ function guardarPedidos() {
         return;
     }
 
-    programarSincronizacionAutomatica("pedidos");
+    programarSincronizacionAutomatica("pedidos", { origen: "guardadoLocal" });
 }
 
 function guardarZonas() {

@@ -16,13 +16,17 @@ http.createServer(function (request, response) {
     decodeURIComponent((request.url || "/").split("?")[0]);
   const relativePath =
     requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
-  const filePath =
+  let filePath =
     path.resolve(root, relativePath);
 
   if (!filePath.startsWith(root)) {
     response.writeHead(403);
     response.end("Forbidden");
     return;
+  }
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(filePath, "index.html");
   }
 
   fs.readFile(filePath, function (error, data) {

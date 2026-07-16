@@ -127,7 +127,28 @@ function obtenerPorcentajeListaPrecio(nombreLista) {
             return normalizarNombreListaPrecio(listaGuardada.nombre) === nombreNormalizado;
         });
 
-    return lista ? Number(lista.porcentaje) || 0 : 0;
+    if (lista && lista.porcentaje !== undefined && lista.porcentaje !== null && lista.porcentaje !== "") {
+        const porcentajeLista =
+            Number(lista.porcentaje);
+
+        if (Number.isFinite(porcentajeLista)) {
+            return porcentajeLista;
+        }
+    }
+
+    if (typeof obtenerPorcentajePredeterminadoListaPrecio === "function") {
+        return obtenerPorcentajePredeterminadoListaPrecio(nombreLista, null);
+    }
+
+    const porcentajesBase =
+        {
+            lista1: 50,
+            lista2: 15,
+            lista3: 20,
+            lista4: 10
+        };
+
+    return porcentajesBase[nombreNormalizado] || 0;
 }
 
 function renderizarOpcionesListasPreciosClientes() {
@@ -1059,16 +1080,22 @@ function crearMapaColumnasPreciosImportacion(encabezados) {
     const mapa = {
         codigo: buscarColumnas(["codigo", "cod", "codref", "codigoproducto"]),
         lista: buscarColumnas(["lista", "listaprecios", "listadeprecios"]),
-        precio: buscarColumnas(["precio", "precioventa", "pu", "punitario"]),
+        precio: buscarColumnas(["precio", "precioventa", "pv", "pu", "punitario"]),
         preciosPorLista: {}
     };
 
-    listasPrecios.forEach(function (lista) {
+    listasPrecios.forEach(function (lista, indiceLista) {
+        const numeroLista =
+            indiceLista + 1;
         const nombreLista =
             normalizarEncabezadoImportacion(lista.nombre);
         const alternativas = [
             nombreLista,
             nombreLista.replace("lista", "l"),
+            "pv" + numeroLista,
+            "pventa" + numeroLista,
+            "precio" + numeroLista,
+            "precioventa" + numeroLista,
             "precio" + nombreLista,
             "precio" + nombreLista.replace("lista", "l")
         ];
@@ -1437,13 +1464,15 @@ function completarPrecioListaPorMargen(nombreLista, inputMargen, inputPrecio) {
         return;
     }
 
+    const precioCompra =
+        Number(dom.productPurchasePriceInput.value) || 0;
     const margenProducto =
         Number(inputMargen.value) || 0;
     const margenLista =
         margenProducto > 0 ? margenProducto : obtenerPorcentajeListaPrecio(nombreLista);
     const precioCalculado =
         calcularPrecioProductoConMargen(
-            dom.productPurchasePriceInput.value,
+            precioCompra,
             margenLista
         );
 
@@ -1771,8 +1800,48 @@ function detectarSeparadorImportacion(linea) {
 }
 
 function obtenerNumeroImportacion(valor, valorPorDefecto) {
-    const texto =
-        limpiarValorImportacion(valor).replace(/\./g, "").replace(",", ".");
+    const textoOriginal =
+        limpiarValorImportacion(valor)
+            .replace(/\s/g, "")
+            .replace(/\$/g, "");
+
+    if (textoOriginal === "") {
+        return valorPorDefecto;
+    }
+
+    const posicionUltimaComa =
+        textoOriginal.lastIndexOf(",");
+    const posicionUltimoPunto =
+        textoOriginal.lastIndexOf(".");
+    let texto = textoOriginal;
+
+    if (posicionUltimaComa >= 0 && posicionUltimoPunto >= 0) {
+        const separadorDecimal =
+            posicionUltimaComa > posicionUltimoPunto ? "," : ".";
+        const separadorMiles =
+            separadorDecimal === "," ? "." : ",";
+
+        texto = texto
+            .split(separadorMiles).join("")
+            .replace(separadorDecimal, ".");
+    } else if (posicionUltimaComa >= 0) {
+        const decimales =
+            textoOriginal.length - posicionUltimaComa - 1;
+
+        texto =
+            decimales > 0 && decimales <= 2
+                ? textoOriginal.replace(/\./g, "").replace(",", ".")
+                : textoOriginal.replace(/,/g, "");
+    } else if (posicionUltimoPunto >= 0) {
+        const decimales =
+            textoOriginal.length - posicionUltimoPunto - 1;
+
+        texto =
+            decimales > 0 && decimales <= 2
+                ? textoOriginal.replace(/,/g, "")
+                : textoOriginal.replace(/\./g, "");
+    }
+
     const numero =
         Number(texto);
 
@@ -1833,7 +1902,83 @@ function obtenerValorColumnaImportacion(columnas, mapa, nombre, indiceAlternativ
     return limpiarValorImportacion(columnas[indice]);
 }
 
-function importarProductosDesdeTextoPlano(texto) {
+function marcarImportacionProductosPendiente() {
+    const tiposPendientes = ["datosBase", "productos"];
+
+    tiposPendientes.forEach(function (tipoPendiente) {
+        if (typeof marcarSincronizacionPendiente === "function") {
+            marcarSincronizacionPendiente(tipoPendiente);
+            return;
+        }
+
+        if (typeof programarSincronizacionAutomatica === "function") {
+            programarSincronizacionAutomatica(tipoPendiente);
+        }
+    });
+}
+
+async function sincronizarTiposImportacionProductos() {
+    const tiposImportacion = ["datosBase", "productos"];
+
+    if (typeof sincronizarTipoLocalConSupabase !== "function") {
+        if (typeof sincronizarCambiosPendientesSupabase !== "function") {
+            throw new Error("No hay sincronizador Supabase disponible.");
+        }
+
+        await sincronizarCambiosPendientesSupabase();
+        return tiposImportacion;
+    }
+
+    const tiposSincronizados = [];
+    const sincronizar = async function () {
+        for (const tipoImportacion of tiposImportacion) {
+            await sincronizarTipoLocalConSupabase(tipoImportacion);
+
+            if (typeof limpiarSincronizacionPendiente === "function") {
+                limpiarSincronizacionPendiente(tipoImportacion);
+            }
+
+            tiposSincronizados.push(tipoImportacion);
+        }
+    };
+
+    if (typeof pausarSincronizacionAutomatica === "function") {
+        await pausarSincronizacionAutomatica(sincronizar);
+    } else {
+        await sincronizar();
+    }
+
+    return tiposSincronizados;
+}
+
+async function sincronizarImportacionProductosAhora(actualizarEstado, resumen, estadoResumen) {
+    marcarImportacionProductosPendiente();
+
+    if (typeof usuarioSupabaseAutenticado === "function" && !usuarioSupabaseAutenticado()) {
+        actualizarEstado(
+            resumen + " | Guardado local. Pendiente de subir cuando inicies sesion online.",
+            "sync-working"
+        );
+        return;
+    }
+
+    try {
+        actualizarEstado(resumen + " | Subiendo a Supabase...", "sync-working");
+        await sincronizarTiposImportacionProductos();
+        actualizarEstado(
+            resumen + " | Supabase actualizado.",
+            estadoResumen || "sync-ok"
+        );
+    } catch (error) {
+        console.error("No se pudo subir la importacion de productos a Supabase:", error);
+        actualizarEstado(
+            resumen + " | Guardado local. Pendiente de subir: " + (error.message || "error"),
+            "sync-error"
+        );
+    }
+}
+
+async function importarProductosDesdeTextoPlano(texto) {
     const textoLimpio =
         texto.trim();
 
@@ -1949,13 +2094,21 @@ function importarProductosDesdeTextoPlano(texto) {
             const preciosListaActualizados =
                 { ...preciosListaExistentes };
 
-            if (precioTexto !== "") {
+            if (precioTexto !== "" || precioCompraTexto !== "") {
                 preciosListaActualizados["Lista 1"] = precio;
             }
 
-            preciosListaActualizados["Lista 2"] = precioLista2 > 0 ? precioLista2 : precio;
-            preciosListaActualizados["Lista 3"] = precioLista3 > 0 ? precioLista3 : precio;
-            preciosListaActualizados["Lista 4"] = precioLista4 > 0 ? precioLista4 : precio;
+            if (precioLista2Texto !== "" || precioCompraTexto !== "") {
+                preciosListaActualizados["Lista 2"] = precioLista2 > 0 ? precioLista2 : precio;
+            }
+
+            if (precioLista3Texto !== "" || precioCompraTexto !== "") {
+                preciosListaActualizados["Lista 3"] = precioLista3 > 0 ? precioLista3 : precio;
+            }
+
+            if (precioLista4Texto !== "" || precioCompraTexto !== "") {
+                preciosListaActualizados["Lista 4"] = precioLista4 > 0 ? precioLista4 : precio;
+            }
 
             productoExistente.nombre = nombre;
             productoExistente.precio = precio;
@@ -2036,20 +2189,20 @@ function importarProductosDesdeTextoPlano(texto) {
         guardarRubros();
         guardarProveedores();
     });
-    programarSincronizacionAutomatica("productos");
-    programarSincronizacionAutomatica("datosBase");
-
     registrarAuditoria(
         "Productos",
         "Importo productos",
         "Creados: " + creados + " | Actualizados: " + actualizados + " | Errores: " + errores
     );
 
-    actualizarEstadoImportacionProductos(
-        "Importacion local terminada. Creados: " + creados +
+    const resumenImportacion =
+        "Importacion terminada. Creados: " + creados +
         " | Actualizados: " + actualizados +
-        " | Errores: " + errores +
-        " | Sincronizacion online programada.",
+        " | Errores: " + errores;
+
+    await sincronizarImportacionProductosAhora(
+        actualizarEstadoImportacionProductos,
+        resumenImportacion,
         errores > 0 ? "sync-error" : "sync-ok"
     );
 }
@@ -2074,10 +2227,645 @@ async function importarProductosDesdeTexto() {
                 ? await leerArchivoProductosComoTexto(archivo)
                 : dom.productosImportacionTexto.value;
 
-        importarProductosDesdeTextoPlano(texto);
+        await importarProductosDesdeTextoPlano(texto);
     } catch (error) {
         console.error("Error importando productos:", error);
         actualizarEstadoImportacionProductos(error.message || "No se pudo importar productos.", "sync-error");
+    }
+}
+
+function actualizarEstadoCorreccionTemporalProductos(mensaje, tipo) {
+    if (!dom.productosTemporalEstado) {
+        return;
+    }
+
+    dom.productosTemporalEstado.textContent = mensaje;
+    dom.productosTemporalEstado.classList.remove("sync-ok", "sync-error", "sync-working");
+
+    if (tipo) {
+        dom.productosTemporalEstado.classList.add(tipo);
+    }
+}
+
+function obtenerArchivoCorreccionTemporal(inputArchivo) {
+    if (!inputArchivo || !inputArchivo.files || inputArchivo.files.length === 0) {
+        return null;
+    }
+
+    return inputArchivo.files[0];
+}
+
+function buscarIndiceEncabezadoCorreccionTemporal(nombresNormalizados, posiblesNombres) {
+    for (const posibleNombre of posiblesNombres) {
+        const indice =
+            nombresNormalizados.indexOf(posibleNombre);
+
+        if (indice >= 0) {
+            return indice;
+        }
+    }
+
+    return -1;
+}
+
+function crearMapaColumnasCorreccionTemporal(encabezados) {
+    const nombresNormalizados =
+        encabezados.map(normalizarEncabezadoImportacion);
+
+    const mapa = {
+        codigo: buscarIndiceEncabezadoCorreccionTemporal(
+            nombresNormalizados,
+            ["codref", "codigo", "cod", "codigoref", "codigoproducto"]
+        ),
+        nombre: buscarIndiceEncabezadoCorreccionTemporal(
+            nombresNormalizados,
+            ["producto", "nombre", "descripcion", "articulo", "detalle"]
+        ),
+        rubro: buscarIndiceEncabezadoCorreccionTemporal(
+            nombresNormalizados,
+            ["rubro", "familia", "grupo"]
+        ),
+        categoria: buscarIndiceEncabezadoCorreccionTemporal(
+            nombresNormalizados,
+            ["categoria", "tipo", "linea", "subrubro"]
+        ),
+        marca: buscarIndiceEncabezadoCorreccionTemporal(
+            nombresNormalizados,
+            ["marca", "laboratorio"]
+        ),
+        proveedor: buscarIndiceEncabezadoCorreccionTemporal(
+            nombresNormalizados,
+            ["proveedor", "prov"]
+        ),
+        precio: buscarIndiceEncabezadoCorreccionTemporal(
+            nombresNormalizados,
+            ["precio", "precioventa", "pv", "pventa", "lista1", "pv1"]
+        ),
+        preciosPorLista: {}
+    };
+
+    listasPrecios.forEach(function (lista, indiceLista) {
+        const numeroLista =
+            indiceLista + 1;
+        const nombreLista =
+            normalizarEncabezadoImportacion(lista.nombre);
+        const nombreCorto =
+            nombreLista.replace("lista", "l");
+        const alternativas = [
+            nombreLista,
+            nombreCorto,
+            "lista" + numeroLista,
+            "l" + numeroLista,
+            "pv" + numeroLista,
+            "pventa" + numeroLista,
+            "precio" + numeroLista,
+            "precioventa" + numeroLista,
+            "precio" + nombreLista,
+            "precio" + nombreCorto
+        ];
+        const indice =
+            buscarIndiceEncabezadoCorreccionTemporal(nombresNormalizados, alternativas);
+
+        if (indice >= 0) {
+            mapa.preciosPorLista[lista.nombre] = indice;
+        }
+    });
+
+    return mapa;
+}
+
+function normalizarCodigoCorreccionTemporalProducto(valor) {
+    const texto =
+        limpiarValorImportacion(valor).replace(/\s/g, "");
+
+    if (texto === "") {
+        return "";
+    }
+
+    const pareceNumerico =
+        /^[0-9.,]+$/.test(texto);
+    const numero =
+        pareceNumerico ? obtenerNumeroImportacion(texto, null) : null;
+
+    if (Number.isInteger(numero) && numero > 0) {
+        return String(numero);
+    }
+
+    return texto.toLowerCase();
+}
+
+function obtenerCodigoNumericoCorreccionTemporal(codigoNormalizado) {
+    const numero =
+        obtenerNumeroImportacion(codigoNormalizado, null);
+
+    if (!Number.isInteger(numero) || numero <= 0) {
+        return null;
+    }
+
+    return numero;
+}
+
+function buscarProductoPorCodigoCorreccionTemporal(codigoNormalizado) {
+    if (codigoNormalizado === "") {
+        return null;
+    }
+
+    return productos.find(function (producto) {
+        return normalizarCodigoCorreccionTemporalProducto(producto.codigo) === codigoNormalizado ||
+            normalizarCodigoCorreccionTemporalProducto(producto.codigoReal || "") === codigoNormalizado;
+    }) || null;
+}
+
+function obtenerPrecioCorreccionTemporal(columnas, indice) {
+    if (indice < 0 || indice >= columnas.length) {
+        return null;
+    }
+
+    const valor =
+        limpiarValorImportacion(columnas[indice]);
+
+    if (valor === "") {
+        return null;
+    }
+
+    const precio =
+        obtenerNumeroImportacion(valor, null);
+
+    if (!Number.isFinite(precio) || precio < 0) {
+        return null;
+    }
+
+    return precio;
+}
+
+function obtenerRegistroCorreccionTemporalDesdeColumnas(columnas, mapaColumnas) {
+    const codigo =
+        obtenerValorColumnaImportacion(columnas, mapaColumnas, "codigo", 0);
+    const registro = {
+        codigo: codigo,
+        nombre: obtenerValorColumnaImportacion(columnas, mapaColumnas, "nombre", 1),
+        rubro: obtenerValorColumnaImportacion(columnas, mapaColumnas, "rubro", -1),
+        categoria: obtenerValorColumnaImportacion(columnas, mapaColumnas, "categoria", -1),
+        marca: obtenerValorColumnaImportacion(columnas, mapaColumnas, "marca", -1),
+        proveedor: obtenerValorColumnaImportacion(columnas, mapaColumnas, "proveedor", -1),
+        preciosLista: {}
+    };
+
+    if (mapaColumnas && Object.keys(mapaColumnas.preciosPorLista).length > 0) {
+        Object.keys(mapaColumnas.preciosPorLista).forEach(function (lista) {
+            const precio =
+                obtenerPrecioCorreccionTemporal(columnas, mapaColumnas.preciosPorLista[lista]);
+
+            if (precio !== null) {
+                registro.preciosLista[lista] = precio;
+            }
+        });
+    } else {
+        const precio =
+            obtenerPrecioCorreccionTemporal(
+                columnas,
+                mapaColumnas && mapaColumnas.precio >= 0 ? mapaColumnas.precio : 2
+            );
+
+        if (precio !== null) {
+            registro.preciosLista["Lista 1"] = precio;
+        }
+    }
+
+    return registro;
+}
+
+function leerRegistrosCorreccionTemporalProductos(texto) {
+    const textoLimpio =
+        String(texto || "").trim();
+
+    if (textoLimpio === "") {
+        return {
+            registros: [],
+            errores: 0
+        };
+    }
+
+    const lineas =
+        textoLimpio.split(/\r?\n/).filter(function (linea) {
+            return linea.trim() !== "";
+        });
+
+    const separador =
+        detectarSeparadorImportacion(lineas[0] || "");
+    const primeraLinea =
+        parsearLineaCsvImportacion(lineas[0], separador);
+    const tieneEncabezado =
+        !Number.isInteger(Number(primeraLinea[0])) ||
+        normalizarEncabezadoImportacion(primeraLinea[0]).includes("cod");
+    const mapaColumnas =
+        tieneEncabezado ? crearMapaColumnasCorreccionTemporal(primeraLinea) : null;
+    const lineasDatos =
+        tieneEncabezado ? lineas.slice(1) : lineas;
+    const registros = [];
+    let errores = 0;
+
+    lineasDatos.forEach(function (linea) {
+        const columnas =
+            parsearLineaCsvImportacion(linea, separador);
+        const registro =
+            obtenerRegistroCorreccionTemporalDesdeColumnas(columnas, mapaColumnas);
+        const codigoNormalizado =
+            normalizarCodigoCorreccionTemporalProducto(registro.codigo);
+
+        if (codigoNormalizado === "") {
+            errores += 1;
+            return;
+        }
+
+        registro.codigoNormalizado = codigoNormalizado;
+        registros.push(registro);
+    });
+
+    return {
+        registros: registros,
+        errores: errores
+    };
+}
+
+function unirRegistroCorreccionTemporal(registroDestino, registroOrigen) {
+    ["nombre", "rubro", "categoria", "marca", "proveedor"].forEach(function (campo) {
+        const valor =
+            limpiarValorImportacion(registroOrigen[campo]);
+
+        if (valor !== "") {
+            registroDestino[campo] = valor;
+        }
+    });
+
+    Object.keys(registroOrigen.preciosLista || {}).forEach(function (lista) {
+        registroDestino.preciosLista[lista] = registroOrigen.preciosLista[lista];
+    });
+}
+
+function agregarRegistrosCorreccionTemporalAlMapa(registrosPorCodigo, resultadoLectura) {
+    resultadoLectura.registros.forEach(function (registro) {
+        if (!registrosPorCodigo.has(registro.codigoNormalizado)) {
+            registrosPorCodigo.set(registro.codigoNormalizado, {
+                codigo: registro.codigo,
+                codigoNormalizado: registro.codigoNormalizado,
+                nombre: "",
+                rubro: "",
+                categoria: "",
+                marca: "",
+                proveedor: "",
+                preciosLista: {}
+            });
+        }
+
+        unirRegistroCorreccionTemporal(
+            registrosPorCodigo.get(registro.codigoNormalizado),
+            registro
+        );
+    });
+}
+
+function asignarTextoProductoCorreccionTemporal(producto, campo, valor) {
+    const valorLimpio =
+        limpiarValorImportacion(valor);
+
+    if (valorLimpio === "" || String(producto[campo] || "") === valorLimpio) {
+        return false;
+    }
+
+    producto[campo] = valorLimpio;
+    return true;
+}
+
+function contarPreciosRegistroCorreccionTemporal(preciosLista) {
+    return Object.keys(preciosLista || {}).filter(function (lista) {
+        const precio =
+            Number(preciosLista[lista]);
+
+        return Number.isFinite(precio) && precio >= 0;
+    }).length;
+}
+
+function obtenerPrimerPrecioCorreccionTemporal(preciosLista) {
+    const precios =
+        Object.keys(preciosLista || {}).map(function (lista) {
+            return Number(preciosLista[lista]);
+        }).filter(function (precio) {
+            return Number.isFinite(precio) && precio > 0;
+        });
+
+    return precios.length > 0 ? precios[0] : 0;
+}
+
+function aplicarPreciosCorreccionTemporalProducto(producto, preciosRegistro, fecha) {
+    const listasRegistro =
+        Object.keys(preciosRegistro || {});
+
+    if (listasRegistro.length === 0) {
+        return 0;
+    }
+
+    const preciosLista =
+        obtenerPreciosListaProducto(producto);
+    const margenesGuardados =
+        producto.preciosLista && producto.preciosLista.__margenes
+            ? producto.preciosLista.__margenes
+            : null;
+    let preciosActualizados = 0;
+
+    if (!Array.isArray(producto.historialPrecios)) {
+        producto.historialPrecios = [];
+    }
+
+    listasRegistro.forEach(function (listaRegistro) {
+        const lista =
+            obtenerListaPrecioValida(listaRegistro);
+        const precioNuevo =
+            Number(preciosRegistro[listaRegistro]);
+
+        if (!Number.isFinite(precioNuevo) || precioNuevo < 0) {
+            return;
+        }
+
+        const precioAnterior =
+            Number(preciosLista[lista]) || 0;
+
+        if (Math.abs(precioAnterior - precioNuevo) < 0.01) {
+            return;
+        }
+
+        preciosLista[lista] = precioNuevo;
+        producto.historialPrecios.push({
+            fecha: fecha,
+            lista: lista,
+            anterior: precioAnterior,
+            nuevo: precioNuevo,
+            motivo: "Correccion temporal CSV"
+        });
+        preciosActualizados += 1;
+    });
+
+    if (preciosActualizados > 0) {
+        if (margenesGuardados) {
+            preciosLista.__margenes = margenesGuardados;
+        }
+
+        producto.preciosLista = preciosLista;
+        producto.precio = Number(preciosLista["Lista 1"]) || Number(producto.precio) || 0;
+    }
+
+    return preciosActualizados;
+}
+
+function aplicarRegistroCorreccionTemporalAProducto(producto, registro, fecha) {
+    let datosActualizados = 0;
+
+    if (asignarTextoProductoCorreccionTemporal(producto, "nombre", registro.nombre)) {
+        datosActualizados += 1;
+    }
+
+    if (registro.rubro && asignarTextoProductoCorreccionTemporal(
+        producto,
+        "rubro",
+        asegurarRubroPorNombre(registro.rubro)
+    )) {
+        datosActualizados += 1;
+    }
+
+    if (asignarTextoProductoCorreccionTemporal(producto, "tipo", registro.categoria)) {
+        datosActualizados += 1;
+    }
+
+    if (asignarTextoProductoCorreccionTemporal(producto, "marca", registro.marca)) {
+        datosActualizados += 1;
+    }
+
+    if (registro.proveedor && asignarTextoProductoCorreccionTemporal(
+        producto,
+        "proveedor",
+        asegurarProveedorPorNombre(registro.proveedor)
+    )) {
+        datosActualizados += 1;
+    }
+
+    if (typeof producto.activo !== "boolean") {
+        producto.activo = true;
+    }
+
+    if (!Array.isArray(producto.movimientosStock)) {
+        producto.movimientosStock = [];
+    }
+
+    const preciosActualizados =
+        aplicarPreciosCorreccionTemporalProducto(producto, registro.preciosLista, fecha);
+
+    return {
+        datosActualizados: datosActualizados,
+        preciosActualizados: preciosActualizados
+    };
+}
+
+function crearProductoCorreccionTemporal(registro) {
+    const codigo =
+        obtenerCodigoNumericoCorreccionTemporal(registro.codigoNormalizado);
+    const nombre =
+        limpiarValorImportacion(registro.nombre);
+
+    if (codigo === null || nombre === "") {
+        return null;
+    }
+
+    const preciosLista =
+        crearPreciosListaBase(0);
+    const primerPrecio =
+        obtenerPrimerPrecioCorreccionTemporal(registro.preciosLista);
+
+    Object.keys(registro.preciosLista || {}).forEach(function (listaRegistro) {
+        const lista =
+            obtenerListaPrecioValida(listaRegistro);
+        const precio =
+            Number(registro.preciosLista[listaRegistro]);
+
+        if (Number.isFinite(precio) && precio >= 0) {
+            preciosLista[lista] = precio;
+        }
+    });
+
+    if (!Number(preciosLista["Lista 1"]) && primerPrecio > 0) {
+        preciosLista["Lista 1"] = primerPrecio;
+    }
+
+    return {
+        codigo: codigo,
+        codigoReal: "",
+        nombre: nombre,
+        precio: Number(preciosLista["Lista 1"]) || 0,
+        preciosLista: preciosLista,
+        stock: 0,
+        rubro: registro.rubro ? asegurarRubroPorNombre(registro.rubro) : "Sin rubro",
+        proveedor: registro.proveedor ? asegurarProveedorPorNombre(registro.proveedor) : "Sin proveedor",
+        tipo: limpiarValorImportacion(registro.categoria),
+        marca: limpiarValorImportacion(registro.marca),
+        detalle: "",
+        precioCompra: 0,
+        stockMinimo: 0,
+        pack: 0,
+        unidad: "",
+        iva: 0,
+        bonificacionVenta: 0,
+        proveedorAlternativo: "",
+        activo: true,
+        movimientosStock: [],
+        historialPrecios: []
+    };
+}
+
+async function corregirProductosDesdeArchivosTemporales() {
+    if (!tienePermiso("productos")) {
+        alert("Tu rol no tiene permiso para modificar productos.");
+        return;
+    }
+
+    const archivoNombres =
+        obtenerArchivoCorreccionTemporal(dom.productosTemporalNombresArchivo);
+    const archivoPrecios =
+        obtenerArchivoCorreccionTemporal(dom.productosTemporalPreciosArchivo);
+
+    if (!archivoNombres && !archivoPrecios) {
+        actualizarEstadoCorreccionTemporalProductos(
+            "Seleccione al menos un CSV para corregir productos.",
+            "sync-error"
+        );
+        return;
+    }
+
+    if (dom.productosTemporalButton) {
+        dom.productosTemporalButton.disabled = true;
+    }
+
+    try {
+        actualizarEstadoCorreccionTemporalProductos("Leyendo CSV temporales...", "sync-working");
+
+        const textos =
+            await Promise.all([
+                archivoNombres ? leerArchivoProductosComoTexto(archivoNombres) : Promise.resolve(""),
+                archivoPrecios ? leerArchivoProductosComoTexto(archivoPrecios) : Promise.resolve("")
+            ]);
+        const lecturaNombres =
+            leerRegistrosCorreccionTemporalProductos(textos[0]);
+        const lecturaPrecios =
+            leerRegistrosCorreccionTemporalProductos(textos[1]);
+        const registrosPorCodigo =
+            new Map();
+
+        agregarRegistrosCorreccionTemporalAlMapa(registrosPorCodigo, lecturaNombres);
+        agregarRegistrosCorreccionTemporalAlMapa(registrosPorCodigo, lecturaPrecios);
+
+        if (registrosPorCodigo.size === 0) {
+            actualizarEstadoCorreccionTemporalProductos(
+                "No se encontraron productos validos en los CSV.",
+                "sync-error"
+            );
+            return;
+        }
+
+        const fecha =
+            new Date().toLocaleDateString("es-AR");
+        let productosCreados = 0;
+        let productosActualizados = 0;
+        let camposActualizados = 0;
+        let preciosActualizados = 0;
+        let productosSinCrear = 0;
+        const erroresLectura =
+            lecturaNombres.errores + lecturaPrecios.errores;
+
+        ejecutarSinProgramarSincronizacion(function () {
+            registrosPorCodigo.forEach(function (registro) {
+                const productoExistente =
+                    buscarProductoPorCodigoCorreccionTemporal(registro.codigoNormalizado);
+
+                if (productoExistente) {
+                    const resultado =
+                        aplicarRegistroCorreccionTemporalAProducto(productoExistente, registro, fecha);
+
+                    if (resultado.datosActualizados > 0 || resultado.preciosActualizados > 0) {
+                        productosActualizados += 1;
+                        camposActualizados += resultado.datosActualizados;
+                        preciosActualizados += resultado.preciosActualizados;
+                    }
+
+                    return;
+                }
+
+                const productoNuevo =
+                    crearProductoCorreccionTemporal(registro);
+
+                if (!productoNuevo) {
+                    productosSinCrear += 1;
+                    return;
+                }
+
+                productos.push(productoNuevo);
+                productosCreados += 1;
+                camposActualizados += 1;
+                preciosActualizados += contarPreciosRegistroCorreccionTemporal(registro.preciosLista);
+            });
+
+            guardarProductos();
+            guardarRubros();
+            guardarProveedores();
+        });
+
+        if (dom.productosTemporalNombresArchivo) {
+            dom.productosTemporalNombresArchivo.value = "";
+        }
+
+        if (dom.productosTemporalPreciosArchivo) {
+            dom.productosTemporalPreciosArchivo.value = "";
+        }
+
+        completarSiguienteCodigoProducto();
+        renderizarProductos();
+        renderizarRubros();
+        renderizarProveedores();
+        renderizarCatalogoProductosPedido();
+        renderizarPanelPreciosProductos();
+        actualizarDashboard();
+        actualizarStockTotal();
+
+        registrarAuditoria(
+            "Productos",
+            "Corrigio CSV temporal",
+            "Creados: " + productosCreados +
+            " | Actualizados: " + productosActualizados +
+            " | Campos: " + camposActualizados +
+            " | Precios: " + preciosActualizados +
+            " | Sin crear: " + productosSinCrear +
+            " | Errores lectura: " + erroresLectura
+        );
+
+        const resumenCorreccionTemporal =
+            "Correccion terminada. Creados: " + productosCreados +
+            " | Actualizados: " + productosActualizados +
+            " | Precios cargados: " + preciosActualizados +
+            " | Sin crear: " + productosSinCrear +
+            " | Errores de lectura: " + erroresLectura;
+
+        await sincronizarImportacionProductosAhora(
+            actualizarEstadoCorreccionTemporalProductos,
+            resumenCorreccionTemporal,
+            productosSinCrear > 0 || erroresLectura > 0 ? "sync-error" : "sync-ok"
+        );
+    } catch (error) {
+        console.error("Error corrigiendo productos con CSV temporales:", error);
+        actualizarEstadoCorreccionTemporalProductos(
+            error.message || "No se pudo corregir productos con los CSV.",
+            "sync-error"
+        );
+    } finally {
+        if (dom.productosTemporalButton) {
+            dom.productosTemporalButton.disabled = false;
+        }
     }
 }
 
@@ -2977,3 +3765,4 @@ function cambiarEstadoProducto(codigo) {
         producto.codigo + " - " + producto.nombre
     );
 }
+
