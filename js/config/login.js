@@ -1,4 +1,4 @@
-let sesionSistemaActiva = false;
+﻿let sesionSistemaActiva = false;
 const EMAIL_ACCESO_LOCAL_INICIAL = "admin@local";
 const CLAVE_ACCESO_LOCAL_INICIAL = "admin123";
 
@@ -168,34 +168,98 @@ function aplicarUsuarioSistemaAutenticado(usuario) {
   ocultarLoginSistema();
 }
 
-async function cargarAccesosParaLoginDesdeSupabase() {
-  const rolesSupabase =
-    await obtenerRolesSupabase();
-  const usuariosSupabase =
-    await obtenerUsuariosSupabase();
+function incorporarUsuarioSistemaDesdeLogin(usuario) {
+  if (!usuario || typeof usuario !== "object" || !usuario.email) {
+    return null;
+  }
 
-  if (Array.isArray(rolesSupabase)) {
-    rolesSupabase.forEach(function (rol) {
-      if (!rol || !rol.nombre) {
-        return;
-      }
-
-      ROLES[rol.nombre] =
-        typeof obtenerPermisosRolSistema === "function"
-          ? obtenerPermisosRolSistema(rol.nombre, rol.permisos)
-          : rol.permisos || {};
+  const emailNormalizado =
+    normalizarEmailLogin(usuario.email);
+  const indiceExistente =
+    usuariosSistema.findIndex(function (usuarioGuardado) {
+      return normalizarEmailLogin(usuarioGuardado.email) === emailNormalizado;
     });
 
-    if (typeof asegurarPermisosRolesBaseSistema === "function") {
-      asegurarPermisosRolesBaseSistema();
+  if (indiceExistente >= 0) {
+    usuariosSistema[indiceExistente] = usuario;
+  } else {
+    usuariosSistema.push(usuario);
+  }
+
+  limpiarUsuariosSistemaDuplicados();
+  return buscarUsuarioPorEmail(usuario.email);
+}
+
+async function buscarUsuarioAutorizadoParaLogin(emailLogin) {
+  let usuario =
+    buscarUsuarioPorEmail(emailLogin);
+
+  if (usuario || typeof obtenerUsuarioSistemaPorEmailSupabase !== "function") {
+    return usuario || null;
+  }
+
+  const usuarioSupabase =
+    await obtenerUsuarioSistemaPorEmailSupabase(emailLogin);
+
+  if (!usuarioSupabase) {
+    return null;
+  }
+
+  return incorporarUsuarioSistemaDesdeLogin(usuarioSupabase);
+}
+
+async function cargarAccesosParaLoginDesdeSupabase(emailLogin) {
+  const erroresCarga = [];
+
+  try {
+    const rolesSupabase =
+      await obtenerRolesSupabase();
+
+    if (Array.isArray(rolesSupabase)) {
+      rolesSupabase.forEach(function (rol) {
+        if (!rol || !rol.nombre) {
+          return;
+        }
+
+        ROLES[rol.nombre] =
+          typeof obtenerPermisosRolSistema === "function"
+            ? obtenerPermisosRolSistema(rol.nombre, rol.permisos)
+            : rol.permisos || {};
+      });
+
+      if (typeof asegurarPermisosRolesBaseSistema === "function") {
+        asegurarPermisosRolesBaseSistema();
+      }
+    }
+  } catch (errorRoles) {
+    erroresCarga.push("roles: " + (errorRoles.message || "sin lectura"));
+  }
+
+  try {
+    const usuariosSupabase =
+      await obtenerUsuariosSupabase();
+
+    if (Array.isArray(usuariosSupabase) && usuariosSupabase.length > 0) {
+      usuariosSistema = usuariosSupabase.filter(function (usuario) {
+        return usuario && typeof usuario === "object";
+      });
+      limpiarUsuariosSistemaDuplicados();
+    }
+  } catch (errorUsuarios) {
+    erroresCarga.push("usuarios: " + (errorUsuarios.message || "sin lectura"));
+  }
+
+  if (emailLogin) {
+    const usuarioDirecto =
+      await buscarUsuarioAutorizadoParaLogin(emailLogin);
+
+    if (usuarioDirecto) {
+      return;
     }
   }
 
-  if (Array.isArray(usuariosSupabase) && usuariosSupabase.length > 0) {
-    usuariosSistema = usuariosSupabase.filter(function (usuario) {
-      return usuario && typeof usuario === "object";
-    });
-    limpiarUsuariosSistemaDuplicados();
+  if (erroresCarga.length > 0) {
+    throw new Error("No se pudieron leer accesos de Supabase (" + erroresCarga.join(" | ") + ").");
   }
 }
 
@@ -204,7 +268,7 @@ async function reanudarSesionSistemaDesdeSupabase() {
     return false;
   }
 
-  await cargarAccesosParaLoginDesdeSupabase();
+  await cargarAccesosParaLoginDesdeSupabase(obtenerEmailSesionSupabase());
 
   const usuario =
     buscarUsuarioPorEmail(obtenerEmailSesionSupabase());
@@ -297,18 +361,18 @@ async function iniciarSesionSistema(usuarioOEmail, password) {
     await iniciarSesionSupabase(emailLogin, password);
 
     etapaLogin = "carga de accesos desde Supabase";
-    await cargarAccesosParaLoginDesdeSupabase();
+    await cargarAccesosParaLoginDesdeSupabase(obtenerEmailSesionSupabase());
 
     etapaLogin = "activar sincronizacion";
     activarSincronizacionAutomaticaSupabase();
 
     etapaLogin = "buscar usuario interno";
     const usuario =
-      buscarUsuarioPorEmail(emailLogin);
+      await buscarUsuarioAutorizadoParaLogin(emailLogin);
 
     if (!usuario) {
       await cerrarSesionSupabase();
-      throw new Error("El login de Supabase existe, pero ese usuario no esta creado en Usuarios del sistema.");
+      throw new Error("Supabase acepto la clave, pero el email " + emailLogin + " no esta activo en Usuarios del sistema. Revisalo en public.usuarios con rol SUPERADMIN.");
     }
 
     etapaLogin = "asignar usuario actual";

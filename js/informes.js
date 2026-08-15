@@ -1253,4 +1253,10 @@ function exportarInformeCsv() {
       ];
     })
   );
+
+  registrarAuditoria(
+    "Informes",
+    "Exporto informe CSV",
+    "Filas exportadas: " + detalle.length
+  );
 }

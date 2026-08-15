@@ -341,6 +341,7 @@ const dom = {
   clientesImportacionArchivo: document.querySelector("#clientesImportacionArchivo"),
   clientesImportacionTexto: document.querySelector("#clientesImportacionTexto"),
   clientesImportacionEstado: document.querySelector("#clientesImportacionEstado"),
+  clientesImportacionPreview: document.querySelector("#clientesImportacionPreview"),
   importarClientesButton: document.querySelector("#importarClientesButton"),
   exportarClientesButton: document.querySelector("#exportarClientesButton"),
   clientMenuButtons: document.querySelectorAll("[data-client-section]"),
@@ -363,6 +364,10 @@ const dom = {
   pedidosAtendidosDashboard: document.querySelector("#pedidosAtendidosDashboard"),
   pedidosPendientesDashboard: document.querySelector("#pedidosPendientesDashboard"),
   dashboardPrioridadResumen: document.querySelector("#dashboardPrioridadResumen"),
+  dashboardEstadoArranquePanel: document.querySelector("#dashboardEstadoArranquePanel"),
+  dashboardEstadoArranqueTitulo: document.querySelector("#dashboardEstadoArranqueTitulo"),
+  dashboardEstadoArranqueDetalle: document.querySelector("#dashboardEstadoArranqueDetalle"),
+  dashboardEstadoArranqueLista: document.querySelector("#dashboardEstadoArranqueLista"),
   dashboardPedidosPendientesLista: document.querySelector("#dashboardPedidosPendientesLista"),
   dashboardStockCriticoLista: document.querySelector("#dashboardStockCriticoLista"),
   dashboardDatosIncompletosLista: document.querySelector("#dashboardDatosIncompletosLista"),
@@ -450,6 +455,7 @@ const dom = {
   productosImportacionArchivo: document.querySelector("#productosImportacionArchivo"),
   productosImportacionTexto: document.querySelector("#productosImportacionTexto"),
   productosImportacionEstado: document.querySelector("#productosImportacionEstado"),
+  productosImportacionPreview: document.querySelector("#productosImportacionPreview"),
   importarProductosButton: document.querySelector("#importarProductosButton"),
   productosTemporalNombresArchivo: document.querySelector("#productosTemporalNombresArchivo"),
   productosTemporalPreciosArchivo: document.querySelector("#productosTemporalPreciosArchivo"),
@@ -593,8 +599,76 @@ function textoVacio(valor) {
   return !valor || String(valor).trim() === "" || String(valor).trim() === "-";
 }
 
+function obtenerClaveClienteDuplicadoDashboard(cliente, tipo) {
+  if (tipo === "telefono") {
+    const telefono =
+      String(cliente.telefono || cliente.telefonoMovil || cliente.telefonoParticular || "")
+        .replace(/\D/g, "");
+
+    return telefono.length >= 6 ? "telefono:" + telefono : "";
+  }
+
+  const nombre =
+    normalizarTexto(cliente.nombre || cliente.nombreFantasia || cliente.razonSocial || "");
+  const direccion =
+    normalizarTexto(cliente.direccion || "");
+
+  if (!nombre || !direccion || nombre === "consumidor final") {
+    return "";
+  }
+
+  return "nombre-direccion:" + nombre + "|" + direccion;
+}
+
+function obtenerPosiblesDuplicadosClientesDashboard() {
+  const grupos = {};
+
+  clientes.filter(clienteActivo).forEach(function (cliente) {
+    ["telefono", "nombre-direccion"].forEach(function (tipo) {
+      const clave =
+        obtenerClaveClienteDuplicadoDashboard(cliente, tipo);
+
+      if (!clave) {
+        return;
+      }
+
+      if (!grupos[clave]) {
+        grupos[clave] = {
+          tipo: tipo,
+          clientes: []
+        };
+      }
+
+      grupos[clave].clientes.push(cliente);
+    });
+  });
+
+  return Object.keys(grupos).map(function (clave) {
+    return grupos[clave];
+  }).filter(function (grupo) {
+    return grupo.clientes.length > 1;
+  }).slice(0, 3).map(function (grupo) {
+    const clientesGrupo =
+      grupo.clientes.slice(0, 3).map(function (cliente) {
+        return (cliente.codigo || "-") + " - " + (cliente.nombre || "Sin nombre");
+      });
+
+    return {
+      tipo: "Cliente",
+      texto: "Posible duplicado",
+      detalle: clientesGrupo.join(" / ") +
+        (grupo.tipo === "telefono" ? " | mismo telefono" : " | mismo nombre y direccion")
+    };
+  });
+}
 function obtenerDatosIncompletosParaDashboard() {
   const datosIncompletos = [];
+  const listasActivasNormalizadas =
+    typeof obtenerNombresListasPreciosActivas === "function"
+      ? obtenerNombresListasPreciosActivas().map(function (nombreLista) {
+        return normalizarNombreListaPrecio(nombreLista);
+      })
+      : [];
 
   clientes.filter(clienteActivo).forEach(function (cliente) {
     const camposFaltantes = [];
@@ -615,6 +689,13 @@ function obtenerDatosIncompletosParaDashboard() {
       camposFaltantes.push("zona");
     }
 
+    if (textoVacio(cliente.listaPrecios)) {
+      camposFaltantes.push("lista precios");
+    } else if (listasActivasNormalizadas.length > 0 &&
+        !listasActivasNormalizadas.includes(normalizarNombreListaPrecio(cliente.listaPrecios))) {
+      camposFaltantes.push("lista inexistente");
+    }
+
     if (camposFaltantes.length > 0) {
       datosIncompletos.push({
         tipo: "Cliente",
@@ -624,6 +705,8 @@ function obtenerDatosIncompletosParaDashboard() {
     }
   });
 
+  datosIncompletos.push(...obtenerPosiblesDuplicadosClientesDashboard());
+
   productos.filter(productoActivo).forEach(function (producto) {
     const camposFaltantes = [];
 
@@ -631,7 +714,9 @@ function obtenerDatosIncompletosParaDashboard() {
       camposFaltantes.push("nombre");
     }
 
-    if ((Number(producto.precio) || 0) <= 0) {
+    if (typeof obtenerProblemasPrecioProducto === "function") {
+      camposFaltantes.push(...obtenerProblemasPrecioProducto(producto).slice(0, 4));
+    } else if ((Number(producto.precio) || 0) <= 0) {
       camposFaltantes.push("precio");
     }
 
@@ -754,6 +839,10 @@ function restablecerDatosLocalesSistema() {
     dataStore.borrarLista(nombreDeLista);
   });
 
+  if (typeof limpiarPedidoActualLocal === "function") {
+    limpiarPedidoActualLocal();
+  }
+
   location.reload();
 }
 
@@ -773,6 +862,227 @@ function obtenerUltimosMovimientosDashboard() {
   return auditoria.slice(0, 8);
 }
 
+function crearRevisionArranqueSistema(nivel, texto, detalle) {
+  return {
+    nivel: nivel,
+    texto: texto,
+    detalle: detalle
+  };
+}
+
+function obtenerCantidadProductosSinPrecioValido() {
+  return productos.filter(productoActivo).filter(function (producto) {
+    if (typeof obtenerProblemasPrecioProducto === "function") {
+      return obtenerProblemasPrecioProducto(producto).length > 0;
+    }
+
+    return (Number(producto.precio) || 0) <= 0;
+  }).length;
+}
+
+function obtenerCantidadUsuariosVendedoresActivos() {
+  if (!Array.isArray(usuariosSistema)) {
+    return 0;
+  }
+
+  return usuariosSistema.filter(function (usuario) {
+    return usuario &&
+      usuario.activo !== false &&
+      normalizarTexto(usuario.rol || "") === "vendedor";
+  }).length;
+}
+
+function obtenerRevisionesArranqueSistema(datosIncompletos, productosCriticos) {
+  const revisiones = [];
+  const clientesActivos =
+    clientes.filter(clienteActivo).length;
+  const productosActivos =
+    productos.filter(productoActivo).length;
+  const rubrosActivos =
+    rubros.filter(rubroActivo).length;
+  const zonasActivas =
+    zonas.filter(zonaActiva).length;
+  const vendedoresActivos =
+    obtenerVendedoresComerciales().filter(function (vendedor) {
+      return vendedor.activo !== false;
+    }).length;
+  const productosSinPrecio =
+    obtenerCantidadProductosSinPrecioValido();
+  const posiblesDuplicados =
+    datosIncompletos.filter(function (dato) {
+      return dato.texto === "Posible duplicado";
+    }).length;
+  const hayPendientesSupabase =
+    typeof haySincronizacionPendiente === "function" && haySincronizacionPendiente();
+  const supabaseConfigurado =
+    typeof supabaseEstaConfigurado === "function" && supabaseEstaConfigurado();
+  const sesionOnlineActiva =
+    typeof usuarioSupabaseAutenticado === "function" && usuarioSupabaseAutenticado();
+
+  if (!supabaseConfigurado) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "critico",
+      "Supabase sin configurar",
+      "sin guardado compartido"
+    ));
+  } else if (!sesionOnlineActiva) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "critico",
+      "Sesion online cerrada",
+      "ingresar antes de operar"
+    ));
+  }
+
+  if (hayPendientesSupabase) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "critico",
+      "Cambios pendientes",
+      "subir a Supabase"
+    ));
+  }
+
+  if (clientesActivos === 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "critico",
+      "Clientes",
+      "sin clientes activos"
+    ));
+  }
+
+  if (productosActivos === 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "critico",
+      "Productos",
+      "sin productos activos"
+    ));
+  }
+
+  if (productosSinPrecio > 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "critico",
+      "Precios",
+      productosSinPrecio + " producto" + (productosSinPrecio === 1 ? "" : "s") + " a revisar"
+    ));
+  }
+
+  if (vendedoresActivos === 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "aviso",
+      "Vendedores",
+      "sin vendedores activos"
+    ));
+  }
+
+  if (vendedoresActivos > 0 && obtenerCantidadUsuariosVendedoresActivos() === 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "aviso",
+      "Accesos vendedores",
+      "faltan usuarios moviles"
+    ));
+  }
+
+  if (rubrosActivos === 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "aviso",
+      "Rubros",
+      "sin rubros activos"
+    ));
+  }
+
+  if (zonasActivas === 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "aviso",
+      "Zonas",
+      "sin zonas activas"
+    ));
+  }
+
+  if (posiblesDuplicados > 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "aviso",
+      "Clientes duplicados",
+      posiblesDuplicados + " grupo" + (posiblesDuplicados === 1 ? "" : "s") + " posible" + (posiblesDuplicados === 1 ? "" : "s")
+    ));
+  }
+
+  if (productosCriticos.length > 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "aviso",
+      "Stock critico",
+      productosCriticos.length + " producto" + (productosCriticos.length === 1 ? "" : "s")
+    ));
+  }
+
+  return revisiones;
+}
+
+function obtenerResumenArranqueSistema(revisiones) {
+  const criticos =
+    revisiones.filter(function (revision) {
+      return revision.nivel === "critico";
+    }).length;
+  const avisos =
+    revisiones.filter(function (revision) {
+      return revision.nivel === "aviso";
+    }).length;
+
+  if (criticos > 0) {
+    return {
+      estado: "critico",
+      titulo: "Revisar antes de operar",
+      detalle: criticos + " punto" + (criticos === 1 ? "" : "s") + " critico" + (criticos === 1 ? "" : "s") + " pendiente" + (criticos === 1 ? "" : "s")
+    };
+  }
+
+  if (avisos > 0) {
+    return {
+      estado: "aviso",
+      titulo: "Listo con avisos",
+      detalle: avisos + " aviso" + (avisos === 1 ? "" : "s") + " para revisar"
+    };
+  }
+
+  return {
+    estado: "listo",
+    titulo: "Sistema listo",
+    detalle: "Sin alertas de arranque"
+  };
+}
+
+function renderizarEstadoArranqueSistema(datosIncompletos, productosCriticos) {
+  if (!dom.dashboardEstadoArranquePanel || !dom.dashboardEstadoArranqueLista) {
+    return;
+  }
+
+  const revisiones =
+    obtenerRevisionesArranqueSistema(datosIncompletos, productosCriticos);
+  const resumen =
+    obtenerResumenArranqueSistema(revisiones);
+
+  dom.dashboardEstadoArranquePanel.classList.remove("estado-listo", "estado-aviso", "estado-critico");
+  dom.dashboardEstadoArranquePanel.classList.add("estado-" + resumen.estado);
+  dom.dashboardEstadoArranqueTitulo.textContent =
+    resumen.titulo;
+  dom.dashboardEstadoArranqueDetalle.textContent =
+    resumen.detalle;
+
+  if (revisiones.length === 0) {
+    dom.dashboardEstadoArranqueLista.innerHTML =
+      crearFilaDashboard("Arranque", "listo para cargar datos reales");
+    return;
+  }
+
+  dom.dashboardEstadoArranqueLista.innerHTML =
+    revisiones.slice(0, 5).map(function (revision) {
+      return `
+        <div class="dashboard-readiness-row ${revision.nivel}">
+          <span>${escaparTextoHtml(revision.texto)}</span>
+          <strong>${escaparTextoHtml(revision.detalle)}</strong>
+        </div>
+      `;
+    }).join("");
+}
+
 function renderizarCentroControlDashboard() {
   const pedidosPendientes = obtenerPedidosPendientesParaDashboard();
   const productosCriticos = obtenerProductosCriticosParaDashboard();
@@ -786,6 +1096,8 @@ function renderizarCentroControlDashboard() {
     alertasTotales === 0
       ? "Sin alertas importantes"
       : alertasTotales + " prioridades para revisar";
+
+  renderizarEstadoArranqueSistema(datosIncompletos, productosCriticos);
 
   renderizarListaDashboard(
     dom.dashboardPedidosPendientesLista,
@@ -1406,6 +1718,11 @@ function usuarioSistemaEsVendedorMovil(usuario) {
 }
 
 async function guardarUsuarioMovilDeVendedor(nombreVendedor, emailAcceso, password, vendedorActivo) {
+  if (!tienePermiso("configuracion")) {
+    alert("Tu rol no tiene permiso para administrar vendedores.");
+    return false;
+  }
+
   if (!emailAcceso) {
     alert("Ingrese un usuario movil valido para el vendedor.");
     return false;
@@ -1501,6 +1818,11 @@ function limpiarFormularioVendedor() {
 
 async function guardarVendedorDesdeFormulario(event) {
   event.preventDefault();
+
+  if (!tienePermiso("configuracion")) {
+    alert("Tu rol no tiene permiso para administrar vendedores.");
+    return;
+  }
 
   const nombre =
     dom.vendedorNombreInput.value.trim();
@@ -1634,6 +1956,11 @@ async function guardarVendedorDesdeFormulario(event) {
 }
 
 function editarVendedor(codigo) {
+  if (!tienePermiso("configuracion")) {
+    alert("Tu rol no tiene permiso para editar vendedores.");
+    return;
+  }
+
   const vendedor =
     vendedoresSistema.find(function (vendedorGuardado) {
       return vendedorGuardado.codigo === codigo;
@@ -1661,6 +1988,11 @@ function editarVendedor(codigo) {
 }
 
 function alternarEstadoVendedor(codigo) {
+  if (!tienePermiso("configuracion")) {
+    alert("Tu rol no tiene permiso para activar o desactivar vendedores.");
+    return;
+  }
+
   const vendedor =
     vendedoresSistema.find(function (vendedorGuardado) {
       return vendedorGuardado.codigo === codigo;
@@ -1695,6 +2027,11 @@ function alternarEstadoVendedor(codigo) {
 }
 
 function eliminarVendedor(codigo) {
+  if (!tienePermiso("configuracion")) {
+    alert("Tu rol no tiene permiso para eliminar vendedores.");
+    return;
+  }
+
   const vendedor =
     vendedoresSistema.find(function (vendedorGuardado) {
       return vendedorGuardado.codigo === codigo;
@@ -2739,7 +3076,8 @@ function usuarioPuedeVerPagina(nombrePagina) {
 function obtenerModuloDesdeAccionRapida(accion) {
   const mapaDeAcciones = {
     "nuevo-pedido": "ventas",
-    "nota-credito": "cuentaCorriente"
+    "nota-credito": "cuentaCorriente",
+    "revision-precios": "productos"
   };
 
   return mapaDeAcciones[accion] || null;
@@ -3147,6 +3485,17 @@ function configurarEventos() {
 
         mostrarPagina("cuenta");
         mostrarSeccionCuenta("nota");
+      }
+
+      if (button.dataset.quickAction === "revision-precios") {
+        mostrarPagina("productos");
+
+        if (dom.productosVistaInput) {
+          dom.productosVistaInput.value = "revision_precios";
+          reiniciarPaginaProductos();
+        }
+
+        renderizarProductos();
       }
 
       actualizarEstadoSidebar(true);
@@ -3909,6 +4258,15 @@ function configurarEventos() {
     importarClientesDesdeTexto
   );
 
+  [dom.clientesImportacionArchivo, dom.clientesImportacionTexto].forEach(function (input) {
+    if (!input) {
+      return;
+    }
+
+    input.addEventListener("change", limpiarPrevisualizacionImportacionClientes);
+    input.addEventListener("input", limpiarPrevisualizacionImportacionClientes);
+  });
+
   dom.productForm.addEventListener(
     "submit",
     agregarProducto
@@ -3946,6 +4304,15 @@ function configurarEventos() {
     "click",
     importarProductosDesdeTexto
   );
+
+  [dom.productosImportacionArchivo, dom.productosImportacionTexto].forEach(function (input) {
+    if (!input) {
+      return;
+    }
+
+    input.addEventListener("change", limpiarPrevisualizacionImportacionProductos);
+    input.addEventListener("input", limpiarPrevisualizacionImportacionProductos);
+  });
 
   if (dom.productosTemporalButton) {
     dom.productosTemporalButton.addEventListener(
@@ -4263,6 +4630,10 @@ async function iniciarApp() {
   actualizarClientePedidoSeleccionado();
   renderizarProductosHabitualesCliente();
   mostrarPagina("dashboard");
+
+  if (typeof restaurarPedidoActualLocalSiCorresponde === "function") {
+    restaurarPedidoActualLocalSiCorresponde();
+  }
 }
 
 iniciarApp();

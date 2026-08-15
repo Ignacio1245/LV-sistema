@@ -1,4 +1,4 @@
-﻿/* Proveedores, informes, clientes, productos y modales administrativos */
+/* Proveedores, informes, clientes, productos y modales administrativos */
 .provider-layout {
   display: grid;
   gap: 14px;
@@ -840,6 +840,72 @@
   width: fit-content;
 }
 
+
+.import-preview {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.import-preview.hidden {
+  display: none;
+}
+
+.import-preview h4 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.import-preview p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.import-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.import-preview-grid span,
+.import-preview-detail {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.import-preview-grid strong,
+.import-preview-detail strong {
+  color: var(--text);
+  font-size: 18px;
+  text-transform: none;
+}
+
+.import-preview-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.import-preview-warning {
+  padding: 10px;
+  color: #7c2d12;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  font-weight: 800;
+}
 .temporary-product-import {
   display: grid;
   gap: 12px;

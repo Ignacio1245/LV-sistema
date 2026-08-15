@@ -391,6 +391,7 @@ function mapearAuditoriaDesdeSupabase(registro) {
       hour: "2-digit",
       minute: "2-digit"
     }),
+    fechaIso: fecha.toISOString(),
     usuario: registro.usuario_nombre || "Sistema",
     rol: registro.usuario_rol || "-",
     modulo: registro.modulo || "Sistema",

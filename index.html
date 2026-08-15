@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 
 <head>
@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LV Sistema</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/styles.css?v=20260715-pulido1">
+  <link rel="stylesheet" href="/css/styles.css?v=20260815-arranque1">
 </head>
 
 <body class="login-required">
@@ -272,6 +272,15 @@
             </div>
           </div>
 
+          <div class="dashboard-readiness-panel estado-aviso" id="dashboardEstadoArranquePanel">
+            <div>
+              <p class="eyebrow">Estado de arranque</p>
+              <h3 id="dashboardEstadoArranqueTitulo">Revisando sistema</h3>
+              <span id="dashboardEstadoArranqueDetalle">Control automatico antes de operar.</span>
+            </div>
+            <div id="dashboardEstadoArranqueLista" class="dashboard-readiness-list"></div>
+          </div>
+
           <div class="dashboard-control-header">
             <div>
               <p class="eyebrow">Centro de control</p>
@@ -300,7 +309,7 @@
             <article class="dashboard-control-card">
               <div>
                 <h4>Datos incompletos</h4>
-                <button type="button" data-quick-page="clientes">Revisar datos</button>
+                <button type="button" data-quick-action="revision-precios">Revisar precios</button>
               </div>
               <div id="dashboardDatosIncompletosLista" class="dashboard-alert-list"></div>
             </article>
@@ -1000,8 +1009,11 @@
               <div class="sync-status" id="clientesImportacionEstado">
                 La importacion se guarda en el sistema y se sincroniza con Supabase si hay sesion activa.
               </div>
+              <div class="import-preview hidden" id="clientesImportacionPreview">
+                Cargue un CSV para revisar altas, actualizaciones, errores y saldos antes de aplicar.
+              </div>
               <button class="secondary-button" id="importarClientesButton" type="button">
-                Importar clientes
+                Revisar importacion
               </button>
             </div>
 
@@ -1691,6 +1703,7 @@
                 <option value="stock">Stock</option>
                 <option value="stock_valorizado">Stock valorizado</option>
                 <option value="margenes">Margenes</option>
+                <option value="revision_precios">Precios a revisar</option>
                 <option value="proveedores">Proveedores</option>
               </select>
               <div class="filter-tabs" aria-label="Filtro de productos">
@@ -1941,8 +1954,11 @@
               <div class="sync-status" id="productosImportacionEstado">
                 La importacion se guarda en el sistema y se sincroniza con Supabase si hay sesion activa.
               </div>
+              <div class="import-preview hidden" id="productosImportacionPreview">
+                Cargue un CSV para revisar altas, actualizaciones, errores y columnas detectadas antes de aplicar.
+              </div>
               <button class="secondary-button" id="importarProductosButton" type="button">
-                Importar productos
+                Revisar importacion
               </button>
 
               <div class="temporary-product-import">
@@ -3333,49 +3349,49 @@
 
   <!-- Supabase y autenticacion -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase-config.js?v=20260618-entrega2"></script>
-  <script src="js/supabase-auth.js?v=20260713-loginclave1"></script>
+  <script src="/js/supabase-config.js?v=20260618-entrega2"></script>
+  <script src="/js/supabase-auth.js?v=20260713-loginclave1"></script>
 
   <!-- Datos base y utilidades compartidas -->
-  <script src="js/data.js?v=20260620-ventas1"></script>
-  <script src="js/helpers.js?v=20260621-export1"></script>
+  <script src="/js/data.js?v=20260620-ventas1"></script>
+  <script src="/js/helpers.js?v=20260717-importsegura1"></script>
 
   <!-- Modulos administrativos principales -->
-  <script src="js/clientes.js?v=20260714-pagosonline1"></script>
-  <script src="js/rubros.js?v=20260620-supabase1"></script>
-  <script src="js/zonas.js?v=20260620-supabase1"></script>
-  <script src="js/proveedores.js?v=20260712-cierre2"></script>
-  <script src="js/compras.js?v=20260621-costos2"></script>
-  <script src="js/movimientos.js?v=20260620-stock1"></script>
-  <script src="js/productos.js?v=20260626-stockseguro1"></script>
-  <script src="js/productos-admin.js?v=20260714-importsync1"></script>
+  <script src="/js/clientes.js?v=20260719-auditoria2"></script>
+  <script src="/js/rubros.js?v=20260620-supabase1"></script>
+  <script src="/js/zonas.js?v=20260620-supabase1"></script>
+  <script src="/js/proveedores.js?v=20260712-cierre2"></script>
+  <script src="/js/compras.js?v=20260717-stocktraza1"></script>
+  <script src="/js/movimientos.js?v=20260620-stock1"></script>
+  <script src="/js/productos.js?v=20260717-stocktraza1"></script>
+  <script src="/js/productos-admin.js?v=20260801-controlprecios1"></script>
 
   <!-- Persistencia local y repositorio Supabase -->
-  <script src="js/data-store.js?v=20260626-local1"></script>
-  <script src="js/storage.js?v=20260714-simultaneo1"></script>
-  <script src="js/database/supabase-mappers.js?v=20260714-roles1"></script>
-  <script src="js/database/supabase-repository.js?v=20260714-roles1"></script>
-  <script src="js/supabase-data.js?v=20260714-confirmasupa1"></script>
+  <script src="/js/data-store.js?v=20260626-local1"></script>
+  <script src="/js/storage.js?v=20260714-simultaneo1"></script>
+  <script src="/js/database/supabase-mappers.js?v=20260719-auditoria1"></script>
+  <script src="/js/database/supabase-repository.js?v=20260714-roles1"></script>
+  <script src="/js/supabase-data.js?v=20260801-pendientes1"></script>
 
   <!-- Configuracion, usuarios y permisos -->
-  <script src="js/config/configuracion.js?v=20260618-loginfix2"></script>
-  <script src="js/config/permisos.js?v=20260618-loginfix2"></script>
-  <script src="js/config/usuarios.js?v=20260714-rolesfix1"></script>
-  <script src="js/config/login.js?v=20260713-superadmin1"></script>
+  <script src="/js/config/configuracion.js?v=20260618-loginfix2"></script>
+  <script src="/js/config/permisos.js?v=20260618-loginfix2"></script>
+  <script src="/js/config/usuarios.js?v=20260714-rolesfix1"></script>
+  <script src="/js/config/login.js?v=20260815-loginrescate1"></script>
 
   <!-- Control administrativo -->
-  <script src="js/auditoria.js?v=20260621-export1"></script>
-  <script src="js/informes.js?v=20260706-dias1"></script>
-  <script src="js/respaldo.js?v=20260712-seguro1"></script>
+  <script src="/js/auditoria.js?v=20260719-auditoria2"></script>
+  <script src="/js/informes.js?v=20260719-auditoria2"></script>
+  <script src="/js/respaldo.js?v=20260712-seguro1"></script>
 
   <!-- Pedidos y comprobantes -->
-  <script src="js/pedido.js?v=20260715-salida1"></script>
-  <script src="js/pedido/habituales.js?v=20260618-loginfix2"></script>
-  <script src="js/pedido/observaciones.js?v=20260618-entrega3"></script>
-  <script src="js/pedido/impresion.js?v=20260620-notacredito1"></script>
+  <script src="/js/pedido.js?v=20260801-autosave1"></script>
+  <script src="/js/pedido/habituales.js?v=20260618-loginfix2"></script>
+  <script src="/js/pedido/observaciones.js?v=20260801-autosave1"></script>
+  <script src="/js/pedido/impresion.js?v=20260731-remito1"></script>
 
   <!-- Inicializacion de pantalla y eventos -->
-  <script src="js/app.js?v=20260714-pedidosonline1"></script>
+  <script src="/js/app.js?v=20260815-arranque1"></script>
 </body>
 
 </html>

@@ -267,6 +267,12 @@ function exportarAuditoriaCsv() {
       ];
     })
   );
+
+  registrarAuditoria(
+    "Auditoria",
+    "Exporto auditoria CSV",
+    "Registros exportados: " + registros.length
+  );
 }
 
 function limpiarAuditoria() {
@@ -284,5 +290,10 @@ function limpiarAuditoria() {
 
   auditoria = [];
   guardarAuditoria();
+  registrarAuditoria(
+    "Auditoria",
+    "Limpio registro",
+    "Registro de auditoria reiniciado"
+  );
   renderizarAuditoria();
 }

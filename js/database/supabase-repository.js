@@ -1,19 +1,55 @@
-async function consultarTablaSupabase(nombreTabla, ordenCampo) {
-  const consulta =
-    supabaseClient
-      .from(nombreTabla)
-      .select("*");
+const TAMANO_PAGINA_SUPABASE = 1000;
 
-  const { data, error } =
-    ordenCampo
-      ? await consulta.order(ordenCampo, { ascending: true })
-      : await consulta;
+async function consultarTablaSupabase(nombreTabla, ordenCampo, opciones) {
+  const opcionesConsulta = opciones || {};
+  const seleccion = opcionesConsulta.seleccion || "*";
+  const ascendente = opcionesConsulta.ascendente !== false;
+  const limiteTotal = Number(opcionesConsulta.limite) || 0;
+  const resultados = [];
+  let pagina = 0;
 
-  if (error) {
-    throw error;
+  while (true) {
+    const desde = pagina * TAMANO_PAGINA_SUPABASE;
+    let hasta = desde + TAMANO_PAGINA_SUPABASE - 1;
+
+    if (limiteTotal > 0) {
+      const restantes = limiteTotal - resultados.length;
+
+      if (restantes <= 0) {
+        break;
+      }
+
+      hasta = desde + Math.min(restantes, TAMANO_PAGINA_SUPABASE) - 1;
+    }
+
+    let consulta =
+      supabaseClient
+        .from(nombreTabla)
+        .select(seleccion)
+        .range(desde, hasta);
+
+    if (ordenCampo) {
+      consulta = consulta.order(ordenCampo, { ascending: ascendente });
+    }
+
+    const { data, error } =
+      await consulta;
+
+    if (error) {
+      throw error;
+    }
+
+    const filas = data || [];
+    resultados.push(...filas);
+
+    if (filas.length < (hasta - desde + 1)) {
+      break;
+    }
+
+    pagina += 1;
   }
 
-  return data || [];
+  return resultados;
 }
 
 async function obtenerProductosSupabase() {
@@ -156,25 +192,17 @@ async function eliminarClienteSupabase(cliente) {
 }
 
 async function obtenerPedidosSupabase() {
-  const { data, error } =
-    await supabaseClient
-      .from("pedidos")
-      .select(`
+  const pedidosSupabase =
+    await consultarTablaSupabase("pedidos", "numero", {
+      seleccion: `
         *,
         clientes(*),
         pedido_items(
           *,
           productos(*)
         )
-      `)
-      .order("numero", { ascending: true });
-
-  if (error) {
-    throw error;
-  }
-
-  const pedidosSupabase =
-    data || [];
+      `
+    });
 
   return pedidosSupabase
     .map(mapearPedidoDesdeSupabase)
@@ -390,18 +418,13 @@ async function actualizarPagoClienteSupabase(pago) {
 }
 
 async function obtenerAuditoriaSupabase() {
-  const { data, error } =
-    await supabaseClient
-      .from("auditoria")
-      .select("*")
-      .order("fecha", { ascending: false })
-      .limit(500);
+  const auditoriaSupabase =
+    await consultarTablaSupabase("auditoria", "fecha", {
+      ascendente: false,
+      limite: 500
+    });
 
-  if (error) {
-    throw error;
-  }
-
-  return (data || [])
+  return auditoriaSupabase
     .map(mapearAuditoriaDesdeSupabase)
     .filter(Boolean);
 }
@@ -468,17 +491,12 @@ async function eliminarRolSupabase(nombreRol) {
 }
 
 async function obtenerUsuariosSupabase() {
-  const { data, error } =
-    await supabaseClient
-      .from("usuarios")
-      .select("*, roles(nombre)")
-      .order("codigo", { ascending: true });
+  const usuariosSupabase =
+    await consultarTablaSupabase("usuarios", "codigo", {
+      seleccion: "*, roles(nombre)"
+    });
 
-  if (error) {
-    throw error;
-  }
-
-  return (data || [])
+  return usuariosSupabase
     .map(mapearUsuarioDesdeSupabase)
     .filter(Boolean);
 }

@@ -928,6 +928,78 @@ table .danger-button {
   font-weight: 600;
 }
 
+.dashboard-readiness-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 480px);
+  gap: 14px;
+  align-items: start;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #cfd8e3;
+  border-radius: 7px;
+}
+
+.dashboard-readiness-panel.estado-listo {
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.dashboard-readiness-panel.estado-aviso {
+  background: #fffbeb;
+  border-color: #facc15;
+}
+
+.dashboard-readiness-panel.estado-critico {
+  background: #fff1f2;
+  border-color: #fda4af;
+}
+
+.dashboard-readiness-panel h3,
+.dashboard-readiness-panel p {
+  margin: 0;
+}
+
+.dashboard-readiness-panel span {
+  display: block;
+  margin-top: 4px;
+  color: #4d5c70;
+  font-weight: 600;
+}
+
+.dashboard-readiness-list {
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-readiness-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid #d8e1ec;
+  border-radius: 7px;
+}
+
+.dashboard-readiness-row span {
+  margin: 0;
+  color: #122236;
+  font-weight: 900;
+}
+
+.dashboard-readiness-row strong {
+  color: #334155;
+  text-align: right;
+}
+
+.dashboard-readiness-row.critico strong {
+  color: #b91c1c;
+}
+
+.dashboard-readiness-row.aviso strong {
+  color: #854d0e;
+}
+
 .dashboard-start-actions {
   display: flex;
   flex-wrap: wrap;
@@ -968,8 +1040,13 @@ table .danger-button {
     flex-direction: column;
   }
 
-  .dashboard-start-panel {
+  .dashboard-start-panel,
+  .dashboard-readiness-panel {
     align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-start-panel {
     flex-direction: column;
   }
 

@@ -108,18 +108,17 @@ function registrarCompra(event) {
       recalcularPreciosProductoPorCosto(producto, "Compra con costo nuevo");
   }
 
-  if (!Array.isArray(producto.movimientosStock)) {
-    producto.movimientosStock = [];
-  }
-
   const fecha =
     new Date().toLocaleDateString("es-AR");
 
-  producto.movimientosStock.push({
+  registrarMovimientoStockProducto(producto, {
     fecha: fecha,
     tipo: "Entrada por compra",
+    motivo: "Compra a proveedor " + proveedor,
+    referencia: comprobante,
     pedido: comprobante,
     cantidad: cantidad,
+    stockAnterior: stockAnterior,
     stockFinal: obtenerStockTotalProducto(producto)
   });
 

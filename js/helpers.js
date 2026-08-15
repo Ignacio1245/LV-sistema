@@ -147,6 +147,68 @@ function descargarCsv(nombreArchivo, encabezados, filas) {
   URL.revokeObjectURL(url);
 }
 
+function obtenerFirmaTextoSistema(texto) {
+  const textoSeguro =
+    String(texto || "");
+  let hash = 0;
+
+  for (let indice = 0; indice < textoSeguro.length; indice += 1) {
+    hash = ((hash << 5) - hash) + textoSeguro.charCodeAt(indice);
+    hash |= 0;
+  }
+
+  return textoSeguro.length + ":" + hash;
+}
+function obtenerFechaHoraArchivoSistema() {
+  return new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+}
+
+function descargarJsonSistema(nombreArchivo, datos) {
+  const blob =
+    new Blob([JSON.stringify(datos, null, 2)], {
+      type: "application/json;charset=utf-8"
+    });
+  const url =
+    URL.createObjectURL(blob);
+  const enlace =
+    document.createElement("a");
+
+  enlace.href = url;
+  enlace.download = nombreArchivo;
+  document.body.appendChild(enlace);
+  enlace.click();
+  document.body.removeChild(enlace);
+  URL.revokeObjectURL(url);
+}
+
+function generarRespaldoAutomaticoAntesDeOperacion(nombreOperacion) {
+  if (typeof crearDatosRespaldoSistema !== "function") {
+    alert("No se pudo generar el respaldo automatico. No se aplico la operacion.");
+    return false;
+  }
+
+  try {
+    const nombreSeguro =
+      typeof normalizarEncabezadoImportacion === "function"
+        ? normalizarEncabezadoImportacion(nombreOperacion || "operacion")
+        : String(nombreOperacion || "operacion").replace(/[^a-z0-9]/gi, "").toLowerCase();
+    const nombreArchivo =
+      "lv-sistema-respaldo-antes-" + nombreSeguro + "-" + obtenerFechaHoraArchivoSistema() + ".json";
+
+    descargarJsonSistema(nombreArchivo, crearDatosRespaldoSistema());
+
+    if (typeof registrarAuditoria === "function") {
+      registrarAuditoria("Respaldo", "Respaldo automatico", nombreArchivo);
+    }
+
+    return true;
+  } catch (error) {
+    console.error("No se pudo generar respaldo automatico:", error);
+    alert("No se pudo generar el respaldo automatico. No se aplico la operacion.");
+    return false;
+  }
+}
+
 let clienteSeleccionado = null;
 let productoSeleccionado = null;
 

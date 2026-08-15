@@ -109,6 +109,71 @@ function reconstruirStockProductoDesdeTotal(producto, stockTotal) {
   return producto;
 }
 
+function obtenerUsuarioActualMovimientoStock() {
+  if (typeof usuarioActual === "object" && usuarioActual) {
+    return {
+      codigo: Number(usuarioActual.codigo) || 0,
+      nombre: usuarioActual.nombre || "Sistema",
+      rol: usuarioActual.rol || "-"
+    };
+  }
+
+  return {
+    codigo: 0,
+    nombre: "Sistema",
+    rol: "-"
+  };
+}
+
+function registrarMovimientoStockProducto(producto, datosMovimiento) {
+  if (!producto) {
+    return null;
+  }
+
+  const datos =
+    datosMovimiento || {};
+  const ahora =
+    new Date();
+  const usuarioMovimiento =
+    obtenerUsuarioActualMovimientoStock();
+  const stockAnterior =
+    Number.isFinite(Number(datos.stockAnterior))
+      ? Number(datos.stockAnterior)
+      : obtenerStockTotalProducto(producto);
+  const stockFinal =
+    Number.isFinite(Number(datos.stockFinal))
+      ? Number(datos.stockFinal)
+      : stockAnterior + (Number(datos.cantidad) || 0);
+  const referencia =
+    datos.referencia || datos.pedido || datos.motivo || "-";
+
+  if (!Array.isArray(producto.movimientosStock)) {
+    producto.movimientosStock = [];
+  }
+
+  const movimiento = {
+    fecha: datos.fecha || ahora.toLocaleDateString("es-AR"),
+    hora: datos.hora || ahora.toLocaleTimeString("es-AR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    }),
+    fechaIso: datos.fechaIso || ahora.toISOString(),
+    tipo: datos.tipo || "Movimiento de stock",
+    motivo: datos.motivo || referencia,
+    referencia: referencia,
+    pedido: datos.pedido || referencia,
+    cantidad: Number(datos.cantidad) || 0,
+    stockAnterior: stockAnterior,
+    stockFinal: stockFinal,
+    usuario: usuarioMovimiento.nombre,
+    usuarioCodigo: usuarioMovimiento.codigo,
+    usuarioRol: usuarioMovimiento.rol
+  };
+
+  producto.movimientosStock.push(movimiento);
+  return movimiento;
+}
+
 function formatearStockProducto(producto) {
   const stockTotal =
     obtenerStockTotalProducto(producto);
@@ -257,10 +322,7 @@ function obtenerStockDisponibleProducto(producto, pedidoIgnoradoId) {
   );
 }
 function obtenerStockVendible(producto, pedidoIgnoradoId) {
-  return Math.max(
-    obtenerStockTotalProducto(producto) - obtenerStockMinimoProducto(producto),
-    0
-  );
+  return obtenerStockDisponibleProducto(producto, pedidoIgnoradoId);
 }
 
 function productoActivo(producto) {
@@ -337,15 +399,12 @@ function actualizarEstadoAutomaticoPorStock(producto, mostrarAlerta) {
   producto.activo = false;
   producto.bajaAutomaticaStock = true;
 
-  if (!Array.isArray(producto.movimientosStock)) {
-    producto.movimientosStock = [];
-  }
-
-  producto.movimientosStock.push({
-    fecha: new Date().toLocaleDateString("es-AR"),
+  registrarMovimientoStockProducto(producto, {
     tipo: "Baja automatica sin stock",
-    pedido: "Stock 0",
+    motivo: "Stock 0",
+    referencia: "Stock 0",
     cantidad: 0,
+    stockAnterior: obtenerStockTotalProducto(producto),
     stockFinal: obtenerStockTotalProducto(producto)
   });
 

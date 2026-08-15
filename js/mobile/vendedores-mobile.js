@@ -3,8 +3,14 @@ const telefonoVendedorDesdeUrl =
 const CLAVE_TELEFONO_VENDEDOR = "lv_vendedores_telefono_destino";
 const CLAVE_TELEFONO_CATALOGO_VENDEDOR = "lv_catalogo_telefono_destino";
 const CLAVE_CLIENTES_RECIENTES_VENDEDOR = "lv_vendedores_clientes_recientes";
+const CLAVE_PEDIDOS_PENDIENTES_VENDEDOR = "lv_vendedores_pedidos_pendientes";
+const CLAVE_BORRADOR_PEDIDO_VENDEDOR = "lv_vendedores_borrador_pedido";
+const CLAVE_BORRADOR_CLIENTE_VENDEDOR = "lv_vendedores_borrador_cliente";
 const PREFIJO_COBRANZA_PENDIENTE_VENDEDOR = "PENDIENTE_COBRANZA_VENDEDOR";
 const MAX_CLIENTES_RECIENTES_VENDEDOR = 6;
+const MAX_PEDIDOS_PENDIENTES_VENDEDOR = 25;
+const HORAS_MAXIMAS_BORRADOR_PEDIDO_VENDEDOR = 72;
+const HORAS_MAXIMAS_BORRADOR_CLIENTE_VENDEDOR = 72;
 
 let clientesVendedor = [];
 let productosVendedor = [];
@@ -19,6 +25,9 @@ let firmaUltimoPedidoMovilGuardado = "";
 let cobranzaVendedorEnCurso = false;
 let ultimosResultadosClientesVendedor = [];
 let ultimosResultadosProductosVendedor = [];
+let vendedorActualizandoAlVolver = false;
+let ultimaActualizacionVendedorAlVolver = 0;
+const INTERVALO_ACTUALIZACION_VENDEDOR_AL_VOLVER = 15000;
 
 const vendedorDom = {
   login: document.getElementById("vendedorLogin"),
@@ -205,6 +214,7 @@ async function iniciarSesionVendedorDesdeFormulario(evento) {
     mostrarContenidoVendedor();
     await cargarDatosVendedor();
     actualizarVistaVendedorDespuesDeCargarDatos();
+    await sincronizarPedidosPendientesVendedor();
     return;
   }
 
@@ -223,6 +233,7 @@ async function iniciarSesionVendedorDesdeFormulario(evento) {
     mostrarContenidoVendedor();
     await cargarDatosVendedor();
     actualizarVistaVendedorDespuesDeCargarDatos();
+  await sincronizarPedidosPendientesVendedor();
   } catch (error) {
     vendedorDom.loginEstado.textContent =
       "No se pudo ingresar: " + obtenerMensajeLoginVendedor(error);
@@ -242,6 +253,10 @@ function vendedorTieneTrabajoSinCerrar() {
       vendedorDom.nuevoClienteZona.value.trim() !== ""
     );
 
+  if (altaClienteConDatos) {
+    guardarBorradorClienteVendedor();
+  }
+
   return itemsPedidoVendedor.length > 0 ||
     pedidoVendedorEnCurso ||
     cobranzaVendedorEnCurso ||
@@ -253,8 +268,232 @@ function advertirSalidaVendedorConTrabajo(evento) {
     return;
   }
 
+  guardarBorradorPedidoVendedor();
   evento.preventDefault();
   evento.returnValue = "";
+}
+
+function puedeActualizarVendedorAlVolver() {
+  if (document.hidden || vendedorActualizandoAlVolver) {
+    return false;
+  }
+
+  if (!vendedorMovilPuedeOperar() || vendedorTieneTrabajoSinCerrar()) {
+    return false;
+  }
+
+  if (Date.now() - ultimaActualizacionVendedorAlVolver < INTERVALO_ACTUALIZACION_VENDEDOR_AL_VOLVER) {
+    return false;
+  }
+
+  return vendedorUsaSupabaseConAuth() && usuarioSupabaseAutenticado();
+}
+
+async function actualizarDatosVendedorAlVolver() {
+  if (!puedeActualizarVendedorAlVolver()) {
+    return;
+  }
+
+  vendedorActualizandoAlVolver = true;
+  ultimaActualizacionVendedorAlVolver = Date.now();
+
+  try {
+    establecerEstadoConexionVendedor("Actualizando datos online...");
+    await cargarDatosVendedor();
+    actualizarVistaVendedorDespuesDeCargarDatos();
+    establecerEstadoConexionVendedor("Datos online actualizados");
+  } catch (error) {
+    console.warn("No se pudo actualizar vendedor al volver:", error);
+    establecerEstadoConexionVendedor("No se pudieron actualizar datos online.");
+  } finally {
+    vendedorActualizandoAlVolver = false;
+  }
+}
+
+function obtenerClaveBorradorPedidoVendedor() {
+  const usuarioActual =
+    vendedorUsaSupabaseConAuth() && typeof obtenerEmailSesionSupabase === "function"
+      ? obtenerEmailSesionSupabase()
+      : vendedorDom.nombreVendedor.value;
+  const usuarioNormalizado =
+    normalizarUsuarioAccesoVendedor(usuarioActual || "local");
+
+  return CLAVE_BORRADOR_PEDIDO_VENDEDOR + "_" + (usuarioNormalizado || "local");
+}
+
+function leerBorradorPedidoVendedor() {
+  try {
+    const textoBorrador =
+      localStorage.getItem(obtenerClaveBorradorPedidoVendedor());
+
+    if (!textoBorrador) {
+      return null;
+    }
+
+    const borrador =
+      JSON.parse(textoBorrador);
+
+    return borrador && typeof borrador === "object" ? borrador : null;
+  } catch (error) {
+    console.warn("No se pudo leer el borrador del vendedor:", error);
+    return null;
+  }
+}
+
+function limpiarBorradorPedidoVendedor() {
+  try {
+    localStorage.removeItem(obtenerClaveBorradorPedidoVendedor());
+  } catch (error) {
+    console.warn("No se pudo limpiar el borrador del vendedor:", error);
+  }
+}
+
+function obtenerItemsBorradorPedidoVendedor() {
+  return itemsPedidoVendedor.map(function (itemPedido) {
+    return {
+      codigoProducto: Number(itemPedido.producto.codigo) || 0,
+      cantidad: normalizarCantidadVendedor(itemPedido.producto, itemPedido.cantidad),
+      descuentoPorcentaje: normalizarDescuentoVendedor(itemPedido.descuentoPorcentaje || 0)
+    };
+  }).filter(function (itemBorrador) {
+    return itemBorrador.codigoProducto > 0 && itemBorrador.cantidad > 0;
+  });
+}
+
+function guardarBorradorPedidoVendedor() {
+  if (moduloVendedorActual !== "venta") {
+    return;
+  }
+
+  try {
+    const tieneDatosPedido =
+      clienteSeleccionadoVendedor ||
+      itemsPedidoVendedor.length > 0 ||
+      vendedorDom.observacion.value.trim() !== "";
+
+    if (!tieneDatosPedido) {
+      limpiarBorradorPedidoVendedor();
+      return;
+    }
+
+    const borrador = {
+      fecha: new Date().toISOString(),
+      clienteCodigo: clienteSeleccionadoVendedor ? Number(clienteSeleccionadoVendedor.codigo) || 0 : 0,
+      formaPago: vendedorDom.formaPago.value || "CUENTA_CORRIENTE",
+      observacion: vendedorDom.observacion.value.trim(),
+      items: obtenerItemsBorradorPedidoVendedor()
+    };
+
+    localStorage.setItem(
+      obtenerClaveBorradorPedidoVendedor(),
+      JSON.stringify(borrador)
+    );
+  } catch (error) {
+    console.warn("No se pudo guardar el borrador del vendedor:", error);
+  }
+}
+
+function borradorPedidoVendedorEstaVencido(borrador) {
+  const fechaBorrador =
+    new Date(borrador && borrador.fecha ? borrador.fecha : 0).getTime();
+
+  if (!fechaBorrador) {
+    return true;
+  }
+
+  const horasTranscurridas =
+    (Date.now() - fechaBorrador) / 36e5;
+
+  return horasTranscurridas > HORAS_MAXIMAS_BORRADOR_PEDIDO_VENDEDOR;
+}
+
+function restaurarBorradorPedidoVendedor() {
+  if (clienteSeleccionadoVendedor || itemsPedidoVendedor.length > 0) {
+    return false;
+  }
+
+  if (moduloVendedorActual && moduloVendedorActual !== "venta") {
+    return false;
+  }
+
+  const borrador =
+    leerBorradorPedidoVendedor();
+
+  if (!borrador) {
+    return false;
+  }
+
+  if (borradorPedidoVendedorEstaVencido(borrador)) {
+    limpiarBorradorPedidoVendedor();
+    return false;
+  }
+
+  const clienteBorrador =
+    clientesVendedor.find(function (cliente) {
+      return Number(cliente.codigo) === Number(borrador.clienteCodigo);
+    });
+
+  if (!clienteBorrador) {
+    limpiarBorradorPedidoVendedor();
+    return false;
+  }
+
+  const itemsRestaurados =
+    (Array.isArray(borrador.items) ? borrador.items : []).map(function (itemBorrador) {
+      const producto =
+        productosVendedor.find(function (productoVendedor) {
+          return Number(productoVendedor.codigo) === Number(itemBorrador.codigoProducto);
+        });
+
+      if (!producto) {
+        return null;
+      }
+
+      const cantidadMaxima =
+        obtenerCantidadMaximaVendedor(producto);
+      const cantidad =
+        Math.min(
+          cantidadMaxima,
+          normalizarCantidadVendedor(producto, itemBorrador.cantidad)
+        );
+
+      if (cantidad <= 0) {
+        return null;
+      }
+
+      return {
+        producto: producto,
+        cantidad: cantidad,
+        descuentoPorcentaje: normalizarDescuentoVendedor(itemBorrador.descuentoPorcentaje || 0)
+      };
+    }).filter(Boolean);
+
+  if (itemsRestaurados.length === 0) {
+    limpiarBorradorPedidoVendedor();
+    return false;
+  }
+
+  moduloVendedorActual = "venta";
+  clienteSeleccionadoVendedor = clienteBorrador;
+  itemsPedidoVendedor = itemsRestaurados;
+  vendedorDom.formaPago.value =
+    borrador.formaPago || "CUENTA_CORRIENTE";
+  vendedorDom.observacion.value =
+    borrador.observacion || "";
+  if (vendedorDom.zonaCliente) {
+    vendedorDom.zonaCliente.value =
+      obtenerZonaClienteVendedor(clienteBorrador);
+  }
+  vendedorDom.busquedaCliente.value =
+    clienteBorrador.codigo + " - " + clienteBorrador.nombre;
+  vendedorDom.clienteSeleccionado.classList.add("vendedores-seleccion-activa");
+  vendedorDom.clienteSeleccionado.innerHTML =
+    "<strong>" + escaparTextoVendedor(clienteBorrador.codigo) + " - " + escaparTextoVendedor(clienteBorrador.nombre) + "</strong>" +
+    "<span>" + escaparTextoVendedor(clienteBorrador.direccion || "Sin direccion") + "</span>" +
+    "<small>" + escaparTextoVendedor(clienteBorrador.zona || "Sin zona") + " | " + escaparTextoVendedor(clienteBorrador.listaPrecios || "Lista 1") + "</small>";
+  vendedorDom.estadoEnvio.textContent =
+    "Borrador de pedido recuperado. Revisalo antes de enviar.";
+  return true;
 }
 
 async function cerrarSesionVendedor() {
@@ -425,6 +664,66 @@ function vendedorMovilPuedeOperar() {
   return vendedorMovilAutorizado !== false;
 }
 
+function leerPedidosPendientesVendedor() {
+  try {
+    const pedidosPendientes =
+      JSON.parse(localStorage.getItem(CLAVE_PEDIDOS_PENDIENTES_VENDEDOR) || "[]");
+
+    return Array.isArray(pedidosPendientes)
+      ? pedidosPendientes.filter(function (pedidoPendiente) {
+        return pedidoPendiente &&
+          typeof pedidoPendiente === "object" &&
+          pedidoPendiente.firma &&
+          pedidoPendiente.pedido;
+      })
+      : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function guardarPedidosPendientesVendedor(pedidosPendientes) {
+  localStorage.setItem(
+    CLAVE_PEDIDOS_PENDIENTES_VENDEDOR,
+    JSON.stringify(
+      (Array.isArray(pedidosPendientes) ? pedidosPendientes : [])
+        .slice(0, MAX_PEDIDOS_PENDIENTES_VENDEDOR)
+    )
+  );
+}
+
+function obtenerCantidadPedidosPendientesVendedor() {
+  return leerPedidosPendientesVendedor().length;
+}
+
+function establecerEstadoConexionVendedor(mensaje) {
+  if (!vendedorDom.estadoConexion) {
+    return;
+  }
+
+  const textoBase =
+    mensaje || "";
+  const cantidadPendiente =
+    obtenerCantidadPedidosPendientesVendedor();
+
+  vendedorDom.estadoConexion.dataset.estadoBase =
+    textoBase;
+  vendedorDom.estadoConexion.textContent =
+    textoBase + (cantidadPendiente > 0
+      ? " | " + cantidadPendiente + " pedido" + (cantidadPendiente === 1 ? "" : "s") + " pendiente" + (cantidadPendiente === 1 ? "" : "s")
+      : "");
+}
+
+function actualizarIndicadorPedidosPendientesVendedor() {
+  const estadoBase =
+    vendedorDom.estadoConexion && vendedorDom.estadoConexion.dataset.estadoBase
+      ? vendedorDom.estadoConexion.dataset.estadoBase
+      : vendedorDom.estadoConexion
+        ? vendedorDom.estadoConexion.textContent
+        : "";
+
+  establecerEstadoConexionVendedor(estadoBase || "Listo");
+}
 function obtenerMotivoBloqueoVendedorMovil() {
   return motivoBloqueoVendedorMovil ||
     "Tu cuenta no esta habilitada como vendedor movil.";
@@ -615,8 +914,7 @@ async function cargarDatosVendedor() {
       if (!vendedorMovilPuedeOperar()) {
         clientesVendedor = [];
         productosVendedor = [];
-        vendedorDom.estadoConexion.textContent =
-          obtenerMotivoBloqueoVendedorMovil();
+        establecerEstadoConexionVendedor(obtenerMotivoBloqueoVendedorMovil());
         return;
       }
 
@@ -635,8 +933,7 @@ async function cargarDatosVendedor() {
       if (!vendedorMovilPuedeOperar()) {
         clientesVendedor = [];
         productosVendedor = [];
-        vendedorDom.estadoConexion.textContent =
-          obtenerMotivoBloqueoVendedorMovil();
+        establecerEstadoConexionVendedor(obtenerMotivoBloqueoVendedorMovil());
         mostrarLoginVendedor(obtenerMotivoBloqueoVendedorMovil());
         return;
       }
@@ -647,8 +944,7 @@ async function cargarDatosVendedor() {
           .filter(clienteAsignadoAlVendedorActual);
       productosVendedor =
         resultado[1].filter(productoDisponibleVendedor);
-      vendedorDom.estadoConexion.textContent =
-        "Datos desde Supabase";
+      establecerEstadoConexionVendedor("Datos desde Supabase");
       return;
     }
   } catch (error) {
@@ -659,8 +955,7 @@ async function cargarDatosVendedor() {
     Array.isArray(clientes) ? clientes.filter(clienteActivoVendedor) : [];
   productosVendedor =
     Array.isArray(productos) ? productos.filter(productoDisponibleVendedor) : [];
-  vendedorDom.estadoConexion.textContent =
-    "Modo prueba local";
+  establecerEstadoConexionVendedor("Modo prueba local");
 }
 
 function obtenerZonaClienteVendedor(cliente) {
@@ -882,14 +1177,19 @@ function seleccionarModuloVendedor(modulo) {
     modulo === "clientes" ? "clientes" : modulo === "catalogo" ? "catalogo" : "venta";
 
   if (moduloVendedorActual !== moduloNuevo) {
+    guardarBorradorPedidoVendedor();
     moduloVendedorActual =
       moduloNuevo;
     reiniciarClientePorCambioZona();
+    if (moduloNuevo === "venta") {
+      restaurarBorradorPedidoVendedor();
+    }
   }
 
   actualizarFlujoVendedor();
   renderizarZonasClientesVendedor();
   renderizarResultadosClientesVendedor();
+  renderizarItemsPedidoVendedor();
   vendedorDom.busquedaCliente.focus();
 }
 
@@ -982,6 +1282,93 @@ function obtenerZonaSugeridaNuevoClienteVendedor() {
   return "Sin zona";
 }
 
+function obtenerClaveBorradorClienteVendedor() {
+  const usuarioActual =
+    vendedorUsaSupabaseConAuth() && typeof obtenerEmailSesionSupabase === "function"
+      ? obtenerEmailSesionSupabase()
+      : vendedorDom.nombreVendedor.value;
+  const usuarioNormalizado =
+    normalizarUsuarioAccesoVendedor(usuarioActual || "local");
+
+  return CLAVE_BORRADOR_CLIENTE_VENDEDOR + "_" + (usuarioNormalizado || "local");
+}
+
+function limpiarBorradorClienteVendedor() {
+  try {
+    localStorage.removeItem(obtenerClaveBorradorClienteVendedor());
+  } catch (error) {
+    console.warn("No se pudo limpiar el borrador de cliente vendedor:", error);
+  }
+}
+
+function guardarBorradorClienteVendedor() {
+  if (!vendedorDom.nuevoClienteForm ||
+      vendedorDom.nuevoClienteForm.classList.contains("vendedores-oculto")) {
+    return;
+  }
+
+  const borrador = {
+    fecha: new Date().toISOString(),
+    nombre: vendedorDom.nuevoClienteNombre.value.trim(),
+    telefono: vendedorDom.nuevoClienteTelefono.value.trim(),
+    direccion: vendedorDom.nuevoClienteDireccion.value.trim(),
+    zona: vendedorDom.nuevoClienteZona.value.trim()
+  };
+
+  if (!borrador.nombre && !borrador.telefono && !borrador.direccion && !borrador.zona) {
+    limpiarBorradorClienteVendedor();
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      obtenerClaveBorradorClienteVendedor(),
+      JSON.stringify(borrador)
+    );
+  } catch (error) {
+    console.warn("No se pudo guardar el borrador de cliente vendedor:", error);
+  }
+}
+
+function restaurarBorradorClienteVendedor() {
+  try {
+    const textoBorrador =
+      localStorage.getItem(obtenerClaveBorradorClienteVendedor());
+
+    if (!textoBorrador) {
+      return false;
+    }
+
+    const borrador =
+      JSON.parse(textoBorrador);
+    const fechaBorrador =
+      new Date(borrador && borrador.fecha ? borrador.fecha : 0).getTime();
+    const horasTranscurridas =
+      fechaBorrador ? (Date.now() - fechaBorrador) / 36e5 : Infinity;
+
+    if (horasTranscurridas > HORAS_MAXIMAS_BORRADOR_CLIENTE_VENDEDOR) {
+      limpiarBorradorClienteVendedor();
+      return false;
+    }
+
+    vendedorDom.nuevoClienteNombre.value =
+      borrador.nombre || "";
+    vendedorDom.nuevoClienteTelefono.value =
+      borrador.telefono || "";
+    vendedorDom.nuevoClienteDireccion.value =
+      borrador.direccion || "";
+    vendedorDom.nuevoClienteZona.value =
+      borrador.zona || obtenerZonaSugeridaNuevoClienteVendedor();
+    vendedorDom.nuevoClienteEstado.textContent =
+      "Borrador de cliente recuperado.";
+    return true;
+  } catch (error) {
+    console.warn("No se pudo restaurar el borrador de cliente vendedor:", error);
+    limpiarBorradorClienteVendedor();
+    return false;
+  }
+}
+
 function mostrarAltaRapidaClienteVendedor() {
   if (!vendedorDom.nuevoClienteForm) {
     return;
@@ -991,11 +1378,15 @@ function mostrarAltaRapidaClienteVendedor() {
     vendedorDom.busquedaCliente.value.trim();
 
   vendedorDom.nuevoClienteForm.classList.remove("vendedores-oculto");
-  vendedorDom.nuevoClienteNombre.value =
-    /^\d+\s*-/.test(busquedaActual) ? "" : busquedaActual;
-  vendedorDom.nuevoClienteZona.value =
-    obtenerZonaSugeridaNuevoClienteVendedor();
-  vendedorDom.nuevoClienteEstado.textContent = "";
+  if (!restaurarBorradorClienteVendedor()) {
+    vendedorDom.nuevoClienteNombre.value =
+      /^\d+\s*-/.test(busquedaActual) ? "" : busquedaActual;
+    vendedorDom.nuevoClienteTelefono.value = "";
+    vendedorDom.nuevoClienteDireccion.value = "";
+    vendedorDom.nuevoClienteZona.value =
+      obtenerZonaSugeridaNuevoClienteVendedor();
+    vendedorDom.nuevoClienteEstado.textContent = "";
+  }
   vendedorDom.nuevoClienteNombre.focus();
 }
 
@@ -1004,6 +1395,7 @@ function ocultarAltaRapidaClienteVendedor() {
     return;
   }
 
+  limpiarBorradorClienteVendedor();
   vendedorDom.nuevoClienteForm.classList.add("vendedores-oculto");
   vendedorDom.nuevoClienteForm.reset();
   vendedorDom.nuevoClienteEstado.textContent = "";
@@ -1037,6 +1429,49 @@ async function obtenerSiguienteCodigoClienteVendedor() {
   }
 
   return mayorCodigoLocal + 1;
+}
+
+function obtenerTelefonoComparableClienteVendedor(cliente) {
+  return String(
+    cliente.telefono ||
+    cliente.telefonoMovil ||
+    cliente.telefonoParticular ||
+    ""
+  ).replace(/\D/g, "");
+}
+
+function buscarClienteSimilarNuevoClienteVendedor() {
+  const nombre =
+    normalizarTextoVendedor(vendedorDom.nuevoClienteNombre.value.trim());
+  const direccion =
+    normalizarTextoVendedor(vendedorDom.nuevoClienteDireccion.value.trim());
+  const telefono =
+    vendedorDom.nuevoClienteTelefono.value.replace(/\D/g, "");
+
+  return clientesVendedor.find(function (cliente) {
+    if (telefono.length >= 6 && obtenerTelefonoComparableClienteVendedor(cliente) === telefono) {
+      return true;
+    }
+
+    if (nombre && direccion) {
+      return normalizarTextoVendedor(cliente.nombre || "") === nombre &&
+        normalizarTextoVendedor(cliente.direccion || "") === direccion;
+    }
+
+    return false;
+  }) || null;
+}
+
+function confirmarAltaClienteSimilarVendedor(clienteSimilar) {
+  if (!clienteSimilar) {
+    return true;
+  }
+
+  return confirm(
+    "Ya existe un cliente parecido: " +
+      clienteSimilar.codigo + " - " + clienteSimilar.nombre +
+      ". Crear otro cliente igual?"
+  );
 }
 
 function crearClienteMovilParaSupabase(codigoCliente) {
@@ -1178,6 +1613,15 @@ async function crearClienteDesdeVendedorMovil(evento) {
     return;
   }
 
+  const clienteSimilar =
+    buscarClienteSimilarNuevoClienteVendedor();
+
+  if (!confirmarAltaClienteSimilarVendedor(clienteSimilar)) {
+    vendedorDom.nuevoClienteEstado.textContent =
+      "Alta cancelada. Usa el cliente existente si corresponde.";
+    return;
+  }
+
   if (vendedorDom.guardarNuevoCliente) {
     vendedorDom.guardarNuevoCliente.disabled = true;
   }
@@ -1201,8 +1645,7 @@ async function crearClienteDesdeVendedorMovil(evento) {
     seleccionarClienteVendedor(clienteGuardado);
     await refrescarDatosVendedorManteniendoCliente(clienteGuardado);
 
-    vendedorDom.estadoConexion.textContent =
-      "Cliente creado online: " + clienteGuardado.codigo;
+    establecerEstadoConexionVendedor("Cliente creado online: " + clienteGuardado.codigo);
   } catch (error) {
     console.error("No se pudo crear cliente desde vendedor movil:", error);
     vendedorDom.nuevoClienteEstado.textContent =
@@ -1215,6 +1658,7 @@ async function crearClienteDesdeVendedorMovil(evento) {
 }
 
 function actualizarVistaVendedorDespuesDeCargarDatos() {
+  restaurarBorradorPedidoVendedor();
   renderizarZonasClientesVendedor();
   renderizarClientesRecientesVendedor();
   renderizarResultadosClientesVendedor();
@@ -1437,6 +1881,7 @@ function seleccionarClienteVendedor(cliente) {
   actualizarFlujoVendedor();
   renderizarResultadosProductosVendedor();
   actualizarVistaCobranzaVendedor();
+  guardarBorradorPedidoVendedor();
 
   if (moduloVendedorActual === "venta") {
     vendedorDom.busquedaProducto.focus();
@@ -1724,6 +2169,7 @@ function agregarProductoPedidoVendedor(producto, cantidad, descuentoPorcentaje) 
     "Agregado: " + producto.nombre;
   renderizarItemsPedidoVendedor();
   renderizarResultadosProductosVendedor();
+  guardarBorradorPedidoVendedor();
   vendedorDom.busquedaProducto.focus();
 }
 
@@ -1748,6 +2194,7 @@ function cambiarCantidadPedidoVendedor(producto, cambio) {
   }
 
   renderizarItemsPedidoVendedor();
+  guardarBorradorPedidoVendedor();
 }
 
 function establecerCantidadPedidoVendedor(producto, cantidad) {
@@ -1771,6 +2218,7 @@ function establecerCantidadPedidoVendedor(producto, cantidad) {
   }
 
   renderizarItemsPedidoVendedor();
+  guardarBorradorPedidoVendedor();
 }
 
 function establecerDescuentoPedidoVendedor(producto, descuentoPorcentaje) {
@@ -1785,6 +2233,7 @@ function establecerDescuentoPedidoVendedor(producto, descuentoPorcentaje) {
     normalizarDescuentoVendedor(descuentoPorcentaje);
 
   renderizarItemsPedidoVendedor();
+  guardarBorradorPedidoVendedor();
 }
 
 function eliminarItemPedidoVendedor(producto) {
@@ -1793,6 +2242,7 @@ function eliminarItemPedidoVendedor(producto) {
   });
 
   renderizarItemsPedidoVendedor();
+  guardarBorradorPedidoVendedor();
 }
 
 function calcularSubtotalItemVendedor(itemPedido) {
@@ -2596,24 +3046,17 @@ function esErrorNumeroPedidoDuplicadoVendedor(error) {
       mensaje.includes("duplicate key"));
 }
 
-async function guardarPedidoMovilEnSupabase() {
-  if (
-    !vendedorUsaSupabaseConAuth() ||
-    !usuarioSupabaseAutenticado() ||
-    typeof guardarPedidoSupabase !== "function"
-  ) {
-    return {
-      guardado: false,
-      motivo: "Sin sesion online"
-    };
-  }
-
+async function guardarPedidoBaseMovilEnSupabase(pedidoBase) {
   let numeroPedido =
     await obtenerNumeroPedidoMovilSupabase();
 
   for (let intento = 1; intento <= 4; intento += 1) {
-    const pedidoMovil =
-      crearPedidoMovilParaSupabase(numeroPedido);
+    const pedidoMovil = {
+      ...pedidoBase,
+      id: Number(numeroPedido) || Date.now(),
+      numero: Number(numeroPedido) || Date.now(),
+      fecha: pedidoBase.fecha || obtenerFechaPedidoMovil()
+    };
 
     try {
       const pedidoGuardado =
@@ -2636,6 +3079,109 @@ async function guardarPedidoMovilEnSupabase() {
     guardado: false,
     motivo: "No se pudo reservar numero"
   };
+}
+
+function crearRegistroPedidoPendienteVendedor(motivo) {
+  const firma =
+    crearFirmaPedidoVendedorActual();
+
+  return {
+    id: String(Date.now()) + "-" + Math.floor(Math.random() * 100000),
+    firma: firma,
+    fechaIso: new Date().toISOString(),
+    motivo: motivo || "Pendiente de sincronizar",
+    vendedor: obtenerNombreVendedorCuentaActual() || "Vendedor movil",
+    cliente: clienteSeleccionadoVendedor
+      ? clienteSeleccionadoVendedor.codigo + " - " + clienteSeleccionadoVendedor.nombre
+      : "Sin cliente",
+    pedido: crearPedidoMovilParaSupabase(Date.now())
+  };
+}
+
+function guardarPedidoPendienteLocalVendedor(motivo) {
+  const registroPendiente =
+    crearRegistroPedidoPendienteVendedor(motivo);
+
+  if (!registroPendiente.firma) {
+    throw new Error("No se pudo crear la firma local del pedido.");
+  }
+
+  const pedidosPendientes =
+    leerPedidosPendientesVendedor();
+  const yaExiste =
+    pedidosPendientes.some(function (pedidoPendiente) {
+      return pedidoPendiente.firma === registroPendiente.firma;
+    });
+
+  if (!yaExiste) {
+    pedidosPendientes.unshift(registroPendiente);
+    guardarPedidosPendientesVendedor(pedidosPendientes);
+  }
+
+  firmaUltimoPedidoMovilGuardado =
+    registroPendiente.firma;
+  actualizarIndicadorPedidosPendientesVendedor();
+
+  return !yaExiste;
+}
+
+async function sincronizarPedidosPendientesVendedor() {
+  if (
+    !vendedorUsaSupabaseConAuth() ||
+    !usuarioSupabaseAutenticado() ||
+    typeof guardarPedidoSupabase !== "function"
+  ) {
+    actualizarIndicadorPedidosPendientesVendedor();
+    return;
+  }
+
+  const pedidosPendientes =
+    leerPedidosPendientesVendedor();
+
+  if (pedidosPendientes.length === 0) {
+    actualizarIndicadorPedidosPendientesVendedor();
+    return;
+  }
+
+  const pendientesRestantes = [];
+  let pedidosSubidos = 0;
+
+  for (const pedidoPendiente of pedidosPendientes) {
+    try {
+      await guardarPedidoBaseMovilEnSupabase(pedidoPendiente.pedido);
+      pedidosSubidos += 1;
+    } catch (error) {
+      pendientesRestantes.push({
+        ...pedidoPendiente,
+        motivo: error.message || pedidoPendiente.motivo || "No se pudo sincronizar"
+      });
+    }
+  }
+
+  guardarPedidosPendientesVendedor(pendientesRestantes);
+  actualizarIndicadorPedidosPendientesVendedor();
+
+  if (pedidosSubidos > 0) {
+    vendedorDom.estadoEnvio.textContent =
+      pedidosSubidos + " pedido" + (pedidosSubidos === 1 ? "" : "s") + " pendiente" + (pedidosSubidos === 1 ? "" : "s") + " sincronizado" + (pedidosSubidos === 1 ? "" : "s") + ".";
+  }
+}
+async function guardarPedidoMovilEnSupabase() {
+  if (
+    !vendedorUsaSupabaseConAuth() ||
+    !usuarioSupabaseAutenticado() ||
+    typeof guardarPedidoSupabase !== "function"
+  ) {
+    return {
+      guardado: false,
+      motivo: "Sin sesion online"
+    };
+  }
+
+  const pedidoMovil =
+    crearPedidoMovilParaSupabase(Date.now());
+
+  return guardarPedidoBaseMovilEnSupabase(pedidoMovil);
 }
 
 function abrirWhatsappPedidoVendedor() {
@@ -2694,6 +3240,7 @@ async function enviarPedidoWhatsappVendedor() {
     if (firmaPedidoActual && firmaPedidoActual === firmaUltimoPedidoMovilGuardado) {
       vendedorDom.estadoEnvio.textContent =
         "Este pedido ya estaba guardado online. Abriendo WhatsApp...";
+      limpiarBorradorPedidoVendedor();
       abrirWhatsappPedidoVendedor();
       return;
     }
@@ -2709,24 +3256,34 @@ async function enviarPedidoWhatsappVendedor() {
         firmaPedidoActual || crearFirmaPedidoVendedorActual();
     }
 
+    if (!resultadoGuardado.guardado) {
+      guardarPedidoPendienteLocalVendedor(resultadoGuardado.motivo || "Sin guardado online");
+    }
+
     vendedorDom.estadoEnvio.textContent =
       resultadoGuardado.guardado
         ? "Pedido guardado online. Abriendo WhatsApp..."
-        : "Sin guardado online. Abriendo WhatsApp...";
+        : "Pedido pendiente en este celular. Abriendo WhatsApp...";
 
+    limpiarBorradorPedidoVendedor();
     abrirWhatsappPedidoVendedor();
   } catch (error) {
     console.error("No se pudo guardar pedido movil:", error);
-    const abrirIgual =
-      confirm("No se pudo guardar online. Queres abrir WhatsApp igual?");
 
-    if (abrirIgual) {
+    try {
+      const seAgregoPendiente =
+        guardarPedidoPendienteLocalVendedor(error.message || "No se pudo guardar online");
+
       vendedorDom.estadoEnvio.textContent =
-        "Pedido no guardado online. WhatsApp abierto.";
+        seAgregoPendiente
+          ? "No se pudo guardar online. Quedo pendiente en este celular y se abre WhatsApp."
+          : "Este pedido ya estaba pendiente en este celular. Abriendo WhatsApp...";
+      limpiarBorradorPedidoVendedor();
       abrirWhatsappPedidoVendedor();
-    } else {
+    } catch (errorLocal) {
+      console.error("No se pudo guardar pendiente movil:", errorLocal);
       vendedorDom.estadoEnvio.textContent =
-        "Pedido no enviado. Revisa internet o permisos.";
+        "Pedido no enviado. No se pudo guardar online ni dejar pendiente local.";
     }
   } finally {
     pedidoVendedorEnCurso = false;
@@ -2735,6 +3292,7 @@ async function enviarPedidoWhatsappVendedor() {
 }
 
 function limpiarPedidoVendedor() {
+  limpiarBorradorPedidoVendedor();
   clienteSeleccionadoVendedor = null;
   itemsPedidoVendedor = [];
   firmaUltimoPedidoMovilGuardado = "";
@@ -2773,6 +3331,7 @@ async function iniciarVendedoresMobile() {
 
   await cargarDatosVendedor();
   actualizarVistaVendedorDespuesDeCargarDatos();
+  await sincronizarPedidosPendientesVendedor();
 }
 
 vendedorDom.loginForm.addEventListener("submit", iniciarSesionVendedorDesdeFormulario);
@@ -2794,12 +3353,23 @@ if (vendedorDom.botonNuevoCliente) {
 }
 if (vendedorDom.nuevoClienteForm) {
   vendedorDom.nuevoClienteForm.addEventListener("submit", crearClienteDesdeVendedorMovil);
+  [
+    vendedorDom.nuevoClienteNombre,
+    vendedorDom.nuevoClienteTelefono,
+    vendedorDom.nuevoClienteDireccion,
+    vendedorDom.nuevoClienteZona
+  ].forEach(function (controlNuevoCliente) {
+    controlNuevoCliente.addEventListener("input", guardarBorradorClienteVendedor);
+    controlNuevoCliente.addEventListener("change", guardarBorradorClienteVendedor);
+  });
 }
 if (vendedorDom.cancelarNuevoCliente) {
   vendedorDom.cancelarNuevoCliente.addEventListener("click", ocultarAltaRapidaClienteVendedor);
 }
 vendedorDom.busquedaProducto.addEventListener("input", renderizarResultadosProductosVendedor);
 vendedorDom.busquedaProducto.addEventListener("keydown", agregarPrimerProductoVendedor);
+vendedorDom.formaPago.addEventListener("change", guardarBorradorPedidoVendedor);
+vendedorDom.observacion.addEventListener("input", guardarBorradorPedidoVendedor);
 vendedorDom.telefonoDestino.addEventListener("input", guardarTelefonoDestinoVendedor);
 vendedorDom.botonLimpiar.addEventListener("click", limpiarPedidoVendedor);
 vendedorDom.botonCopiar.addEventListener("click", copiarPedidoVendedor);
@@ -2811,6 +3381,8 @@ vendedorDom.botonCopiarCatalogo.addEventListener("click", copiarLinkCatalogoVend
 vendedorDom.botonCobrarSaldo.addEventListener("click", completarCobranzaConSaldoVendedor);
 vendedorDom.botonGuardarCobranza.addEventListener("click", guardarCobranzaVendedor);
 window.addEventListener("beforeunload", advertirSalidaVendedorConTrabajo);
+document.addEventListener("visibilitychange", actualizarDatosVendedorAlVolver);
+window.addEventListener("focus", actualizarDatosVendedorAlVolver);
 
 iniciarVendedoresMobile();
 

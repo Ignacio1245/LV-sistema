@@ -1,7 +1,8 @@
-﻿let filtroEstadoClientes = "activos";
+let filtroEstadoClientes = "activos";
 let clienteEditando = null;
 let cobranzasPendientesVendedor = [];
 let cobranzasVendedorEnProceso = {};
+let importacionClientesPendiente = null;
 const operacionesCuentaCorrienteEnCurso = new Set();
 
 const PREFIJO_COBRANZA_PENDIENTE_ADMIN = "PENDIENTE_COBRANZA_VENDEDOR";
@@ -244,26 +245,206 @@ function crearMapaColumnasClientesImportacion(encabezados) {
   }
 
   return {
-    codigo: buscarColumnas(["codigo", "cod", "codcliente", "codref"]),
-    nombre: buscarColumnas(["nombre", "cliente", "razonsocial", "fantasia"]),
-    telefono: buscarColumnas(["telefono", "tel", "celular", "movil"]),
-    direccion: buscarColumnas(["direccion", "domicilio"]),
+    codigo: buscarColumnas(["id", "codigo", "cod", "codcliente", "codref", "codigocliente"]),
+    nombre: buscarColumnas(["nombre", "cliente", "razonsocial", "fantasia", "nombrefantasia", "nombrecliente"]),
+    telefono: buscarColumnas(["telefono", "telefonos", "tel", "telfono", "celular", "movil"]),
+    direccion: buscarColumnas(["direccion", "direccin", "domicilio", "domiciliocliente", "direccioncliente", "direccincliente"]),
     zona: buscarColumnas(["zona"]),
-    saldo: buscarColumnas(["saldo", "deuda", "cuentacorriente", "ctacte"]),
+    saldo: buscarColumnas(["saldo", "deuda", "cuentacorriente", "ctacte", "balance", "saldocuenta", "importe"]),
     listaPrecios: buscarColumnas(["lista", "listaprecios", "listadeprecios"]),
     vendedorAsignado: buscarColumnas(["vendedor", "vendedorasignado"]),
     observaciones: buscarColumnas(["observaciones", "observacion", "notas"]),
     horarioAtencion: buscarColumnas(["horario", "horarioatencion"]),
     email: buscarColumnas(["email", "mail"]),
     localidad: buscarColumnas(["localidad"]),
-    nombreFantasia: buscarColumnas(["nombrefantasia", "fantasia"]),
+    nombreFantasia: buscarColumnas(["nombrefantasia", "fantasia", "nombrecomercial"]),
     razonSocial: buscarColumnas(["razonsocial", "firma"])
   };
 }
 
+function limpiarPrevisualizacionImportacionClientes() {
+  importacionClientesPendiente = null;
+
+  if (dom.clientesImportacionPreview) {
+    dom.clientesImportacionPreview.classList.add("hidden");
+    dom.clientesImportacionPreview.innerHTML =
+      "Cargue un CSV para revisar altas, actualizaciones, errores y saldos antes de aplicar.";
+  }
+
+  if (dom.importarClientesButton) {
+    dom.importarClientesButton.textContent = "Revisar importacion";
+  }
+}
+
+function analizarImportacionClientes(texto) {
+  const textoLimpio =
+    texto.trim();
+
+  if (textoLimpio === "") {
+    throw new Error("Pegue clientes o seleccione un archivo CSV.");
+  }
+
+  const lineas =
+    textoLimpio.split(/\r?\n/).filter(function (linea) {
+      return linea.trim() !== "";
+    });
+  const separador =
+    detectarSeparadorImportacion(lineas[0] || "");
+  const primeraLinea =
+    parsearLineaCsvImportacion(lineas[0], separador);
+  const tieneEncabezado =
+    !Number.isInteger(Number(primeraLinea[0])) ||
+    normalizarEncabezadoImportacion(primeraLinea[0]).includes("cod");
+  const mapaColumnas =
+    tieneEncabezado ? crearMapaColumnasClientesImportacion(primeraLinea) : null;
+  const lineasDatos =
+    tieneEncabezado ? lineas.slice(1) : lineas;
+  const codigosVistos = new Set();
+  const codigosDuplicados = [];
+  const erroresDetalle = [];
+  const ejemplos = [];
+  let creados = 0;
+  let actualizados = 0;
+  let errores = 0;
+  let filasIgnoradas = 0;
+  let saldosInformados = 0;
+  let saldosPreservados = 0;
+
+  lineasDatos.forEach(function (linea, indiceLinea) {
+    const columnas =
+      parsearLineaCsvImportacion(linea, separador);
+
+    if (columnas.length < 2) {
+      errores += 1;
+      filasIgnoradas += 1;
+      erroresDetalle.push("Linea " + (indiceLinea + 1) + ": faltan columnas minimas.");
+      return;
+    }
+
+    const codigo =
+      Number(obtenerValorClienteImportacion(columnas, mapaColumnas, "codigo", 0));
+    const nombre =
+      obtenerValorClienteImportacion(columnas, mapaColumnas, "nombre", 1);
+    const saldoInformado =
+      importacionClienteTieneDato(columnas, mapaColumnas, "saldo", 5);
+
+    if (!datosClienteValidos(codigo, nombre)) {
+      errores += 1;
+      filasIgnoradas += 1;
+      erroresDetalle.push("Linea " + (indiceLinea + 1) + ": codigo o nombre invalido.");
+      return;
+    }
+
+    if (codigosVistos.has(codigo)) {
+      codigosDuplicados.push(codigo);
+      filasIgnoradas += 1;
+      return;
+    }
+
+    codigosVistos.add(codigo);
+
+    const clienteExistente =
+      clientes.find(function (cliente) {
+        return cliente.codigo === codigo;
+      });
+
+    if (clienteExistente) {
+      actualizados += 1;
+      if (!saldoInformado) {
+        saldosPreservados += 1;
+      }
+    } else {
+      creados += 1;
+    }
+
+    if (saldoInformado) {
+      saldosInformados += 1;
+    }
+
+    if (ejemplos.length < 5) {
+      ejemplos.push((clienteExistente ? "Actualiza" : "Crea") + " " + codigo + " - " + nombre);
+    }
+  });
+
+  const columnasDetectadas =
+    tieneEncabezado
+      ? primeraLinea.filter(function (columna) { return columna !== ""; })
+      : ["Sin encabezado: codigo, nombre, telefono, direccion, zona, saldo"];
+  const bloqueado =
+    codigosDuplicados.length > 0 || creados + actualizados === 0;
+
+  return {
+    firma: obtenerFirmaTextoSistema(texto),
+    separador: separador === "\t" ? "tabulacion" : separador,
+    tieneEncabezado: tieneEncabezado,
+    columnasDetectadas: columnasDetectadas,
+    totalFilas: lineasDatos.length,
+    creados: creados,
+    actualizados: actualizados,
+    errores: errores,
+    filasIgnoradas: filasIgnoradas,
+    saldosInformados: saldosInformados,
+    saldosPreservados: saldosPreservados,
+    codigosDuplicados: codigosDuplicados,
+    erroresDetalle: erroresDetalle,
+    ejemplos: ejemplos,
+    bloqueado: bloqueado
+  };
+}
+
+function renderizarPrevisualizacionImportacionClientes(analisis) {
+  if (!dom.clientesImportacionPreview) {
+    return;
+  }
+
+  const columnas =
+    analisis.columnasDetectadas.map(escaparTextoHtml).join("; ");
+  const ejemplos =
+    analisis.ejemplos.length > 0
+      ? analisis.ejemplos.map(function (ejemplo) {
+        return "<li>" + escaparTextoHtml(ejemplo) + "</li>";
+      }).join("")
+      : "<li>Sin filas validas para mostrar.</li>";
+  const errores =
+    analisis.erroresDetalle.slice(0, 5).map(function (error) {
+      return "<li>" + escaparTextoHtml(error) + "</li>";
+    }).join("");
+  const duplicados =
+    analisis.codigosDuplicados.length > 0
+      ? `<div class="import-preview-warning">Codigos duplicados en el CSV: ${escaparTextoHtml(analisis.codigosDuplicados.slice(0, 12).join(", "))}. La importacion queda bloqueada hasta corregirlos.</div>`
+      : "";
+
+  dom.clientesImportacionPreview.innerHTML = `
+    <h4>Previsualizacion de clientes</h4>
+    <div class="import-preview-grid">
+      <span>Total filas<strong>${analisis.totalFilas}</strong></span>
+      <span>Creados<strong>${analisis.creados}</strong></span>
+      <span>Actualizados<strong>${analisis.actualizados}</strong></span>
+      <span>Ignoradas<strong>${analisis.filasIgnoradas}</strong></span>
+      <span>Saldos leidos<strong>${analisis.saldosInformados}</strong></span>
+      <span>Saldos preservados<strong>${analisis.saldosPreservados}</strong></span>
+    </div>
+    <div class="import-preview-detail">
+      <span>Columnas detectadas</span>
+      <strong>${columnas || "Sin columnas"}</strong>
+    </div>
+    ${duplicados}
+    ${errores ? `<ul class="import-preview-list">${errores}</ul>` : ""}
+    <ul class="import-preview-list">${ejemplos}</ul>
+  `;
+  dom.clientesImportacionPreview.classList.remove("hidden");
+}
+function obtenerIndiceClienteImportacion(columnas, mapa, nombre, indiceAlternativo) {
+  if (mapa) {
+    return mapa[nombre] >= 0 ? mapa[nombre] : -1;
+  }
+
+  return indiceAlternativo;
+}
+
 function obtenerValorClienteImportacion(columnas, mapa, nombre, indiceAlternativo) {
   const indice =
-    mapa && mapa[nombre] >= 0 ? mapa[nombre] : indiceAlternativo;
+    obtenerIndiceClienteImportacion(columnas, mapa, nombre, indiceAlternativo);
 
   if (indice < 0 || indice >= columnas.length) {
     return "";
@@ -272,17 +453,99 @@ function obtenerValorClienteImportacion(columnas, mapa, nombre, indiceAlternativ
   return limpiarValorImportacion(columnas[indice]);
 }
 
+function importacionClienteTieneDato(columnas, mapa, nombre, indiceAlternativo) {
+  const indice =
+    obtenerIndiceClienteImportacion(columnas, mapa, nombre, indiceAlternativo);
+
+  if (indice < 0 || indice >= columnas.length) {
+    return false;
+  }
+
+  return limpiarValorImportacion(columnas[indice]) !== "";
+}
+
+function obtenerUsuarioActualMovimientoCuenta() {
+  if (typeof usuarioActual === "object" && usuarioActual) {
+    return {
+      codigo: usuarioActual.codigo || 0,
+      nombre: usuarioActual.nombre || usuarioActual.usuario || "Sistema",
+      rol: usuarioActual.rol || "-"
+    };
+  }
+
+  return {
+    codigo: 0,
+    nombre: "Sistema",
+    rol: "-"
+  };
+}
+
+function crearMovimientoCuentaCliente(datosMovimiento) {
+  const datos =
+    datosMovimiento || {};
+  const ahora =
+    new Date();
+  const usuarioMovimiento =
+    obtenerUsuarioActualMovimientoCuenta();
+  const saldoAnterior =
+    Number.isFinite(Number(datos.saldoAnterior)) ? Number(datos.saldoAnterior) : 0;
+  const importe =
+    Number(datos.importe) || 0;
+  const saldoPosterior =
+    Number.isFinite(Number(datos.saldoPosterior))
+      ? Number(datos.saldoPosterior)
+      : saldoAnterior + importe;
+  const referencia =
+    datos.referencia || datos.motivo || datos.tipo || "Movimiento de cuenta";
+
+  return {
+    codigoPago: datos.codigoPago || null,
+    fecha: datos.fecha || ahora.toLocaleDateString("es-AR"),
+    hora: datos.hora || ahora.toLocaleTimeString("es-AR", {
+      hour: "2-digit",
+      minute: "2-digit"
+    }),
+    fechaIso: datos.fechaIso || ahora.toISOString(),
+    tipo: datos.tipo || "Movimiento de cuenta",
+    motivo: datos.motivo || referencia,
+    referencia: referencia,
+    importe: importe,
+    medioPago: datos.medioPago || "CUENTA_CLIENTE",
+    saldoAnterior: saldoAnterior,
+    saldoPosterior: saldoPosterior,
+    usuario: usuarioMovimiento.nombre,
+    usuarioCodigo: usuarioMovimiento.codigo,
+    usuarioRol: usuarioMovimiento.rol
+  };
+}
+
+function convertirSaldoImportadoAFormatoSistema(valorImportado) {
+  const saldoOrigen =
+    obtenerNumeroImportacion(valorImportado, 0);
+
+  if (saldoOrigen === 0) {
+    return 0;
+  }
+
+  // En los listados externos: negativo = deuda, positivo = a favor.
+  // En LV Sistema: positivo = deuda, negativo = a favor.
+  return -saldoOrigen;
+}
+
 function crearHistorialSaldoInicialCliente(saldoInicial) {
   if (saldoInicial === 0) {
     return [];
   }
 
   return [
-    {
-      fecha: new Date().toLocaleDateString("es-AR"),
-      tipo: "Saldo inicial importado",
-      importe: saldoInicial
-    }
+    crearMovimientoCuentaCliente({
+      tipo: saldoInicial > 0 ? "Saldo inicial importado - deuda" : "Saldo inicial importado - a favor",
+      motivo: "Importacion CSV clientes",
+      referencia: "Saldo inicial importado",
+      importe: saldoInicial,
+      saldoAnterior: 0,
+      saldoPosterior: saldoInicial
+    })
   ];
 }
 
@@ -328,16 +591,19 @@ function importarClientesDesdeTextoPlano(texto) {
 
     const codigo = Number(obtenerValorClienteImportacion(columnas, mapaColumnas, "codigo", 0));
     const nombre = obtenerValorClienteImportacion(columnas, mapaColumnas, "nombre", 1);
-    const telefono = obtenerValorClienteImportacion(columnas, mapaColumnas, "telefono", 2) || "-";
-    const direccion = obtenerValorClienteImportacion(columnas, mapaColumnas, "direccion", 3) || "-";
-    const zona = asegurarZonaPorNombre(
-      obtenerValorClienteImportacion(columnas, mapaColumnas, "zona", 4) || "Sin zona"
-    );
+    const telefonoTexto = obtenerValorClienteImportacion(columnas, mapaColumnas, "telefono", 2);
+    const direccionTexto = obtenerValorClienteImportacion(columnas, mapaColumnas, "direccion", 3);
+    const zonaTexto = obtenerValorClienteImportacion(columnas, mapaColumnas, "zona", 4);
+    const saldoImportadoInformado =
+      importacionClienteTieneDato(columnas, mapaColumnas, "saldo", 5);
+    const saldoImportadoTexto =
+      saldoImportadoInformado
+        ? obtenerValorClienteImportacion(columnas, mapaColumnas, "saldo", 5)
+        : "";
     const saldoInicial =
-      obtenerNumeroImportacion(
-        obtenerValorClienteImportacion(columnas, mapaColumnas, "saldo", 5),
-        0
-      );
+      saldoImportadoInformado
+        ? convertirSaldoImportadoAFormatoSistema(saldoImportadoTexto)
+        : 0;
     const datosComerciales = {
       razonSocial: obtenerValorClienteImportacion(columnas, mapaColumnas, "razonSocial", -1),
       nombreFantasia: obtenerValorClienteImportacion(columnas, mapaColumnas, "nombreFantasia", -1),
@@ -363,6 +629,13 @@ function importarClientesDesdeTextoPlano(texto) {
       clientes.find(function (cliente) {
         return cliente.codigo === codigo;
       });
+    const telefono = telefonoTexto || (clienteExistente ? clienteExistente.telefono || "-" : "-");
+    const direccion = direccionTexto || (clienteExistente ? clienteExistente.direccion || "-" : "-");
+    const zona = zonaTexto !== ""
+      ? asegurarZonaPorNombre(zonaTexto)
+      : clienteExistente
+        ? clienteExistente.zona || asegurarZonaPorNombre("Sin zona")
+        : asegurarZonaPorNombre("Sin zona");
 
     if (clienteExistente) {
       const saldoAnterior =
@@ -371,8 +644,14 @@ function importarClientesDesdeTextoPlano(texto) {
       clienteExistente.telefono = telefono;
       clienteExistente.direccion = direccion;
       clienteExistente.zona = zona;
-      clienteExistente.saldo = saldoInicial;
-      Object.assign(clienteExistente, datosComerciales);
+      if (saldoImportadoInformado) {
+        clienteExistente.saldo = saldoInicial;
+      }
+      Object.keys(datosComerciales).forEach(function (campoComercial) {
+        if (datosComerciales[campoComercial] !== "" && datosComerciales[campoComercial] !== 0) {
+          clienteExistente[campoComercial] = datosComerciales[campoComercial];
+        }
+      });
 
       if (typeof clienteExistente.activo !== "boolean") {
         clienteExistente.activo = true;
@@ -382,12 +661,17 @@ function importarClientesDesdeTextoPlano(texto) {
         clienteExistente.historial = [];
       }
 
-      if (saldoAnterior !== saldoInicial) {
-        clienteExistente.historial.push({
-          fecha: new Date().toLocaleDateString("es-AR"),
-          tipo: "Ajuste de saldo por importacion",
-          importe: saldoInicial - saldoAnterior
-        });
+      if (saldoImportadoInformado && saldoAnterior !== saldoInicial) {
+        clienteExistente.historial.push(
+          crearMovimientoCuentaCliente({
+            tipo: "Ajuste de saldo por importacion",
+            motivo: "Importacion CSV clientes",
+            referencia: "Actualizacion de saldo importado",
+            importe: saldoInicial - saldoAnterior,
+            saldoAnterior: saldoAnterior,
+            saldoPosterior: saldoInicial
+          })
+        );
       }
       actualizados += 1;
       return;
@@ -396,12 +680,12 @@ function importarClientesDesdeTextoPlano(texto) {
     clientes.push({
       codigo: codigo,
       nombre: nombre,
-      saldo: saldoInicial,
+      saldo: saldoImportadoInformado ? saldoInicial : 0,
       telefono: telefono,
       direccion: direccion,
       zona: zona,
       activo: true,
-      historial: crearHistorialSaldoInicialCliente(saldoInicial),
+      historial: saldoImportadoInformado ? crearHistorialSaldoInicialCliente(saldoInicial) : [],
       ...datosComerciales
     });
 
@@ -454,8 +738,49 @@ async function importarClientesDesdeTexto() {
       archivo
         ? await leerArchivoProductosComoTexto(archivo)
         : dom.clientesImportacionTexto.value;
+    const analisis =
+      analizarImportacionClientes(texto);
+
+    if (!importacionClientesPendiente || importacionClientesPendiente.firma !== analisis.firma) {
+      importacionClientesPendiente = analisis;
+      renderizarPrevisualizacionImportacionClientes(analisis);
+      dom.importarClientesButton.textContent = analisis.bloqueado
+        ? "Corrija el CSV y vuelva a revisar"
+        : "Confirmar importacion";
+      actualizarEstadoImportacionClientes(
+        analisis.bloqueado
+          ? "Revise la previsualizacion. Hay errores que bloquean la importacion."
+          : "Previsualizacion lista. Revise el resumen y vuelva a tocar confirmar para aplicar.",
+        analisis.bloqueado ? "sync-error" : "sync-working"
+      );
+      return;
+    }
+
+    if (analisis.bloqueado) {
+      renderizarPrevisualizacionImportacionClientes(analisis);
+      actualizarEstadoImportacionClientes("La importacion esta bloqueada hasta corregir el CSV.", "sync-error");
+      return;
+    }
+
+    const confirmar =
+      confirm(
+        "Aplicar importacion de clientes?\n" +
+        "Creados: " + analisis.creados + " | Actualizados: " + analisis.actualizados + " | Ignoradas: " + analisis.filasIgnoradas + "\n" +
+        "Antes se descargara un respaldo automatico."
+      );
+
+    if (!confirmar) {
+      actualizarEstadoImportacionClientes("Importacion cancelada. La previsualizacion sigue disponible.", "sync-working");
+      return;
+    }
+
+    if (!generarRespaldoAutomaticoAntesDeOperacion("importacion-clientes")) {
+      actualizarEstadoImportacionClientes("No se aplico la importacion porque no se pudo generar el respaldo.", "sync-error");
+      return;
+    }
 
     importarClientesDesdeTextoPlano(texto);
+    limpiarPrevisualizacionImportacionClientes();
   } catch (error) {
     console.error("Error importando clientes:", error);
     actualizarEstadoImportacionClientes(error.message || "No se pudo importar clientes.", "sync-error");
@@ -634,6 +959,12 @@ function exportarClientesCsv() {
       "Observaciones"
     ],
     filas
+  );
+
+  registrarAuditoria(
+    "Clientes",
+    "Exporto clientes CSV",
+    "Registros exportados: " + clientesFiltrados.length
   );
 }
 
@@ -1221,18 +1552,20 @@ async function aprobarCobranzaVendedor(idSupabase) {
     saldoAnterior - importe;
   const historialAnterior =
     Array.isArray(cliente.historial) ? cliente.historial.slice() : [];
-  const movimientoCuenta = {
+  const movimientoCuenta = crearMovimientoCuentaCliente({
     codigoPago: pago.codigoPago || obtenerSiguienteCodigoPagoCliente(cliente),
     fecha: pago.fecha || new Date().toLocaleDateString("es-AR"),
     tipo: pago.observacion.replace(
       PREFIJO_COBRANZA_PENDIENTE_ADMIN,
       PREFIJO_COBRANZA_APROBADA_ADMIN
     ),
+    motivo: "Cobranza de vendedor aprobada",
+    referencia: "Cobranza " + (pago.codigoPago || pago.idSupabase || "-"),
     importe: -importe,
     medioPago: "PAGO_CLIENTE",
     saldoAnterior: saldoAnterior,
     saldoPosterior: saldoPosterior
-  };
+  });
 
   let pagoMarcadoAprobado = false;
 
@@ -1386,6 +1719,12 @@ function exportarCuentaClientesCsv() {
       "Movimientos"
     ],
     filas
+  );
+
+  registrarAuditoria(
+    "Cuenta corriente",
+    "Exporto saldos CSV",
+    "Clientes exportados: " + clientesFiltrados.length
   );
 }
 
@@ -2162,14 +2501,16 @@ function registrarNotaCreditoDesdeFormulario(event) {
   const saldoClienteAnterior =
     Number(cliente.saldo) || 0;
 
-  const movimientoCuenta = {
+  const movimientoCuenta = crearMovimientoCuentaCliente({
     codigoPago: obtenerSiguienteCodigoPagoCliente(cliente),
-    fecha: new Date().toLocaleDateString("es-AR"),
     tipo: "Nota de credito pedido #" + (pedido.numero || pedido.id) + " - " + motivo,
+    motivo: motivo,
+    referencia: "Pedido #" + (pedido.numero || pedido.id),
     importe: -importe,
+    medioPago: "NOTA_CREDITO",
     saldoAnterior: saldoClienteAnterior,
     saldoPosterior: saldoClienteAnterior - importe
-  };
+  });
 
   cliente.saldo =
     movimientoCuenta.saldoPosterior;
@@ -2517,14 +2858,16 @@ async function registrarPago(codigo, importeDirecto) {
       cliente.historial = [];
     }
 
-    const movimientoCuenta = {
+    const movimientoCuenta = crearMovimientoCuentaCliente({
       codigoPago: obtenerSiguienteCodigoPagoCliente(cliente),
-      fecha: new Date().toLocaleDateString("es-AR"),
       tipo: "Pago recibido",
+      motivo: "Pago manual registrado en administracion",
+      referencia: "Cliente " + cliente.codigo,
       importe: -importeAplicado,
+      medioPago: "PAGO_CLIENTE",
       saldoAnterior: saldoAntesDelPago,
       saldoPosterior: saldoDespuesDelPago
-    };
+    });
 
     cliente.saldo =
       movimientoCuenta.saldoPosterior;

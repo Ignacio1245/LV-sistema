@@ -10,7 +10,7 @@ function obtenerItemsParaImprimirPedido(pedido) {
         <td>${escaparTextoHtml(item.producto.codigo)}</td>
         <td>${escaparTextoHtml(item.producto.nombre)}</td>
         <td>${escaparTextoHtml(item.cantidad)}</td>
-        <td>${descuentoTexto}</td>
+        <td>${escaparTextoHtml(descuentoTexto)}</td>
         <td>${formatearDinero(typeof item.precioUnitario === "number" ? item.precioUnitario : item.producto.precio)}</td>
         <td>${formatearDinero(item.subtotal)}</td>
       </tr>
@@ -89,6 +89,31 @@ function obtenerQrComprobanteHtml(totalComprobante) {
     `;
 }
 
+function obtenerUrlCatalogoPublico() {
+    const origen =
+        window.location && window.location.origin
+            ? window.location.origin
+            : "https://lv-sistema.vercel.app";
+
+    return new URL("/catalogo", origen).toString();
+}
+
+function obtenerQrCatalogoPublicoHtml() {
+    const urlCatalogoPublico =
+        obtenerUrlCatalogoPublico();
+    const textoQr =
+        encodeURIComponent(urlCatalogoPublico);
+
+    return `
+      <div class="qr-box qr-box-catalogo">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${textoQr}" alt="QR catalogo">
+        <strong>Catalogo</strong>
+        <span>Escanea para cargar otro pedido</span>
+        <small>${escaparTextoHtml(urlCatalogoPublico)}</small>
+      </div>
+    `;
+}
+
 function imprimirPedido(pedidoParaImprimir) {
     const observacionesHtml =
         pedidoParaImprimir.observaciones.length === 0
@@ -131,7 +156,8 @@ function imprimirPedido(pedidoParaImprimir) {
         .total { margin-top: 20px; text-align: right; font-size: 24px; font-weight: 800; }
         .box { border: 1px solid #d8e1ec; border-radius: 8px; padding: 14px; margin-top: 18px; }
         .brand { text-align: right; }
-        .qr-box { display: grid; gap: 6px; justify-items: center; border: 1px solid #d8e1ec; border-radius: 8px; padding: 10px; margin-top: 10px; max-width: 160px; }
+        .qr-row { display: flex; align-items: flex-start; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+        .qr-box { display: grid; gap: 6px; justify-items: center; border: 1px solid #d8e1ec; border-radius: 8px; padding: 10px; max-width: 160px; }
         .qr-box img { width: 120px; height: 120px; }
         .qr-box span { color: #667085; font-size: 12px; text-align: center; word-break: break-word; }
         .qr-box b { color: #102033; font-size: 15px; }
@@ -150,14 +176,19 @@ function imprimirPedido(pedidoParaImprimir) {
           <span class="muted">${escaparTextoHtml(subtituloComprobante)}</span><br>
           ${CONFIG.cuit ? `<span class="muted">CUIT: ${escaparTextoHtml(CONFIG.cuit)}</span><br>` : ""}
           ${CONFIG.whatsapp ? `<span class="muted">WhatsApp: ${escaparTextoHtml(CONFIG.whatsapp)}</span><br>` : ""}
-          ${obtenerQrComprobanteHtml(pedidoParaImprimir.total)}
+          <div class="qr-row">
+            ${obtenerQrCatalogoPublicoHtml()}
+            ${obtenerQrComprobanteHtml(pedidoParaImprimir.total)}
+          </div>
         </div>
       </div>
 
       <div class="box">
         <strong>Cliente:</strong> ${escaparTextoHtml(pedidoParaImprimir.cliente.codigo)} - ${escaparTextoHtml(pedidoParaImprimir.cliente.nombre)}<br>
         <strong>Direccion:</strong> ${escaparTextoHtml(pedidoParaImprimir.cliente.direccion)}<br>
-        <strong>Forma de pago:</strong> ${escaparTextoHtml(obtenerTextoFormaPago(pedidoParaImprimir.formaPago))}
+        <strong>Forma de pago:</strong> ${escaparTextoHtml(obtenerTextoFormaPago(pedidoParaImprimir.formaPago))}<br>
+        <strong>Vendedor:</strong> ${escaparTextoHtml(pedidoParaImprimir.vendedor || "Sin vendedor")}<br>
+        <strong>Estado de cobro:</strong> ${escaparTextoHtml(pedidoParaImprimir.estadoCobro || "-")}
       </div>
 
       <table>
@@ -219,7 +250,9 @@ function imprimirPedidoActual() {
         total: calcularTotalPedido(),
         formaPago: obtenerFormaPagoActual(),
         observaciones: pedidoActual.observaciones,
-        fecha: new Date().toLocaleDateString("es-AR")
+        fecha: new Date().toLocaleDateString("es-AR"),
+        vendedor: usuarioActual ? usuarioActual.nombre : "Actual",
+        estadoCobro: "-"
     };
 
     imprimirPedido(pedidoParaImprimir);
@@ -244,6 +277,8 @@ function imprimirPedidoGuardado(id) {
         formaPago: pedido.formaPago || "CUENTA_CORRIENTE",
         observaciones: pedido.observaciones || [],
         notaCredito: pedido.notaCredito || [],
-        fecha: pedido.fecha || new Date().toLocaleDateString("es-AR")
+        fecha: pedido.fecha || new Date().toLocaleDateString("es-AR"),
+        vendedor: pedido.vendedor || "Sin vendedor",
+        estadoCobro: pedido.estadoCobro || "-"
     });
 }

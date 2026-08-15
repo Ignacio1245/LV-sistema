@@ -38,6 +38,193 @@ as $$
   );
 $$;
 
+create or replace function public.usuario_rol_actual()
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(upper(trim(roles.nombre)), '')
+  from usuarios
+  join roles on roles.id = usuarios.rol_id
+  where lower(trim(usuarios.email)) = lower(trim(coalesce(auth.jwt() ->> 'email', '')))
+    and usuarios.activo = true
+    and roles.activo = true
+  limit 1;
+$$;
+
+create or replace function public.usuario_es_vendedor_sistema()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.usuario_rol_actual() = 'VENDEDOR';
+$$;
+
+create or replace function public.texto_corresponde_usuario_vendedor(valor text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from usuarios
+    join roles on roles.id = usuarios.rol_id
+    left join vendedores on vendedores.activo = true
+      and (
+        lower(trim(vendedores.email)) = lower(trim(usuarios.email))
+        or (
+          trim(coalesce(vendedores.email, '')) = ''
+          and lower(trim(vendedores.nombre)) = lower(trim(usuarios.nombre))
+        )
+      )
+    where lower(trim(usuarios.email)) = lower(trim(coalesce(auth.jwt() ->> 'email', '')))
+      and usuarios.activo = true
+      and roles.activo = true
+      and upper(trim(roles.nombre)) = 'VENDEDOR'
+      and length(trim(coalesce(valor, ''))) > 0
+      and lower(trim(coalesce(valor, ''))) in (
+        lower(trim(coalesce(usuarios.nombre, ''))),
+        lower(trim(coalesce(usuarios.email, ''))),
+        lower(trim(coalesce(vendedores.nombre, ''))),
+        lower(trim(coalesce(vendedores.email, '')))
+      )
+  );
+$$;
+
+create or replace function public.usuario_puede_acceder_vendedor(vendedor_nombre text, vendedor_email text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when public.usuario_es_vendedor_sistema() then
+      public.usuario_tiene_permiso('ventas')
+      and (
+        public.texto_corresponde_usuario_vendedor(vendedor_nombre)
+        or public.texto_corresponde_usuario_vendedor(vendedor_email)
+      )
+    else
+      public.usuario_sistema_activo()
+  end;
+$$;
+create or replace function public.usuario_puede_acceder_cliente(vendedor_asignado text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when public.usuario_es_vendedor_sistema() then
+      public.usuario_tiene_permiso('ventas')
+      and public.texto_corresponde_usuario_vendedor(vendedor_asignado)
+    else
+      public.usuario_tiene_permiso('clientes')
+      or public.usuario_tiene_permiso('ventas')
+      or public.usuario_tiene_permiso('cuentaCorriente')
+      or public.usuario_tiene_permiso('informes')
+  end;
+$$;
+
+create or replace function public.usuario_puede_escribir_cliente(vendedor_asignado text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when public.usuario_es_vendedor_sistema() then
+      public.usuario_tiene_permiso('ventas')
+      and public.texto_corresponde_usuario_vendedor(vendedor_asignado)
+    else
+      public.usuario_tiene_permiso('clientes')
+      or public.usuario_tiene_permiso('cuentaCorriente')
+      or public.usuario_tiene_permiso('ventas')
+  end;
+$$;
+
+create or replace function public.usuario_puede_acceder_pedido(pedido_vendedor text, pedido_cliente_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when public.usuario_es_vendedor_sistema() then
+      public.usuario_tiene_permiso('ventas')
+      and (
+        public.texto_corresponde_usuario_vendedor(pedido_vendedor)
+        or exists (
+          select 1
+          from clientes
+          where clientes.id = pedido_cliente_id
+            and public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+        )
+      )
+    else
+      public.usuario_tiene_permiso('ventas')
+      or public.usuario_tiene_permiso('cuentaCorriente')
+      or public.usuario_tiene_permiso('informes')
+  end;
+$$;
+
+create or replace function public.usuario_puede_escribir_pedido(pedido_vendedor text, pedido_cliente_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when public.usuario_es_vendedor_sistema() then
+      public.usuario_tiene_permiso('ventas')
+      and (
+        public.texto_corresponde_usuario_vendedor(pedido_vendedor)
+        or exists (
+          select 1
+          from clientes
+          where clientes.id = pedido_cliente_id
+            and public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+        )
+      )
+    else
+      public.usuario_tiene_permiso('ventas')
+      or public.usuario_tiene_permiso('cuentaCorriente')
+  end;
+$$;
+
+create or replace function public.usuario_puede_acceder_pago_cliente(pago_cliente_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when public.usuario_es_vendedor_sistema() then
+      public.usuario_tiene_permiso('ventas')
+      and exists (
+        select 1
+        from clientes
+        where clientes.id = pago_cliente_id
+          and public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+      )
+    else
+      public.usuario_tiene_permiso('cuentaCorriente')
+      or public.usuario_tiene_permiso('clientes')
+      or public.usuario_tiene_permiso('ventas')
+  end;
+$$;
 drop policy if exists "trabajo autenticado roles" on roles;
 drop policy if exists "trabajo autenticado usuarios" on usuarios;
 drop policy if exists "trabajo autenticado configuracion" on configuracion_empresa;
@@ -159,14 +346,14 @@ create policy "compras escritura permiso" on compras
 for all to authenticated using (public.usuario_tiene_permiso('compras')) with check (public.usuario_tiene_permiso('compras'));
 
 create policy "vendedores lectura usuario activo" on vendedores
-for select to authenticated using (public.usuario_sistema_activo());
+for select to authenticated using (public.usuario_puede_acceder_vendedor(nombre, email));
 create policy "vendedores escritura configuracion" on vendedores
 for all to authenticated using (public.usuario_tiene_permiso('configuracion')) with check (public.usuario_tiene_permiso('configuracion'));
 
 create policy "clientes lectura permiso" on clientes
-for select to authenticated using (public.usuario_tiene_permiso('clientes') or public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('cuentaCorriente'));
+for select to authenticated using (public.usuario_puede_acceder_cliente(vendedor_asignado));
 create policy "clientes escritura permiso" on clientes
-for all to authenticated using (public.usuario_tiene_permiso('clientes') or public.usuario_tiene_permiso('cuentaCorriente') or public.usuario_tiene_permiso('ventas')) with check (public.usuario_tiene_permiso('clientes') or public.usuario_tiene_permiso('cuentaCorriente') or public.usuario_tiene_permiso('ventas'));
+for all to authenticated using (public.usuario_puede_escribir_cliente(vendedor_asignado)) with check (public.usuario_puede_escribir_cliente(vendedor_asignado));
 
 create policy "productos lectura usuario activo" on productos
 for select to authenticated using (public.usuario_sistema_activo());
@@ -179,19 +366,19 @@ create policy "producto precios escritura productos" on producto_precios
 for all to authenticated using (public.usuario_tiene_permiso('productos')) with check (public.usuario_tiene_permiso('productos'));
 
 create policy "pedidos lectura permiso" on pedidos
-for select to authenticated using (public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('cuentaCorriente') or public.usuario_tiene_permiso('informes'));
+for select to authenticated using (public.usuario_puede_acceder_pedido(vendedor, cliente_id));
 create policy "pedidos escritura ventas" on pedidos
-for all to authenticated using (public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('cuentaCorriente')) with check (public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('cuentaCorriente'));
+for all to authenticated using (public.usuario_puede_escribir_pedido(vendedor, cliente_id)) with check (public.usuario_puede_escribir_pedido(vendedor, cliente_id));
 
 create policy "pedido items lectura permiso" on pedido_items
-for select to authenticated using (public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('cuentaCorriente') or public.usuario_tiene_permiso('informes'));
+for select to authenticated using (exists (select 1 from pedidos where pedidos.id = pedido_items.pedido_id and public.usuario_puede_acceder_pedido(pedidos.vendedor, pedidos.cliente_id)));
 create policy "pedido items escritura ventas" on pedido_items
-for all to authenticated using (public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('cuentaCorriente')) with check (public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('cuentaCorriente'));
+for all to authenticated using (exists (select 1 from pedidos where pedidos.id = pedido_items.pedido_id and public.usuario_puede_escribir_pedido(pedidos.vendedor, pedidos.cliente_id))) with check (exists (select 1 from pedidos where pedidos.id = pedido_items.pedido_id and public.usuario_puede_escribir_pedido(pedidos.vendedor, pedidos.cliente_id)));
 
 create policy "pagos cliente lectura permiso" on pagos_cliente
-for select to authenticated using (public.usuario_tiene_permiso('cuentaCorriente') or public.usuario_tiene_permiso('clientes') or public.usuario_tiene_permiso('ventas'));
+for select to authenticated using (public.usuario_puede_acceder_pago_cliente(cliente_id));
 create policy "pagos cliente escritura permiso" on pagos_cliente
-for all to authenticated using (public.usuario_tiene_permiso('cuentaCorriente') or public.usuario_tiene_permiso('ventas')) with check (public.usuario_tiene_permiso('cuentaCorriente') or public.usuario_tiene_permiso('ventas'));
+for all to authenticated using (public.usuario_puede_acceder_pago_cliente(cliente_id)) with check (public.usuario_puede_acceder_pago_cliente(cliente_id));
 
 create policy "movimientos stock lectura permiso" on movimientos_stock
 for select to authenticated using (public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('productos') or public.usuario_tiene_permiso('ventas'));

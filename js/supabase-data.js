@@ -28,7 +28,8 @@ function obtenerNombreTipoSincronizacion(tipo) {
     clientes: "clientes y cuenta corriente",
     productos: "productos",
     pedidos: "pedidos",
-    administracion: "usuarios y configuracion"
+    administracion: "usuarios y configuracion",
+    auditoria: "auditoria"
   };
 
   return nombresPorTipo[tipo] || tipo;
@@ -161,11 +162,7 @@ function pausarSincronizacionAutomatica(accion) {
 }
 
 function programarSincronizacionAutomatica(tipo, opciones) {
-  if (
-    !sincronizacionAutomaticaHabilitada ||
-    sincronizacionAutomaticaPausada ||
-    !haySesionSupabaseParaSincronizar()
-  ) {
+  if (!sincronizacionAutomaticaHabilitada || sincronizacionAutomaticaPausada) {
     return;
   }
 
@@ -175,6 +172,10 @@ function programarSincronizacionAutomatica(tipo, opciones) {
 
   clearTimeout(temporizadoresSincronizacion[tipo]);
   marcarSincronizacionPendiente(tipo);
+
+  if (!haySesionSupabaseParaSincronizar()) {
+    return;
+  }
 
   temporizadoresSincronizacion[tipo] = setTimeout(function () {
     ejecutarSincronizacionAutomatica(tipo);
@@ -201,6 +202,10 @@ async function sincronizarTipoLocalConSupabase(tipo) {
 
   if (tipo === "administracion") {
     await sincronizarAdministracionLocalConSupabase();
+  }
+
+  if (tipo === "auditoria") {
+    await sincronizarAuditoriaLocalConSupabase();
   }
 }
 
@@ -289,8 +294,25 @@ function informarOperacionSupabase(mensaje, tipo) {
   }
 }
 
+function marcarOperacionSupabasePendiente(tipo, mensaje) {
+  marcarSincronizacionPendiente(tipo);
+  informarOperacionSupabase(mensaje, "sync-error");
+}
+
+function informarOperacionSinSesionSupabase(tipo) {
+  marcarOperacionSupabasePendiente(
+    tipo,
+    "Sin sesion Supabase. Cambio local pendiente de subir: " + obtenerNombreTipoSincronizacion(tipo) + "."
+  );
+}
+
 async function guardarClienteOperacionSupabase(cliente) {
-  if (!puedeGuardarOperacionEnSupabase() || !cliente) {
+  if (!cliente) {
+    return null;
+  }
+
+  if (!puedeGuardarOperacionEnSupabase()) {
+    informarOperacionSinSesionSupabase("clientes");
     return null;
   }
 
@@ -314,9 +336,9 @@ async function guardarClienteOperacionSupabase(cliente) {
     return clienteGuardado;
   } catch (error) {
     console.error("No se pudo guardar cliente en Supabase:", error);
-    informarOperacionSupabase(
-      "No se pudo guardar cliente en Supabase: " + (error.message || "error"),
-      "sync-error"
+    marcarOperacionSupabasePendiente(
+      "clientes",
+      "No se pudo guardar cliente en Supabase: " + (error.message || "error")
     );
     return null;
   }
@@ -345,7 +367,12 @@ async function eliminarClienteOperacionSupabase(cliente) {
 }
 
 async function guardarProductoOperacionSupabase(producto) {
-  if (!puedeGuardarOperacionEnSupabase() || !producto) {
+  if (!producto) {
+    return null;
+  }
+
+  if (!puedeGuardarOperacionEnSupabase()) {
+    informarOperacionSinSesionSupabase("productos");
     return null;
   }
 
@@ -369,9 +396,9 @@ async function guardarProductoOperacionSupabase(producto) {
     return productoGuardado;
   } catch (error) {
     console.error("No se pudo guardar producto en Supabase:", error);
-    informarOperacionSupabase(
-      "No se pudo guardar producto en Supabase: " + (error.message || "error"),
-      "sync-error"
+    marcarOperacionSupabasePendiente(
+      "productos",
+      "No se pudo guardar producto en Supabase: " + (error.message || "error")
     );
     return null;
   }
@@ -484,7 +511,12 @@ async function guardarPedidoSupabaseConReintento(pedido) {
 }
 
 async function guardarPedidoOperacionSupabase(pedido) {
-  if (!puedeGuardarOperacionEnSupabase() || !pedido) {
+  if (!pedido) {
+    return null;
+  }
+
+  if (!puedeGuardarOperacionEnSupabase()) {
+    informarOperacionSinSesionSupabase("pedidos");
     return null;
   }
 
@@ -516,9 +548,9 @@ async function guardarPedidoOperacionSupabase(pedido) {
     return pedidoGuardado;
   } catch (error) {
     console.error("No se pudo guardar pedido en Supabase:", error);
-    informarOperacionSupabase(
-      "No se pudo guardar pedido en Supabase: " + (error.message || "error"),
-      "sync-error"
+    marcarOperacionSupabasePendiente(
+      "pedidos",
+      "No se pudo guardar pedido en Supabase: " + (error.message || "error")
     );
     return null;
   }
@@ -556,7 +588,12 @@ async function guardarProductosPedidoOperacionSupabase(pedido) {
 }
 
 async function guardarMovimientoCuentaOperacionSupabase(cliente, movimiento) {
-  if (!puedeGuardarOperacionEnSupabase() || !cliente || !movimiento) {
+  if (!cliente || !movimiento) {
+    return null;
+  }
+
+  if (!puedeGuardarOperacionEnSupabase()) {
+    informarOperacionSinSesionSupabase("clientes");
     return null;
   }
 
@@ -580,9 +617,9 @@ async function guardarMovimientoCuentaOperacionSupabase(cliente, movimiento) {
     return movimientoGuardado;
   } catch (error) {
     console.error("No se pudo guardar cuenta corriente en Supabase:", error);
-    informarOperacionSupabase(
-      "No se pudo guardar cuenta corriente en Supabase: " + (error.message || "error"),
-      "sync-error"
+    marcarOperacionSupabasePendiente(
+      "clientes",
+      "No se pudo guardar cuenta corriente en Supabase: " + (error.message || "error")
     );
     return null;
   }
@@ -773,14 +810,30 @@ async function eliminarProveedorOperacionSupabase(proveedor) {
 }
 
 async function guardarAuditoriaOperacionSupabase(registro) {
-  if (!puedeGuardarOperacionEnSupabase() || !registro) {
+  if (!registro) {
+    return null;
+  }
+
+  if (!puedeGuardarOperacionEnSupabase()) {
+    marcarSincronizacionPendiente("auditoria");
     return null;
   }
 
   try {
-    return await guardarAuditoriaSupabase(registro);
+    const registroGuardado =
+      await guardarAuditoriaSupabase(registro);
+
+    if (registroGuardado && registroGuardado.idSupabase) {
+      registro.idSupabase =
+        registroGuardado.idSupabase;
+      registro.sincronizadoSupabase = true;
+      guardarAuditoria();
+    }
+
+    return registroGuardado;
   } catch (error) {
     console.warn("No se pudo guardar auditoria en Supabase:", error);
+    marcarSincronizacionPendiente("auditoria");
     return null;
   }
 }
@@ -968,21 +1021,70 @@ async function cargarTodoDesdeSupabaseAutomatico() {
   });
 }
 
+function obtenerFechaOrdenAuditoria(registro) {
+  const fecha =
+    Date.parse(registro && registro.fechaIso ? registro.fechaIso : "");
+
+  return Number.isFinite(fecha) ? fecha : 0;
+}
+
 async function cargarAuditoriaDesdeSupabase() {
   try {
+    const auditoriaLocalPendiente =
+      Array.isArray(auditoria)
+        ? auditoria.filter(function (registro) {
+          return registro && !registro.idSupabase;
+        })
+        : [];
     const auditoriaSupabase =
       await obtenerAuditoriaSupabase();
 
-    auditoria = auditoriaSupabase;
+    auditoria = auditoriaSupabase
+      .concat(auditoriaLocalPendiente)
+      .sort(function (a, b) {
+        return obtenerFechaOrdenAuditoria(b) - obtenerFechaOrdenAuditoria(a);
+      })
+      .slice(0, 500);
     guardarAuditoria();
     renderizarAuditoria();
     actualizarDashboard();
+
+    if (auditoriaLocalPendiente.length > 0) {
+      marcarSincronizacionPendiente("auditoria");
+    }
 
     return crearResultadoCargaSupabase("auditoria", auditoria.length);
   } catch (error) {
     console.error("Error cargando auditoria desde Supabase:", error);
     return crearResultadoCargaSupabase("auditoria", 0, error);
   }
+}
+
+async function sincronizarAuditoriaLocalConSupabase() {
+  let registrosSincronizados = 0;
+
+  for (const registro of auditoria) {
+    if (!registro || registro.idSupabase) {
+      continue;
+    }
+
+    const registroGuardado =
+      await guardarAuditoriaSupabase(registro);
+
+    if (registroGuardado && registroGuardado.idSupabase) {
+      registro.idSupabase =
+        registroGuardado.idSupabase;
+      registro.sincronizadoSupabase = true;
+    }
+
+    registrosSincronizados += 1;
+  }
+
+  guardarAuditoria();
+  renderizarAuditoria();
+  actualizarDashboard();
+
+  return registrosSincronizados;
 }
 
 async function cargarProductosDesdeSupabase() {

@@ -1,4 +1,5 @@
 let productoEditando = null;
+let importacionProductosPendiente = null;
 
 function obtenerVistaProductosActual() {
     return dom.productosVistaInput ? dom.productosVistaInput.value : "descripcion";
@@ -17,6 +18,7 @@ function renderizarEncabezadoProductos() {
         stock: ["Codigo", "Producto", "Stock", "Minimo", "Estado", "Acciones"],
         stock_valorizado: ["Codigo", "Producto", "Stock", "Precio", "Valor stock", "Acciones"],
         margenes: ["Codigo", "Producto", "Compra", "Margenes", "Listas", "Acciones"],
+        revision_precios: ["Codigo", "Producto", "Problema", "Precio", "Acciones"],
         proveedores: ["Codigo", "Producto", "Proveedor", "Alternativo", "Rubro", "Acciones"]
     };
     const columnas =
@@ -47,6 +49,59 @@ function obtenerTextoMargenesProducto(producto) {
             return lista + ": " + (Number(margenes[lista]) || 0) + "%";
         })
         .join(" | ");
+}
+
+function obtenerProblemasPrecioProducto(producto) {
+    const problemas = [];
+
+    if (!producto) {
+        return ["producto invalido"];
+    }
+
+    const precioListaUno =
+        Number(producto.precio) ||
+        Number(obtenerValorPorNombreLista(producto.preciosLista, "Lista 1")) ||
+        0;
+    const precioCompra =
+        Number(producto.precioCompra) || 0;
+    const listasActivas =
+        listasPrecios.filter(listaPrecioActiva);
+
+    if (precioListaUno <= 0) {
+        problemas.push("Lista 1 sin precio");
+    }
+
+    if (listasActivas.length === 0) {
+        problemas.push("sin listas activas");
+        return problemas;
+    }
+
+    listasActivas.forEach(function (lista) {
+        const nombreNormalizado =
+            normalizarNombreListaPrecio(lista.nombre);
+        const esListaUno =
+            nombreNormalizado === "lista1";
+        const precioGuardado =
+            Number(obtenerValorPorNombreLista(producto.preciosLista, lista.nombre)) || 0;
+        const listaTieneMargen =
+            (Number(lista.porcentaje) || 0) > 0;
+        const productoTieneBaseParaCalcular =
+            precioCompra > 0 || precioListaUno > 0;
+
+        if (esListaUno) {
+            return;
+        }
+
+        if (precioGuardado <= 0 && productoTieneBaseParaCalcular && listaTieneMargen) {
+            problemas.push(lista.nombre + " sin calcular");
+        }
+    });
+
+    return [...new Set(problemas)].slice(0, 5);
+}
+
+function productoTienePreciosARevisar(producto) {
+    return productoActivo(producto) && obtenerProblemasPrecioProducto(producto).length > 0;
 }
 
 function obtenerSiguienteCodigoProducto() {
@@ -410,6 +465,12 @@ function exportarListaPreciosCsv() {
         "lista-precios.csv",
         ["Codigo", "Producto", "Rubro", "Marca"].concat(listas),
         filas
+    );
+
+    registrarAuditoria(
+        "Productos",
+        "Exporto lista precios CSV",
+        "Productos exportados: " + listaPreciosGeneradaActual.length
     );
 }
 
@@ -936,7 +997,7 @@ function renderizarPanelPreciosProductos() {
     renderizarHistorialPreciosProductos();
 }
 
-function aplicarActualizacionMasivaPrecios(event) {
+async function aplicarActualizacionMasivaPrecios(event) {
     event.preventDefault();
 
     if (!tienePermiso("productos")) {
@@ -970,6 +1031,10 @@ function aplicarActualizacionMasivaPrecios(event) {
         );
 
     if (!confirmar) {
+        return;
+    }
+
+    if (!generarRespaldoAutomaticoAntesDeOperacion("actualizacion-masiva-precios")) {
         return;
     }
 
@@ -1042,6 +1107,12 @@ function aplicarActualizacionMasivaPrecios(event) {
         "Productos",
         "Actualizo precios",
         productosFiltrados.length + " productos | " + listas.join(", ") + " | " + porcentaje + "%"
+    );
+
+    await sincronizarImportacionProductosAhora(
+        actualizarEstadoImportacionPrecios,
+        "Actualizacion masiva aplicada. Productos: " + productosFiltrados.length + " | Listas: " + listas.join(", ") + " | Porcentaje: " + porcentaje + "%",
+        "sync-ok"
     );
 
     dom.priceUpdatePercentInput.value = "";
@@ -1195,6 +1266,23 @@ async function importarPreciosDesdeArchivo() {
         let noEncontrados = 0;
         let errores = 0;
 
+        const confirmarImportacion =
+            confirm(
+                "Importar precios desde CSV?\n" +
+                "Filas a revisar: " + lineasDatos.length + "\n" +
+                "Antes se descargara un respaldo automatico."
+            );
+
+        if (!confirmarImportacion) {
+            actualizarEstadoImportacionPrecios("Importacion de precios cancelada.", "sync-working");
+            return;
+        }
+
+        if (!generarRespaldoAutomaticoAntesDeOperacion("importacion-precios")) {
+            actualizarEstadoImportacionPrecios("No se aplico la importacion porque no se pudo generar el respaldo.", "sync-error");
+            return;
+        }
+
         ejecutarSinProgramarSincronizacion(function () {
             lineasDatos.forEach(function (linea) {
                 const columnas =
@@ -1308,12 +1396,12 @@ async function importarPreciosDesdeArchivo() {
             " | Errores: " + errores
         );
 
-        actualizarEstadoImportacionPrecios(
-            "Importacion local terminada. Productos actualizados: " + productosActualizados +
+        await sincronizarImportacionProductosAhora(
+            actualizarEstadoImportacionPrecios,
+            "Importacion de precios terminada. Productos actualizados: " + productosActualizados +
             " | Precios cargados: " + preciosActualizados +
             " | No encontrados: " + noEncontrados +
-            " | Errores: " + errores +
-            " | No se subio nada a Supabase.",
+            " | Errores: " + errores,
             errores > 0 || noEncontrados > 0 ? "sync-error" : "sync-ok"
         );
     } catch (error) {
@@ -1718,6 +1806,191 @@ function actualizarEstadoImportacionProductos(mensaje, tipo) {
     }
 }
 
+function limpiarPrevisualizacionImportacionProductos() {
+    importacionProductosPendiente = null;
+
+    if (dom.productosImportacionPreview) {
+        dom.productosImportacionPreview.classList.add("hidden");
+        dom.productosImportacionPreview.innerHTML =
+            "Cargue un CSV para revisar altas, actualizaciones, errores y columnas detectadas antes de aplicar.";
+    }
+
+    if (dom.importarProductosButton) {
+        dom.importarProductosButton.textContent = "Revisar importacion";
+    }
+}
+
+function analizarImportacionProductos(texto) {
+    const textoLimpio =
+        texto.trim();
+
+    if (textoLimpio === "") {
+        throw new Error("Pegue productos o seleccione un archivo CSV.");
+    }
+
+    const lineas =
+        textoLimpio.split(/\r?\n/).filter(function (linea) {
+            return linea.trim() !== "";
+        });
+    const separador =
+        detectarSeparadorImportacion(lineas[0] || "");
+    const primeraLinea =
+        parsearLineaCsvImportacion(lineas[0], separador);
+    const tieneEncabezado =
+        !Number.isInteger(Number(primeraLinea[0])) ||
+        normalizarEncabezadoImportacion(primeraLinea[0]).includes("cod");
+    const mapaColumnas =
+        tieneEncabezado ? crearMapaColumnasImportacion(primeraLinea) : null;
+    const lineasDatos =
+        tieneEncabezado ? lineas.slice(1) : lineas;
+    const codigosVistos = new Set();
+    const codigosDuplicados = [];
+    const erroresDetalle = [];
+    const ejemplos = [];
+    let creados = 0;
+    let actualizados = 0;
+    let errores = 0;
+    let filasIgnoradas = 0;
+    let stockPreservado = 0;
+    let preciosPreservados = 0;
+
+    lineasDatos.forEach(function (linea, indiceLinea) {
+        const columnas =
+            parsearLineaCsvImportacion(linea, separador);
+
+        if (columnas.length < 2) {
+            errores += 1;
+            filasIgnoradas += 1;
+            erroresDetalle.push("Linea " + (indiceLinea + 1) + ": faltan columnas minimas.");
+            return;
+        }
+
+        const codigo =
+            Number(obtenerValorColumnaImportacion(columnas, mapaColumnas, "codigo", 0));
+        const nombre =
+            obtenerValorColumnaImportacion(columnas, mapaColumnas, "nombre", 1);
+        const precioTexto =
+            obtenerValorColumnaImportacion(columnas, mapaColumnas, "precio", 2);
+        const precioCompraTexto =
+            obtenerValorColumnaImportacion(columnas, mapaColumnas, "precioCompra", -1);
+        const stockTexto =
+            obtenerValorColumnaImportacion(columnas, mapaColumnas, "stock", 3);
+        const productoExistente =
+            productos.find(function (producto) {
+                return producto.codigo === codigo;
+            });
+        const precioCompra = precioCompraTexto !== ""
+            ? obtenerNumeroImportacion(precioCompraTexto, 0)
+            : productoExistente ? Number(productoExistente.precioCompra) || 0 : 0;
+        const precio = precioTexto !== ""
+            ? obtenerNumeroImportacion(precioTexto, 0)
+            : precioCompra > 0
+                ? calcularPrecioProductoConMargen(precioCompra, obtenerPorcentajeListaPrecio("Lista 1"))
+                : productoExistente ? Number(productoExistente.precio) || 0 : 0;
+        const stock = stockTexto !== ""
+            ? Math.max(0, Math.round(obtenerNumeroImportacion(stockTexto, 0) * 1000) / 1000)
+            : productoExistente ? Number(productoExistente.stock) || 0 : 0;
+
+        if (!datosProductoValidos(codigo, nombre, precio, stock)) {
+            errores += 1;
+            filasIgnoradas += 1;
+            erroresDetalle.push("Linea " + (indiceLinea + 1) + ": codigo, nombre, precio o stock invalido.");
+            return;
+        }
+
+        if (codigosVistos.has(codigo)) {
+            codigosDuplicados.push(codigo);
+            filasIgnoradas += 1;
+            return;
+        }
+
+        codigosVistos.add(codigo);
+
+        if (productoExistente) {
+            actualizados += 1;
+            if (stockTexto === "") {
+                stockPreservado += 1;
+            }
+            if (precioTexto === "" && precioCompraTexto === "") {
+                preciosPreservados += 1;
+            }
+        } else {
+            creados += 1;
+        }
+
+        if (ejemplos.length < 5) {
+            ejemplos.push((productoExistente ? "Actualiza" : "Crea") + " " + codigo + " - " + nombre);
+        }
+    });
+
+    const columnasDetectadas =
+        tieneEncabezado
+            ? primeraLinea.filter(function (columna) { return columna !== ""; })
+            : ["Sin encabezado: codigo, nombre, precio, stock, rubro, proveedor"];
+    const bloqueado =
+        codigosDuplicados.length > 0 || creados + actualizados === 0;
+
+    return {
+        firma: obtenerFirmaTextoSistema(texto),
+        separador: separador === "\t" ? "tabulacion" : separador,
+        tieneEncabezado: tieneEncabezado,
+        columnasDetectadas: columnasDetectadas,
+        totalFilas: lineasDatos.length,
+        creados: creados,
+        actualizados: actualizados,
+        errores: errores,
+        filasIgnoradas: filasIgnoradas,
+        stockPreservado: stockPreservado,
+        preciosPreservados: preciosPreservados,
+        codigosDuplicados: codigosDuplicados,
+        erroresDetalle: erroresDetalle,
+        ejemplos: ejemplos,
+        bloqueado: bloqueado
+    };
+}
+
+function renderizarPrevisualizacionImportacionProductos(analisis) {
+    if (!dom.productosImportacionPreview) {
+        return;
+    }
+
+    const columnas =
+        analisis.columnasDetectadas.map(escaparTextoHtml).join("; ");
+    const ejemplos =
+        analisis.ejemplos.length > 0
+            ? analisis.ejemplos.map(function (ejemplo) {
+                return "<li>" + escaparTextoHtml(ejemplo) + "</li>";
+            }).join("")
+            : "<li>Sin filas validas para mostrar.</li>";
+    const errores =
+        analisis.erroresDetalle.slice(0, 5).map(function (error) {
+            return "<li>" + escaparTextoHtml(error) + "</li>";
+        }).join("");
+    const duplicados =
+        analisis.codigosDuplicados.length > 0
+            ? `<div class="import-preview-warning">Codigos duplicados en el CSV: ${escaparTextoHtml(analisis.codigosDuplicados.slice(0, 12).join(", "))}. La importacion queda bloqueada hasta corregirlos.</div>`
+            : "";
+
+    dom.productosImportacionPreview.innerHTML = `
+        <h4>Previsualizacion de productos</h4>
+        <div class="import-preview-grid">
+            <span>Total filas<strong>${analisis.totalFilas}</strong></span>
+            <span>Creados<strong>${analisis.creados}</strong></span>
+            <span>Actualizados<strong>${analisis.actualizados}</strong></span>
+            <span>Ignoradas<strong>${analisis.filasIgnoradas}</strong></span>
+            <span>Stock preservado<strong>${analisis.stockPreservado}</strong></span>
+            <span>Precios preservados<strong>${analisis.preciosPreservados}</strong></span>
+        </div>
+        <div class="import-preview-detail">
+            <span>Columnas detectadas</span>
+            <strong>${columnas || "Sin columnas"}</strong>
+        </div>
+        ${duplicados}
+        ${errores ? `<ul class="import-preview-list">${errores}</ul>` : ""}
+        <ul class="import-preview-list">${ejemplos}</ul>
+    `;
+    dom.productosImportacionPreview.classList.remove("hidden");
+}
 function leerArchivoProductosComoTexto(archivo) {
     return new Promise(function (resolve, reject) {
         const lector = new FileReader();
@@ -1891,15 +2164,34 @@ function crearMapaColumnasImportacion(encabezados) {
     };
 }
 
+function obtenerIndiceColumnaImportacion(columnas, mapa, nombre, indiceAlternativo) {
+    if (mapa) {
+        return mapa[nombre] >= 0 ? mapa[nombre] : -1;
+    }
+
+    return indiceAlternativo;
+}
+
 function obtenerValorColumnaImportacion(columnas, mapa, nombre, indiceAlternativo) {
     const indice =
-        mapa && mapa[nombre] >= 0 ? mapa[nombre] : indiceAlternativo;
+        obtenerIndiceColumnaImportacion(columnas, mapa, nombre, indiceAlternativo);
 
     if (indice < 0 || indice >= columnas.length) {
         return "";
     }
 
     return limpiarValorImportacion(columnas[indice]);
+}
+
+function importacionProductoTieneDato(columnas, mapa, nombre, indiceAlternativo) {
+    const indice =
+        obtenerIndiceColumnaImportacion(columnas, mapa, nombre, indiceAlternativo);
+
+    if (indice < 0 || indice >= columnas.length) {
+        return false;
+    }
+
+    return limpiarValorImportacion(columnas[indice]) !== "";
 }
 
 function marcarImportacionProductosPendiente() {
@@ -2030,12 +2322,10 @@ async function importarProductosDesdeTextoPlano(texto) {
         const precioCompraTexto = obtenerValorColumnaImportacion(columnas, mapaColumnas, "precioCompra", -1);
         const stockTexto = obtenerValorColumnaImportacion(columnas, mapaColumnas, "stock", 3);
         const stockMinimoTexto = obtenerValorColumnaImportacion(columnas, mapaColumnas, "stockMinimo", -1);
-        const rubro = asegurarRubroPorNombre(
-            obtenerValorColumnaImportacion(columnas, mapaColumnas, "rubro", 4) || "Sin rubro"
-        );
-        const proveedor = asegurarProveedorPorNombre(
-            obtenerValorColumnaImportacion(columnas, mapaColumnas, "proveedor", 5) || "Sin proveedor"
-        );
+        const rubroTexto =
+            obtenerValorColumnaImportacion(columnas, mapaColumnas, "rubro", 4);
+        const proveedorTexto =
+            obtenerValorColumnaImportacion(columnas, mapaColumnas, "proveedor", 5);
         const categoria =
             obtenerValorColumnaImportacion(columnas, mapaColumnas, "categoria", -1);
         const marca =
@@ -2053,6 +2343,16 @@ async function importarProductosDesdeTextoPlano(texto) {
             productos.find(function (producto) {
                 return producto.codigo === codigo;
             });
+        const rubro = rubroTexto !== ""
+            ? asegurarRubroPorNombre(rubroTexto)
+            : productoExistente
+                ? productoExistente.rubro
+                : asegurarRubroPorNombre("Sin rubro");
+        const proveedor = proveedorTexto !== ""
+            ? asegurarProveedorPorNombre(proveedorTexto)
+            : productoExistente
+                ? productoExistente.proveedor
+                : asegurarProveedorPorNombre("Sin proveedor");
         const precioCompra = precioCompraTexto !== ""
             ? obtenerNumeroImportacion(precioCompraTexto, 0)
             : productoExistente ? Number(productoExistente.precioCompra) || 0 : 0;
@@ -2226,8 +2526,49 @@ async function importarProductosDesdeTexto() {
             archivo
                 ? await leerArchivoProductosComoTexto(archivo)
                 : dom.productosImportacionTexto.value;
+        const analisis =
+            analizarImportacionProductos(texto);
+
+        if (!importacionProductosPendiente || importacionProductosPendiente.firma !== analisis.firma) {
+            importacionProductosPendiente = analisis;
+            renderizarPrevisualizacionImportacionProductos(analisis);
+            dom.importarProductosButton.textContent = analisis.bloqueado
+                ? "Corrija el CSV y vuelva a revisar"
+                : "Confirmar importacion";
+            actualizarEstadoImportacionProductos(
+                analisis.bloqueado
+                    ? "Revise la previsualizacion. Hay errores que bloquean la importacion."
+                    : "Previsualizacion lista. Revise el resumen y vuelva a tocar confirmar para aplicar.",
+                analisis.bloqueado ? "sync-error" : "sync-working"
+            );
+            return;
+        }
+
+        if (analisis.bloqueado) {
+            renderizarPrevisualizacionImportacionProductos(analisis);
+            actualizarEstadoImportacionProductos("La importacion esta bloqueada hasta corregir el CSV.", "sync-error");
+            return;
+        }
+
+        const confirmar =
+            confirm(
+                "Aplicar importacion de productos?\n" +
+                "Creados: " + analisis.creados + " | Actualizados: " + analisis.actualizados + " | Ignoradas: " + analisis.filasIgnoradas + "\n" +
+                "Antes se descargara un respaldo automatico."
+            );
+
+        if (!confirmar) {
+            actualizarEstadoImportacionProductos("Importacion cancelada. La previsualizacion sigue disponible.", "sync-working");
+            return;
+        }
+
+        if (!generarRespaldoAutomaticoAntesDeOperacion("importacion-productos")) {
+            actualizarEstadoImportacionProductos("No se aplico la importacion porque no se pudo generar el respaldo.", "sync-error");
+            return;
+        }
 
         await importarProductosDesdeTextoPlano(texto);
+        limpiarPrevisualizacionImportacionProductos();
     } catch (error) {
         console.error("Error importando productos:", error);
         actualizarEstadoImportacionProductos(error.message || "No se pudo importar productos.", "sync-error");
@@ -2779,6 +3120,24 @@ async function corregirProductosDesdeArchivosTemporales() {
         const erroresLectura =
             lecturaNombres.errores + lecturaPrecios.errores;
 
+        const confirmarCorreccion =
+            confirm(
+                "Aplicar correccion temporal de productos?\n" +
+                "Codigos detectados: " + registrosPorCodigo.size + "\n" +
+                "Errores de lectura: " + erroresLectura + "\n" +
+                "Antes se descargara un respaldo automatico."
+            );
+
+        if (!confirmarCorreccion) {
+            actualizarEstadoCorreccionTemporalProductos("Correccion temporal cancelada.", "sync-working");
+            return;
+        }
+
+        if (!generarRespaldoAutomaticoAntesDeOperacion("correccion-temporal-productos")) {
+            actualizarEstadoCorreccionTemporalProductos("No se aplico la correccion porque no se pudo generar el respaldo.", "sync-error");
+            return;
+        }
+
         ejecutarSinProgramarSincronizacion(function () {
             registrosPorCodigo.forEach(function (registro) {
                 const productoExistente =
@@ -3070,6 +3429,8 @@ function renderizarProductos() {
     }
 
     const textoBusqueda = dom.buscarProductoTabla.value.trim().toLowerCase();
+    const vistaProductosActual =
+        obtenerVistaProductosActual();
 
     const productosFiltrados =
         productos.filter(function (producto) {
@@ -3089,7 +3450,11 @@ function renderizarProductos() {
                 normalizarTexto(producto.rubro || "").includes(textoBusqueda) ||
                 normalizarTexto(producto.proveedor || "").includes(textoBusqueda);
 
-            return coincideEstado && coincideBusqueda;
+            const coincideRevisionPrecios =
+                vistaProductosActual !== "revision_precios" ||
+                productoTienePreciosARevisar(producto);
+
+            return coincideEstado && coincideBusqueda && coincideRevisionPrecios;
         }).sort(function (primero, segundo) {
             return primero.codigo - segundo.codigo;
         });
@@ -3226,6 +3591,17 @@ function renderizarProductos() {
               <td><small>${listasSecundarias || "Sin listas secundarias"}</small></td>
               <td>${acciones}</td>
             `;
+        } else if (vista === "revision_precios") {
+            const problemasPrecio =
+                obtenerProblemasPrecioProducto(producto).join(" | ") || "Sin problemas";
+
+            row.innerHTML = `
+              <td>${producto.codigo}</td>
+              <td>${productoNombre}</td>
+              <td><small>${escaparTextoHtml(problemasPrecio)}</small></td>
+              <td>${formatearDinero(producto.precio)}<br><small>Compra: ${formatearDinero(producto.precioCompra || 0)}</small></td>
+              <td>${acciones}</td>
+            `;
         } else if (vista === "proveedores") {
             row.innerHTML = `
               <td>${producto.codigo}</td>
@@ -3262,9 +3638,14 @@ function obtenerMovimientosProductos() {
         producto.movimientosStock.forEach(function (movimiento, indice) {
             movimientos.push({
                 fecha: movimiento.fecha || "-",
+                hora: movimiento.hora || "",
                 tipo: movimiento.tipo || "Movimiento",
-                pedido: movimiento.pedido || "",
+                motivo: movimiento.motivo || movimiento.pedido || "-",
+                referencia: movimiento.referencia || movimiento.pedido || "",
+                pedido: movimiento.pedido || movimiento.referencia || "",
+                usuario: movimiento.usuario || "-",
                 cantidad: Number(movimiento.cantidad) || 0,
+                stockAnterior: Number(movimiento.stockAnterior) || 0,
                 stockFinal: Number(movimiento.stockFinal) || 0,
                 productoCodigo: producto.codigo,
                 productoNombre: producto.nombre,
@@ -3437,13 +3818,13 @@ function renderizarMovimientosProductos() {
 
             return `
       <tr>
-        <td>${movimiento.fecha}</td>
+        <td>${movimiento.fecha}${movimiento.hora ? " " + movimiento.hora : ""}</td>
         <td>${movimiento.productoCodigo}</td>
         <td>${movimiento.productoNombre}</td>
-        <td>${movimiento.tipo}</td>
-        <td>${pedidoTexto}</td>
+        <td>${movimiento.tipo}<br><small>${movimiento.motivo}</small></td>
+        <td>${pedidoTexto}<br><small>${movimiento.usuario}</small></td>
         <td>${movimiento.cantidad}</td>
-        <td>${movimiento.stockFinal}</td>
+        <td>${movimiento.stockAnterior} > ${movimiento.stockFinal}</td>
       </tr>
     `;
         }).join("");
@@ -3471,11 +3852,11 @@ function verMovimientosStock(codigo) {
         producto.movimientosStock.map(function (movimiento) {
             return `
       <tr>
-        <td>${movimiento.fecha}</td>
-        <td>${movimiento.tipo}</td>
-        <td>${movimiento.pedido ? "#" + movimiento.pedido : "-"}</td>
+        <td>${movimiento.fecha}${movimiento.hora ? " " + movimiento.hora : ""}</td>
+        <td>${movimiento.tipo}<br><small>${movimiento.motivo || "-"}</small></td>
+        <td>${movimiento.pedido ? "#" + movimiento.pedido : "-"}<br><small>${movimiento.usuario || "-"}</small></td>
         <td>${movimiento.cantidad}</td>
-        <td>${movimiento.stockFinal}</td>
+        <td>${Number(movimiento.stockAnterior) || 0} > ${Number(movimiento.stockFinal) || 0}</td>
       </tr>
     `;
         }).join("");
@@ -3594,15 +3975,16 @@ function aplicarMovimientoStock(producto, tipoMovimiento, cantidadMovimiento, mo
 
     reconstruirStockProductoDesdeTotal(producto, stockFinal);
 
-    producto.movimientosStock.push({
-        fecha: new Date().toLocaleDateString("es-AR"),
+    registrarMovimientoStockProducto(producto, {
         tipo: tipoMovimiento === "ENTRADA"
             ? "Entrada manual"
             : tipoMovimiento === "SALIDA"
                 ? "Salida manual"
                 : "Ajuste de stock",
-        pedido: motivoMovimiento || "Movimiento manual",
+        motivo: motivoMovimiento || "Movimiento manual",
+        referencia: motivoMovimiento || "Movimiento manual",
         cantidad: cantidadRegistrada,
+        stockAnterior: stockAnterior,
         stockFinal: obtenerStockTotalProducto(producto)
     });
 

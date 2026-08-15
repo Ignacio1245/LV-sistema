@@ -9,7 +9,283 @@ let pedidoEntregaPendiente = null;
 let productoCargaRapidaPedido = null;
 let cantidadCargaRapidaPedido = 1;
 let guardandoPedidoEnCurso = false;
+let restaurandoPedidoActualLocal = false;
+let pedidoActualLocalInicializado = false;
 const pedidosOperacionEnCurso = new Set();
+const CLAVE_PEDIDO_ACTUAL_LOCAL = "lv_admin_pedido_actual_local";
+
+function localStoragePedidoDisponible() {
+    try {
+        return typeof localStorage !== "undefined" && localStorage !== null;
+    } catch (error) {
+        return false;
+    }
+}
+
+function limpiarPedidoActualLocal() {
+    if (!localStoragePedidoDisponible()) {
+        return;
+    }
+
+    localStorage.removeItem(CLAVE_PEDIDO_ACTUAL_LOCAL);
+}
+
+function obtenerClientePedidoActualParaLocal() {
+    return pedidoActual.cliente ||
+        clienteSeleccionado ||
+        buscarCliente(dom.clienteSearchInput ? dom.clienteSearchInput.value : "");
+}
+
+function pedidoActualTieneDatosParaLocal() {
+    if (pedidoEditando || !dom || !dom.clienteSearchInput || !dom.productoSearchInput) {
+        return false;
+    }
+
+    return pedidoActual.items.length > 0 ||
+        Boolean(obtenerClientePedidoActualParaLocal()) ||
+        pedidoActual.observaciones.length > 0 ||
+        dom.clienteSearchInput.value.trim() !== "" ||
+        dom.productoSearchInput.value.trim() !== "";
+}
+
+function crearDatosPedidoActualLocal() {
+    const clienteLocal =
+        obtenerClientePedidoActualParaLocal();
+
+    return {
+        version: 1,
+        fechaIso: new Date().toISOString(),
+        clienteCodigo: clienteLocal ? clienteLocal.codigo : null,
+        clienteTexto: dom.clienteSearchInput ? dom.clienteSearchInput.value : "",
+        productoTexto: dom.productoSearchInput ? dom.productoSearchInput.value : "",
+        formaPago: obtenerFormaPagoActual(),
+        observaciones: Array.isArray(pedidoActual.observaciones)
+            ? [...pedidoActual.observaciones]
+            : [],
+        items: pedidoActual.items.map(function (item) {
+            return {
+                codigo: item.producto ? item.producto.codigo : null,
+                cantidad: Number(item.cantidad) || 0,
+                listaPrecios: item.listaPrecios || "Lista 1",
+                descuentoPorcentaje: Number(item.descuentoPorcentaje) || 0
+            };
+        })
+    };
+}
+
+function guardarPedidoActualLocal() {
+    if (!pedidoActualLocalInicializado ||
+        restaurandoPedidoActualLocal ||
+        !localStoragePedidoDisponible()) {
+        return;
+    }
+
+    if (!pedidoActualTieneDatosParaLocal()) {
+        limpiarPedidoActualLocal();
+        return;
+    }
+
+    localStorage.setItem(
+        CLAVE_PEDIDO_ACTUAL_LOCAL,
+        JSON.stringify(crearDatosPedidoActualLocal())
+    );
+}
+
+function leerPedidoActualLocal() {
+    if (!localStoragePedidoDisponible()) {
+        return null;
+    }
+
+    try {
+        const datosGuardados =
+            JSON.parse(localStorage.getItem(CLAVE_PEDIDO_ACTUAL_LOCAL) || "null");
+
+        if (!datosGuardados || datosGuardados.version !== 1) {
+            return null;
+        }
+
+        return datosGuardados;
+    } catch (error) {
+        limpiarPedidoActualLocal();
+        return null;
+    }
+}
+
+function pedidoActualLocalEstaVencido(datosGuardados) {
+    const fechaGuardada =
+        datosGuardados && datosGuardados.fechaIso
+            ? new Date(datosGuardados.fechaIso).getTime()
+            : 0;
+
+    if (!fechaGuardada) {
+        return true;
+    }
+
+    const horasGuardadas =
+        (Date.now() - fechaGuardada) / (1000 * 60 * 60);
+
+    return horasGuardadas > 72;
+}
+
+function buscarClienteParaRestaurarPedidoLocal(datosGuardados) {
+    if (!datosGuardados) {
+        return null;
+    }
+
+    const clientePorCodigo =
+        clientes.find(function (cliente) {
+            return String(cliente.codigo) === String(datosGuardados.clienteCodigo);
+        });
+
+    return clientePorCodigo || buscarCliente(datosGuardados.clienteTexto || "");
+}
+
+function restaurarItemsPedidoActualLocal(itemsGuardados) {
+    const itemsRestaurados = [];
+    const productosOmitidos = [];
+
+    (Array.isArray(itemsGuardados) ? itemsGuardados : []).forEach(function (itemGuardado) {
+        const producto =
+            productos.find(function (productoGuardado) {
+                return String(productoGuardado.codigo) === String(itemGuardado.codigo);
+            });
+
+        if (!producto || !productoActivo(producto)) {
+            productosOmitidos.push(String(itemGuardado.codigo || "Producto"));
+            return;
+        }
+
+        const cantidadPedida =
+            Number(itemGuardado.cantidad) || 0;
+        const stockDisponible =
+            obtenerStockDisponibleProducto(producto, null);
+        let cantidadRestaurada =
+            Math.min(cantidadPedida, stockDisponible);
+
+        if (!productoEsPeso(producto)) {
+            cantidadRestaurada = Math.floor(cantidadRestaurada);
+        }
+
+        const cantidadValidada =
+            validarCantidadPedidoProducto(producto, cantidadRestaurada);
+
+        if (!cantidadValidada.valido || cantidadValidada.cantidad <= 0) {
+            productosOmitidos.push(producto.nombre);
+            return;
+        }
+
+        const descuentoPorcentaje =
+            normalizarDescuentoPedido(itemGuardado.descuentoPorcentaje || 0);
+        const listaPrecios =
+            itemGuardado.listaPrecios || obtenerListaPreciosPedidoActual();
+
+        itemsRestaurados.push({
+            producto: producto,
+            cantidad: cantidadValidada.cantidad,
+            listaPrecios: listaPrecios,
+            precioUnitario: obtenerPrecioProductoPorLista(producto, listaPrecios),
+            descuentoPorcentaje: descuentoPorcentaje,
+            subtotal: calcularSubtotalItemPedido(producto, cantidadValidada.cantidad, descuentoPorcentaje)
+        });
+    });
+
+    return {
+        items: itemsRestaurados,
+        omitidos: productosOmitidos
+    };
+}
+
+function restaurarPedidoActualLocalSiCorresponde() {
+    const datosGuardados =
+        leerPedidoActualLocal();
+
+    if (!datosGuardados) {
+        pedidoActualLocalInicializado = true;
+        return false;
+    }
+
+    if (pedidoActualLocalEstaVencido(datosGuardados)) {
+        limpiarPedidoActualLocal();
+        pedidoActualLocalInicializado = true;
+        return false;
+    }
+
+    if (pedidoActualTieneDatos() || pedidoEditando) {
+        pedidoActualLocalInicializado = true;
+        return false;
+    }
+
+    const confirmarRestauracion =
+        confirm("Hay un pedido sin guardar recuperado en esta computadora. Queres restaurarlo?");
+
+    if (!confirmarRestauracion) {
+        limpiarPedidoActualLocal();
+        pedidoActualLocalInicializado = true;
+        return false;
+    }
+
+    restaurandoPedidoActualLocal = true;
+
+    try {
+        const clienteRestaurado =
+            buscarClienteParaRestaurarPedidoLocal(datosGuardados);
+        const resultadoItems =
+            restaurarItemsPedidoActualLocal(datosGuardados.items);
+
+        pedidoActual = {
+            cliente: clienteRestaurado,
+            formaPago: datosGuardados.formaPago || "CUENTA_CORRIENTE",
+            observaciones: Array.isArray(datosGuardados.observaciones)
+                ? [...datosGuardados.observaciones]
+                : [],
+            items: resultadoItems.items
+        };
+
+        clienteSeleccionado = clienteRestaurado;
+        productoSeleccionado = null;
+
+        if (dom.clienteSearchInput) {
+            dom.clienteSearchInput.value = clienteRestaurado
+                ? clienteRestaurado.codigo + " - " + clienteRestaurado.nombre
+                : datosGuardados.clienteTexto || "";
+        }
+
+        if (dom.productoSearchInput) {
+            dom.productoSearchInput.value = datosGuardados.productoTexto || "";
+        }
+
+        if (dom.formaPagoInput) {
+            dom.formaPagoInput.value = pedidoActual.formaPago;
+        }
+
+        actualizarClientePedidoSeleccionado();
+        renderizarPedidoActual();
+        renderizarCatalogoProductosPedido();
+        renderizarProductosHabitualesCliente();
+        mostrarPagina("ventas");
+        dom.ventasPage.classList.add("hidden");
+        dom.pedidoFormPanel.classList.remove("hidden");
+
+        if (resultadoItems.omitidos.length > 0) {
+            alert(
+                "Pedido recuperado, pero algunos productos no se restauraron por falta de stock o baja: " +
+                resultadoItems.omitidos.slice(0, 8).join(", ")
+            );
+        }
+
+        registrarAuditoria(
+            "Pedidos",
+            "Recupero pedido local",
+            clienteRestaurado ? clienteRestaurado.codigo + " - " + clienteRestaurado.nombre : "Sin cliente"
+        );
+
+        return true;
+    } finally {
+        restaurandoPedidoActualLocal = false;
+        pedidoActualLocalInicializado = true;
+        guardarPedidoActualLocal();
+    }
+}
 
 function limpiarPedidoActual() {
     pedidoActual = {
@@ -78,6 +354,7 @@ function limpiarFormularioPedido() {
     actualizarClientePedidoSeleccionado();
     renderizarProductosHabitualesCliente();
     renderizarCatalogoProductosPedido();
+    guardarPedidoActualLocal();
 
 }
 
@@ -89,6 +366,71 @@ function obtenerTextoFormaPago(formaPago) {
     };
 
     return mapaFormasDePago[formaPago] || "Cuenta corriente";
+}
+
+function escaparTextoPedido(valor) {
+    if (typeof escaparTextoHtml === "function") {
+        return escaparTextoHtml(valor);
+    }
+
+    return String(valor === null || valor === undefined ? "" : valor)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function obtenerReferenciaVisiblePedido(pedido) {
+    if (!pedido) {
+        return "#-";
+    }
+
+    return "#" + (pedido.numero || pedido.id);
+}
+
+function auditoriaCorrespondeAPedido(registroAuditoria, pedido) {
+    if (!registroAuditoria || !pedido) {
+        return false;
+    }
+
+    const referenciasPedido = [
+        obtenerReferenciaVisiblePedido(pedido)
+    ];
+
+    if (pedido.id && pedido.numero && pedido.id !== pedido.numero) {
+        referenciasPedido.push("#" + pedido.id);
+    }
+
+    const modulo =
+        normalizarTexto(registroAuditoria.modulo || "");
+    const accion =
+        normalizarTexto(registroAuditoria.accion || "");
+    const detalle =
+        String(registroAuditoria.detalle || "");
+    const detalleNormalizado =
+        normalizarTexto(detalle);
+    const esMovimientoDePedido =
+        modulo.includes("pedido") ||
+        accion.includes("pedido") ||
+        modulo.includes("cuenta corriente");
+
+    return esMovimientoDePedido && referenciasPedido.some(function (referenciaPedido) {
+        return detalle.includes(referenciaPedido) ||
+            detalleNormalizado.includes(normalizarTexto(referenciaPedido));
+    });
+}
+
+function obtenerHistorialAuditoriaPedido(pedido) {
+    if (!Array.isArray(auditoria) || !pedido) {
+        return [];
+    }
+
+    return auditoria
+        .filter(function (registroAuditoria) {
+            return auditoriaCorrespondeAPedido(registroAuditoria, pedido);
+        })
+        .slice(0, 12);
 }
 
 function obtenerFormaPagoActual() {
@@ -295,6 +637,7 @@ function actualizarClientePedidoSeleccionado() {
         }
         renderizarProductosHabitualesCliente();
         renderizarCatalogoProductosPedido();
+        guardarPedidoActualLocal();
         return;
     }
 
@@ -312,6 +655,7 @@ function actualizarClientePedidoSeleccionado() {
 
     renderizarProductosHabitualesCliente();
     renderizarCatalogoProductosPedido();
+    guardarPedidoActualLocal();
 
 }
 
@@ -334,7 +678,11 @@ function obtenerCantidadProductoEnPedido(codigoProducto) {
 
 function obtenerStockDisponibleParaPedido(producto) {
 
-    return obtenerStockVendible(producto, pedidoEditando ? pedidoEditando.id : null) - obtenerCantidadProductoEnPedido(producto.codigo);
+    return Math.max(
+        obtenerStockDisponibleProducto(producto, pedidoEditando ? pedidoEditando.id : null) -
+            obtenerCantidadProductoEnPedido(producto.codigo),
+        0
+    );
 
 }
 
@@ -746,7 +1094,7 @@ function renderizarCatalogoProductosPedido() {
         <small class="stock-pill ${estadoStock.clase}">${estadoStock.texto}</small>
       </div>
       <div class="product-card-footer">
-        <span>Disponible: ${formatearStockProducto(producto)}</span>
+        <span>Disponible: ${formatearCantidadPedido(producto, stockDisponible)}</span>
         <button class="btn btn-atender" type="button" ${stockDisponible <= 0 ? "disabled" : ""}>
           Agregar
         </button>
@@ -792,13 +1140,13 @@ function agregarItemPedido(producto, cantidad, descuentoPorcentaje) {
     const nuevaCantidad =
         cantidadActual + cantidad;
 
-    const stockVendible =
-        obtenerStockVendible(producto, pedidoEditando ? pedidoEditando.id : null);
+    const stockDisponible =
+        obtenerStockDisponibleProducto(producto, pedidoEditando ? pedidoEditando.id : null);
 
-    if (nuevaCantidad > stockVendible) {
+    if (nuevaCantidad > stockDisponible) {
         alert(
             "No podes agregar mas de " +
-            formatearCantidadPedido(producto, stockVendible) +
+            formatearCantidadPedido(producto, stockDisponible) +
             " de " +
             producto.nombre +
             "."
@@ -862,6 +1210,119 @@ function calcularTotalPedido() {
 
 }
 
+function obtenerClaveItemFirmaPedido(item) {
+    const producto =
+        item && item.producto ? item.producto : {};
+    const codigoProducto =
+        String(producto.codigo || "");
+    const cantidadProducto =
+        Number(item && item.cantidad) || 0;
+    const descuentoProducto =
+        Number(item && item.descuentoPorcentaje) || 0;
+    const listaPrecio =
+        normalizarTexto(item && item.listaPrecios ? item.listaPrecios : "Lista 1");
+    const precioUnitario =
+        Number(
+            item && typeof item.precioUnitario === "number"
+                ? item.precioUnitario
+                : producto.precio
+        ) || 0;
+
+    return [
+        codigoProducto,
+        cantidadProducto.toFixed(3),
+        descuentoProducto.toFixed(2),
+        listaPrecio,
+        precioUnitario.toFixed(2)
+    ].join(":");
+}
+
+function obtenerFirmaItemsPedido(items) {
+    if (!Array.isArray(items) || items.length === 0) {
+        return "";
+    }
+
+    return items
+        .map(obtenerClaveItemFirmaPedido)
+        .sort()
+        .join("|");
+}
+
+function obtenerFirmaPedidoCliente(cliente, items, formaPago) {
+    if (!cliente || !Array.isArray(items) || items.length === 0) {
+        return "";
+    }
+
+    return [
+        String(cliente.codigo || ""),
+        normalizarTexto(formaPago || "CUENTA_CORRIENTE"),
+        obtenerFirmaItemsPedido(items)
+    ].join("#");
+}
+
+function obtenerFechaHoyParaPedidoDuplicado() {
+    return obtenerFechaPedidoParaFiltro(
+        new Date().toLocaleDateString("es-AR")
+    );
+}
+
+function buscarPedidoDuplicadoExacto(estadoFinal) {
+    const firmaPedidoActual =
+        obtenerFirmaPedidoCliente(
+            pedidoActual.cliente,
+            pedidoActual.items,
+            obtenerFormaPagoActual()
+        );
+
+    if (!firmaPedidoActual) {
+        return null;
+    }
+
+    const fechaActual =
+        obtenerFechaHoyParaPedidoDuplicado();
+    const estadosControlados =
+        estadoFinal === "BORRADOR"
+            ? ["BORRADOR"]
+            : ["BORRADOR", "PENDIENTE", "ATENDIDO"];
+
+    return pedidos.find(function (pedidoGuardado) {
+        if (!pedidoGuardado || pedidoGuardado === pedidoEditando) {
+            return false;
+        }
+
+        if (!estadosControlados.includes(pedidoGuardado.estado || "PENDIENTE")) {
+            return false;
+        }
+
+        if (obtenerFechaPedidoParaFiltro(pedidoGuardado.fecha || "") !== fechaActual) {
+            return false;
+        }
+
+        return obtenerFirmaPedidoCliente(
+            pedidoGuardado.cliente,
+            pedidoGuardado.items,
+            pedidoGuardado.formaPago || "CUENTA_CORRIENTE"
+        ) === firmaPedidoActual;
+    }) || null;
+}
+
+function confirmarPedidoDuplicadoExacto(pedidoDuplicado) {
+    const numeroPedidoDuplicado =
+        pedidoDuplicado ? pedidoDuplicado.numero || pedidoDuplicado.id : "-";
+    const clientePedidoDuplicado =
+        pedidoDuplicado && pedidoDuplicado.cliente
+            ? pedidoDuplicado.cliente.nombre
+            : "el mismo cliente";
+
+    return confirm(
+        "Ya existe un pedido igual cargado hoy para " +
+        clientePedidoDuplicado +
+        " (#" + numeroPedidoDuplicado + ").\n\n" +
+        "Mismo cliente, mismos productos, cantidades, descuentos y forma de pago.\n" +
+        "Si fue un error, cancela para no duplicar la venta.\n\n" +
+        "Crear otro pedido igual?"
+    );
+}
 function agregarProductoAlPedidoActual() {
     if (!tienePermiso("ventas")) {
         alert("Tu rol no tiene permiso para modificar pedidos.");
@@ -940,6 +1401,7 @@ function renderizarPedidoActual() {
             dom.pedidoItemCount.textContent = "0 unidades cargadas";
         }
 
+        guardarPedidoActualLocal();
         return;
 
     }
@@ -952,8 +1414,8 @@ function renderizarPedidoActual() {
             document.createElement("tr");
 
         row.innerHTML = `
-      <td>${item.producto.codigo}</td>
-      <td>${item.producto.nombre}</td>
+      <td>${escaparTextoPedido(item.producto.codigo)}</td>
+      <td>${escaparTextoPedido(item.producto.nombre)}</td>
       <td>
         <div class="quantity-control">
           <button class="btn btn-secondary" onclick="restarUnidadPedidoActual(${item.producto.codigo})">-</button>
@@ -973,7 +1435,7 @@ function renderizarPedidoActual() {
       </td>
       <td>
         ${formatearDinero(obtenerPrecioUnitarioItemPedido(item))}
-        <small>${item.listaPrecios || "Lista 1"}</small>
+        <small>${escaparTextoPedido(item.listaPrecios || "Lista 1")}</small>
       </td>
       <td>${formatearDinero(item.subtotal)}</td>
       <td>
@@ -1004,6 +1466,8 @@ function renderizarPedidoActual() {
                 ? "1 unidad cargada"
                 : cantidadTotalItems + " unidades cargadas";
     }
+
+    guardarPedidoActualLocal();
 
 }
 
@@ -1061,6 +1525,27 @@ function guardarPedido(estadoPedido, opcionesGuardado) {
 
         return;
 
+    }
+    const permiteDuplicadoExacto =
+        opcionesGuardado && opcionesGuardado.permitirDuplicadoExacto === true;
+    const pedidoDuplicadoExacto =
+        !pedidoEditando && !permiteDuplicadoExacto
+            ? buscarPedidoDuplicadoExacto(estadoFinal)
+            : null;
+
+    if (pedidoDuplicadoExacto && !confirmarPedidoDuplicadoExacto(pedidoDuplicadoExacto)) {
+        guardandoPedidoEnCurso = false;
+        return null;
+    }
+
+    if (pedidoDuplicadoExacto) {
+        registrarAuditoria(
+            "Pedidos",
+            "Confirmo pedido duplicado",
+            "#" + (pedidoDuplicadoExacto.numero || pedidoDuplicadoExacto.id) +
+            " | " + pedidoActual.cliente.nombre +
+            " | " + formatearDinero(calcularTotalPedido())
+        );
     }
     if (pedidoEditando) {
         const pedidoGuardado =
@@ -1172,7 +1657,14 @@ function guardarPedido(estadoPedido, opcionesGuardado) {
 
         fecha:
             new Date()
-                .toLocaleDateString("es-AR")
+                .toLocaleDateString("es-AR"),
+
+        firmaControlDuplicado:
+            obtenerFirmaPedidoCliente(
+                pedidoActual.cliente,
+                pedidoActual.items,
+                obtenerFormaPagoActual()
+            )
 
     };
 
@@ -1361,7 +1853,7 @@ function renderizarPedidos() {
       </td>
 
       <td>
-        ${clientePedidoTexto}
+        ${escaparTextoPedido(clientePedidoTexto)}
       </td>
 
       <td>
@@ -1384,7 +1876,7 @@ function renderizarPedidos() {
 
       <td>
         <span class="status ${pedido.estado.toLowerCase()}">
-          ${pedido.estado}
+          ${escaparTextoPedido(pedido.estado)}
         </span>
         ${pedido.estadoCobro
                 ? `<small class="payment-detail">
@@ -1457,6 +1949,9 @@ function renderizarPedidos() {
         <button class="btn btn-secondary" onclick="verDetallePedido(${pedido.id})">
           Ver
         </button>
+        <button class="btn btn-secondary" onclick="duplicarPedidoGuardado(${pedido.id})">
+          Duplicar
+        </button>
         <button class="btn btn-secondary" onclick="imprimirPedidoGuardado(${pedido.id})">
           Imprimir
         </button>
@@ -1476,6 +1971,201 @@ function renderizarPedidos() {
 
     });
 
+}
+
+function obtenerProductoActualParaDuplicarPedido(item) {
+    if (!item || !item.producto) {
+        return null;
+    }
+
+    const codigoProducto =
+        item.producto.codigo;
+
+    return productos.find(function (producto) {
+        return String(producto.codigo) === String(codigoProducto);
+    }) || null;
+}
+
+function crearItemDuplicadoPedido(item, producto, cantidadDuplicada) {
+    const listaPrecios =
+        item.listaPrecios || obtenerListaPreciosPedidoActual();
+    const descuentoPorcentaje =
+        normalizarDescuentoPedido(item.descuentoPorcentaje || 0);
+    const precioUnitario =
+        obtenerPrecioProductoPorLista(producto, listaPrecios);
+    const subtotal =
+        calcularSubtotalItemPedido(producto, cantidadDuplicada, descuentoPorcentaje);
+
+    return {
+        producto: producto,
+        cantidad: cantidadDuplicada,
+        listaPrecios: listaPrecios,
+        precioUnitario: precioUnitario,
+        descuentoPorcentaje: descuentoPorcentaje,
+        subtotal: subtotal
+    };
+}
+
+function duplicarPedidoGuardado(id) {
+    if (!tienePermiso("ventas")) {
+        alert("Tu rol no tiene permiso para duplicar pedidos.");
+        return;
+    }
+
+    const pedido =
+        pedidos.find(function (pedidoGuardado) {
+            return pedidoGuardado.id === id;
+        });
+
+    if (!pedido) {
+        alert("No se encontro el pedido para duplicar.");
+        return;
+    }
+
+    if (!pedido.cliente) {
+        alert("Este pedido no tiene cliente asignado y no se puede duplicar.");
+        return;
+    }
+
+    if (!clienteActivo(pedido.cliente)) {
+        alert("El cliente del pedido esta inactivo. Reactivalo antes de repetir la venta.");
+        return;
+    }
+
+    if (!Array.isArray(pedido.items) || pedido.items.length === 0) {
+        alert("Este pedido no tiene productos para duplicar.");
+        return;
+    }
+
+    if (pedidoActualTieneDatos()) {
+        const confirmar =
+            confirm("Ya hay un pedido en curso. Queres descartarlo y duplicar este pedido?");
+
+        if (!confirmar) {
+            return;
+        }
+    }
+
+    clienteSeleccionado =
+        pedido.cliente;
+
+    limpiarPedidoActual();
+    pedidoEditando = null;
+
+    const productosOmitidos = [];
+    const itemsDuplicados = [];
+
+    pedido.items.forEach(function (item) {
+        const producto =
+            obtenerProductoActualParaDuplicarPedido(item);
+        const textoProducto =
+            item && item.producto
+                ? item.producto.codigo + " - " + item.producto.nombre
+                : "Producto sin datos";
+
+        if (!producto) {
+            productosOmitidos.push(textoProducto + " (ya no existe)");
+            return;
+        }
+
+        if (!productoActivo(producto)) {
+            productosOmitidos.push(textoProducto + " (inactivo)");
+            return;
+        }
+
+        const cantidadOriginal =
+            Number(item.cantidad) || 0;
+        const stockDisponible =
+            obtenerStockDisponibleProducto(producto, null);
+        let cantidadDuplicada =
+            Math.min(cantidadOriginal, stockDisponible);
+
+        if (!productoEsPeso(producto)) {
+            cantidadDuplicada =
+                Math.floor(cantidadDuplicada);
+        }
+
+        const cantidadValidada =
+            validarCantidadPedidoProducto(producto, cantidadDuplicada);
+
+        if (!cantidadValidada.valido || cantidadValidada.cantidad <= 0) {
+            productosOmitidos.push(textoProducto + " (sin stock disponible)");
+            return;
+        }
+
+        if (cantidadValidada.cantidad < cantidadOriginal) {
+            productosOmitidos.push(
+                textoProducto +
+                " (se copio " +
+                formatearCantidadPedido(producto, cantidadValidada.cantidad) +
+                " de " +
+                formatearCantidadPedido(producto, cantidadOriginal) +
+                ")"
+            );
+        }
+
+        itemsDuplicados.push(
+            crearItemDuplicadoPedido(
+                item,
+                producto,
+                cantidadValidada.cantidad
+            )
+        );
+    });
+
+    if (itemsDuplicados.length === 0) {
+        alert(
+            "No se pudo duplicar el pedido porque ningun producto tiene stock disponible."
+        );
+        clienteSeleccionado = null;
+        limpiarPedidoActual();
+        return;
+    }
+
+    pedidoActual = {
+        cliente: pedido.cliente,
+        formaPago: pedido.formaPago || "CUENTA_CORRIENTE",
+        observaciones: [
+            "Duplicado del pedido #" + (pedido.numero || pedido.id)
+        ].concat(pedido.observaciones ? pedido.observaciones : []),
+        items: itemsDuplicados
+    };
+
+    dom.clienteSearchInput.value =
+        pedido.cliente.codigo +
+        " - " +
+        pedido.cliente.nombre;
+    dom.formaPagoInput.value =
+        pedidoActual.formaPago;
+
+    if (dom.detallePedidoModal) {
+        dom.detallePedidoModal.classList.add("hidden");
+    }
+
+    mostrarPagina("ventas");
+    dom.ventasPage.classList.add("hidden");
+    dom.pedidoFormPanel.classList.remove("hidden");
+
+    renderizarProductosHabitualesCliente();
+    renderizarCatalogoProductosPedido();
+    renderizarPedidoActual();
+
+    registrarAuditoria(
+        "Pedidos",
+        "Preparo duplicado pedido",
+        "#" + (pedido.numero || pedido.id) + " | " + pedido.cliente.nombre + " | " + itemsDuplicados.length + " productos"
+    );
+
+    if (productosOmitidos.length > 0) {
+        alert(
+            "Pedido duplicado para revisar.\n\nProductos con ajuste o sin copiar:\n- " +
+            productosOmitidos.slice(0, 8).join("\n- ") +
+            (productosOmitidos.length > 8 ? "\n- Y " + (productosOmitidos.length - 8) + " mas" : "")
+        );
+        return;
+    }
+
+    alert("Pedido duplicado como nuevo. Revisalo y guardalo cuando este listo.");
 }
 
 function exportarPedidosCsv() {
@@ -1535,6 +2225,12 @@ function exportarPedidosCsv() {
             "Detalle productos"
         ],
         filas
+    );
+
+    registrarAuditoria(
+        "Pedidos",
+        "Exporto pedidos CSV",
+        "Pedidos exportados: " + pedidosFiltrados.length
     );
 }
 
@@ -1615,7 +2311,7 @@ async function atenderPedido(id) {
             }
 
             const disponible =
-                obtenerStockVendible(producto, pedidoEditando ? pedidoEditando.id : null);
+                obtenerStockDisponibleProducto(producto, pedido.id);
 
             if (disponible >= item.cantidad) {
                 return null;
@@ -1656,20 +2352,18 @@ async function atenderPedido(id) {
 
             });
 
-        if (!Array.isArray(producto.movimientosStock)) {
-            producto.movimientosStock = [];
-        }
-
         const stockAnterior =
             obtenerStockTotalProducto(producto);
         const stockFinal =
             Math.max(0, stockAnterior - item.cantidad);
 
-        producto.movimientosStock.push({
-            fecha: new Date().toLocaleDateString("es-AR"),
+        registrarMovimientoStockProducto(producto, {
             tipo: "Salida por pedido",
+            motivo: "Atencion de pedido",
+            referencia: "Pedido #" + (pedido.numero || pedido.id),
             pedido: pedido.numero || pedido.id,
             cantidad: -item.cantidad,
+            stockAnterior: stockAnterior,
             stockFinal: stockFinal
         });
 
@@ -2017,11 +2711,18 @@ async function confirmarEntregaPedido(event) {
         let movimientosCuentaGuardadosOnline = true;
 
         if (importePagado > 0) {
-            const movimientoPagoEntrega = {
+            const saldoAnteriorPagoEntrega =
+                Number(cliente.saldo) || 0;
+            const movimientoPagoEntrega = crearMovimientoCuentaCliente({
                 fecha: pedido.fechaEntrega,
                 tipo: "Pago al entregar pedido #" + (pedido.numero || pedido.id),
-                importe: -importePagado
-            };
+                motivo: "Pago recibido al entregar pedido",
+                referencia: "Pedido #" + (pedido.numero || pedido.id),
+                importe: -importePagado,
+                medioPago: "PAGO_ENTREGA",
+                saldoAnterior: saldoAnteriorPagoEntrega,
+                saldoPosterior: saldoAnteriorPagoEntrega
+            });
 
             cliente.historial.push(movimientoPagoEntrega);
             const movimientoPagoGuardadoOnline =
@@ -2033,12 +2734,22 @@ async function confirmarEntregaPedido(event) {
         }
 
         if (saldoPendiente > 0) {
-            cliente.saldo += saldoPendiente;
-            const movimientoCuenta = {
+            const saldoAnteriorCuentaPedido =
+                Number(cliente.saldo) || 0;
+            const saldoPosteriorCuentaPedido =
+                saldoAnteriorCuentaPedido + saldoPendiente;
+            cliente.saldo =
+                saldoPosteriorCuentaPedido;
+            const movimientoCuenta = crearMovimientoCuentaCliente({
                 fecha: pedido.fechaEntrega,
                 tipo: "Pedido entregado a cuenta #" + (pedido.numero || pedido.id),
-                importe: saldoPendiente
-            };
+                motivo: "Saldo pendiente de pedido entregado",
+                referencia: "Pedido #" + (pedido.numero || pedido.id),
+                importe: saldoPendiente,
+                medioPago: "CUENTA_CORRIENTE",
+                saldoAnterior: saldoAnteriorCuentaPedido,
+                saldoPosterior: saldoPosteriorCuentaPedido
+            });
 
             cliente.historial.push(movimientoCuenta);
             const movimientoCuentaGuardadoOnline =
@@ -2278,17 +2989,27 @@ async function pasarACuentaCorriente(id) {
             return;
         }
 
-        cliente.saldo += importePendiente;
+        const saldoAnteriorCuentaPedido =
+            Number(cliente.saldo) || 0;
+        const saldoPosteriorCuentaPedido =
+            saldoAnteriorCuentaPedido + importePendiente;
+        cliente.saldo =
+            saldoPosteriorCuentaPedido;
 
         if (!cliente.historial) {
             cliente.historial = [];
         }
 
-        const movimientoCuenta = {
+        const movimientoCuenta = crearMovimientoCuentaCliente({
             fecha: new Date().toLocaleDateString("es-AR"),
             tipo: "Pedido CC",
-            importe: importePendiente
-        };
+            motivo: "Pedido pasado a cuenta corriente",
+            referencia: "Pedido #" + (pedido.numero || pedido.id),
+            importe: importePendiente,
+            medioPago: "CUENTA_CORRIENTE",
+            saldoAnterior: saldoAnteriorCuentaPedido,
+            saldoPosterior: saldoPosteriorCuentaPedido
+        });
 
         cliente.historial.push(movimientoCuenta);
 
@@ -2409,10 +3130,10 @@ function verDetallePedido(id) {
 
             return `
       <tr>
-        <td>${item.producto.codigo}</td>
-        <td>${item.producto.nombre}</td>
+        <td>${escaparTextoPedido(item.producto.codigo)}</td>
+        <td>${escaparTextoPedido(item.producto.nombre)}</td>
         <td>${formatearCantidadPedido(item.producto, item.cantidad)}</td>
-        <td>${descuentoTexto}</td>
+        <td>${escaparTextoPedido(descuentoTexto)}</td>
         <td>${formatearDinero(obtenerPrecioUnitarioItemPedido(item))}</td>
         <td>${formatearDinero(item.subtotal)}</td>
       </tr>
@@ -2428,12 +3149,15 @@ function verDetallePedido(id) {
     const filasNotasCredito =
         notasCredito.flatMap(function (nota) {
             return (nota.items || []).map(function (item) {
+                const productoNotaTexto =
+                    item.producto ? item.producto.codigo + " - " + item.producto.nombre : "Producto";
+
                 return `
                   <tr>
-                    <td>${nota.fecha || "-"}</td>
-                    <td>${nota.motivo || "Nota de credito"}</td>
-                    <td>${item.producto ? item.producto.codigo + " - " + item.producto.nombre : "Producto"}</td>
-                    <td>${item.cantidad}</td>
+                    <td>${escaparTextoPedido(nota.fecha || "-")}</td>
+                    <td>${escaparTextoPedido(nota.motivo || "Nota de credito")}</td>
+                    <td>${escaparTextoPedido(productoNotaTexto)}</td>
+                    <td>${escaparTextoPedido(item.cantidad)}</td>
                     <td>${formatearDinero(item.subtotal || 0)}</td>
                   </tr>
                 `;
@@ -2450,6 +3174,26 @@ function verDetallePedido(id) {
             nombre: "Sin cliente",
             direccion: "-"
         };
+    const historialPedido =
+        obtenerHistorialAuditoriaPedido(pedido);
+    const filasHistorialPedido =
+        historialPedido.map(function (registroAuditoria) {
+            return `
+              <tr>
+                <td>${escaparTextoPedido(registroAuditoria.fecha || "-")}</td>
+                <td>${escaparTextoPedido(registroAuditoria.hora || "-")}</td>
+                <td>${escaparTextoPedido(registroAuditoria.usuario || "Sistema")}</td>
+                <td>${escaparTextoPedido(registroAuditoria.accion || "-")}</td>
+                <td>${escaparTextoPedido(registroAuditoria.detalle || "-")}</td>
+              </tr>
+            `;
+        }).join("");
+    const observacionesSeguras =
+        escaparTextoPedido(observaciones);
+    const estadoPedidoDetalle =
+        pedido.estado || "PENDIENTE";
+    const estadoClasePedidoDetalle =
+        normalizarTexto(estadoPedidoDetalle).replace(/[^a-z0-9_-]/g, "");
 
     dom.detallePedidoTitulo.textContent =
         "Pedido #" + (pedido.numero || pedido.id);
@@ -2457,9 +3201,9 @@ function verDetallePedido(id) {
     dom.detallePedidoContenido.innerHTML = `
     <div class="pedido-detail-header">
       <div>
-        <span class="status ${pedido.estado.toLowerCase()}">${pedido.estado}</span>
-        <h3>${clienteDetalle.codigo} - ${clienteDetalle.nombre}</h3>
-        <p>${clienteDetalle.direccion || "-"}</p>
+        <span class="status ${estadoClasePedidoDetalle}">${escaparTextoPedido(estadoPedidoDetalle)}</span>
+        <h3>${escaparTextoPedido(clienteDetalle.codigo)} - ${escaparTextoPedido(clienteDetalle.nombre)}</h3>
+        <p>${escaparTextoPedido(clienteDetalle.direccion || "-")}</p>
       </div>
       <div class="pedido-detail-total">
         <span>Total</span>
@@ -2470,7 +3214,7 @@ function verDetallePedido(id) {
     <div class="pedido-detail-grid">
       <div>
         <span>Fecha</span>
-        <strong>${pedido.fecha}</strong>
+        <strong>${escaparTextoPedido(pedido.fecha)}</strong>
       </div>
       <div>
         <span>Forma de pago</span>
@@ -2519,7 +3263,7 @@ function verDetallePedido(id) {
 
     <div class="pedido-detail-notes">
       <span>Observaciones</span>
-      <p>${observaciones}</p>
+      <p>${observacionesSeguras}</p>
     </div>
 
     ${notasCredito.length > 0
@@ -2545,6 +3289,24 @@ function verDetallePedido(id) {
             : ""
         }
 
+    <div class="table-wrapper pedido-detail-table">
+      <h4>Historial de cambios</h4>
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Hora</th>
+            <th>Usuario</th>
+            <th>Accion</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filasHistorialPedido || `<tr><td colspan="5" class="empty-table">Sin movimientos registrados para este pedido.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+
     <div class="pedido-detail-actions">
       ${pedido.estado === "BORRADOR" || pedido.estado === "PENDIENTE"
             ? `<button class="primary-button" type="button" onclick="editarPedidoDesdeDetalle(${pedido.id})">
@@ -2558,6 +3320,9 @@ function verDetallePedido(id) {
               </button>`
             : ""
         }
+      <button class="secondary-button" type="button" onclick="duplicarPedidoGuardado(${pedido.id})">
+        Duplicar pedido
+      </button>
       <button class="secondary-button" type="button" onclick="imprimirPedidoGuardado(${pedido.id})">
         Imprimir comprobante
       </button>
@@ -2606,20 +3371,20 @@ async function reabrirPedidoAtendido(id) {
             return;
         }
 
-        if (!Array.isArray(producto.movimientosStock)) {
-            producto.movimientosStock = [];
-        }
-
+        const stockAnterior =
+            obtenerStockTotalProducto(producto);
         const stockFinal =
-            obtenerStockTotalProducto(producto) + item.cantidad;
+            stockAnterior + item.cantidad;
         reconstruirStockProductoDesdeTotal(producto, stockFinal);
         reactivarProductoSiCorrespondePorStock(producto);
 
-        producto.movimientosStock.push({
-            fecha: new Date().toLocaleDateString("es-AR"),
+        registrarMovimientoStockProducto(producto, {
             tipo: "Reapertura de pedido",
+            motivo: "Reapertura de pedido atendido",
+            referencia: "Pedido #" + (pedido.numero || pedido.id),
             pedido: pedido.numero || pedido.id,
             cantidad: item.cantidad,
+            stockAnterior: stockAnterior,
             stockFinal: obtenerStockTotalProducto(producto)
         });
     });

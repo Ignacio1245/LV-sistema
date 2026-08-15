@@ -179,6 +179,11 @@ function validarGuardasDePermisos(raizProyecto) {
     ["js/proveedores.js", "editarProveedor"],
     ["js/proveedores.js", "cambiarEstadoProveedor"],
     ["js/proveedores.js", "eliminarProveedor"],
+    ["js/app.js", "guardarUsuarioMovilDeVendedor"],
+    ["js/app.js", "guardarVendedorDesdeFormulario"],
+    ["js/app.js", "editarVendedor"],
+    ["js/app.js", "alternarEstadoVendedor"],
+    ["js/app.js", "eliminarVendedor"],
     ["js/compras.js", "registrarCompra"],
     ["js/productos-admin.js", "agregarListaPrecio"],
     ["js/productos-admin.js", "cambiarEstadoListaPrecio"],
@@ -498,10 +503,13 @@ function validarPoliticasRlsProduccion(raizProyecto) {
   const sql =
     fs.readFileSync(rlsPath, "utf8");
   const reglasNecesarias = [
-    ["clientes escritura ventas", /clientes escritura permiso[\s\S]*usuario_tiene_permiso\('ventas'\)/],
-    ["pagos cliente escritura ventas", /pagos cliente escritura permiso[\s\S]*usuario_tiene_permiso\('ventas'\)/],
-    ["pedidos escritura ventas", /pedidos escritura ventas[\s\S]*usuario_tiene_permiso\('ventas'\)/],
-    ["pedido items escritura cuenta corriente", /pedido items escritura ventas[\s\S]*usuario_tiene_permiso\('cuentaCorriente'\)/],
+    ["clientes escritura ventas", /function public\.usuario_puede_escribir_cliente[\s\S]*usuario_tiene_permiso\('ventas'\)[\s\S]*texto_corresponde_usuario_vendedor/],
+    ["match vendedor no acepta vacios", /function public\.texto_corresponde_usuario_vendedor[\s\S]*length\(trim\(coalesce\(valor, ''\)\)\) > 0/],
+    ["clientes lectura restringida vendedor", /clientes lectura permiso[\s\S]*usuario_puede_acceder_cliente\(vendedor_asignado\)/],
+    ["vendedores lectura restringida vendedor", /vendedores lectura usuario activo[\s\S]*usuario_puede_acceder_vendedor\(nombre, email\)/],
+    ["pagos cliente escritura restringida vendedor", /pagos cliente escritura permiso[\s\S]*usuario_puede_acceder_pago_cliente\(cliente_id\)/],
+    ["pedidos escritura restringida vendedor", /pedidos escritura ventas[\s\S]*usuario_puede_escribir_pedido\(vendedor, cliente_id\)/],
+    ["pedido items escritura por pedido permitido", /pedido items escritura ventas[\s\S]*usuario_puede_escribir_pedido\(pedidos\.vendedor, pedidos\.cliente_id\)/],
     ["productos escritura ventas", /productos escritura permiso[\s\S]*usuario_tiene_permiso\('ventas'\)/]
   ];
   const faltantes =
@@ -603,6 +611,8 @@ function validarSincronizacionMultiEquipo(raizProyecto) {
     path.join(raizProyecto, "js", "supabase-data.js");
   const repositorioPath =
     path.join(raizProyecto, "js", "database", "supabase-repository.js");
+  const mappersPath =
+    path.join(raizProyecto, "js", "database", "supabase-mappers.js");
   const html =
     fs.readFileSync(indexPath, "utf8");
   const app =
@@ -611,6 +621,8 @@ function validarSincronizacionMultiEquipo(raizProyecto) {
     fs.readFileSync(supabaseDataPath, "utf8");
   const repositorio =
     fs.readFileSync(repositorioPath, "utf8");
+  const mappers =
+    fs.readFileSync(mappersPath, "utf8");
   const errores = [];
 
   if (html.includes("refreshOnlineDataButton") ||
@@ -638,6 +650,14 @@ function validarSincronizacionMultiEquipo(raizProyecto) {
     errores.push("app.js debe refrescar datos online al cambiar de apartado");
   }
 
+  if (!app.includes("function actualizarDatosOnlineAlVolverAlSistema") ||
+      !app.includes("document.hidden") ||
+      !app.includes('"visibilitychange"') ||
+      !app.includes('"focus"') ||
+      !app.includes("actualizarDatosOnlineAlVolverAlSistema")) {
+    errores.push("app.js debe refrescar datos online al volver a la pestana del sistema");
+  }
+
   if (!app.includes("sincronizarCambiosPendientesSupabase") ||
       !app.includes("haySincronizacionPendiente") ||
       !app.includes("await sincronizarCambiosPendientesSupabase();")) {
@@ -649,6 +669,17 @@ function validarSincronizacionMultiEquipo(raizProyecto) {
       !supabaseData.includes("sincronizarCambiosPendientesSupabase") ||
       !supabaseData.includes("sincronizacionPendiente")) {
     errores.push("supabase-data.js debe registrar y subir cambios pendientes de sincronizacion");
+  }
+
+  if (!supabaseData.includes("function marcarOperacionSupabasePendiente") ||
+      !supabaseData.includes("function informarOperacionSinSesionSupabase") ||
+      !supabaseData.includes('informarOperacionSinSesionSupabase("clientes")') ||
+      !supabaseData.includes('informarOperacionSinSesionSupabase("productos")') ||
+      !supabaseData.includes('informarOperacionSinSesionSupabase("pedidos")') ||
+      !supabaseData.includes('marcarOperacionSupabasePendiente(\n      "clientes"') ||
+      !supabaseData.includes('marcarOperacionSupabasePendiente(\n      "productos"') ||
+      !supabaseData.includes('marcarOperacionSupabasePendiente(\n      "pedidos"')) {
+    errores.push("operaciones criticas deben quedar pendientes si Supabase falla o no hay sesion");
   }
 
   if (!repositorio.includes("function obtenerMayorNumeroPedidoSupabase") ||
@@ -673,13 +704,30 @@ function validarSincronizacionMultiEquipo(raizProyecto) {
     "vendedoresSistema = vendedoresSupabase;",
     "listasPrecios = listasSupabase;",
     "proveedorPagos = proveedorPagosSupabase;",
-    "compras = comprasSupabase;",
-    "auditoria = auditoriaSupabase;"
+    "compras = comprasSupabase;"
   ].forEach(function (textoEsperado) {
     if (!supabaseData.includes(textoEsperado)) {
       errores.push("carga Supabase debe reemplazar local aunque venga vacio: " + textoEsperado);
     }
   });
+
+  if (!supabaseData.includes('auditoria: "auditoria"') ||
+      !supabaseData.includes('if (tipo === "auditoria")') ||
+      !supabaseData.includes("function sincronizarAuditoriaLocalConSupabase") ||
+      !supabaseData.includes('marcarSincronizacionPendiente("auditoria")')) {
+    errores.push("auditoria debe quedar como pendiente y reintentarse si Supabase no la guarda");
+  }
+
+  if (!supabaseData.includes("auditoriaLocalPendiente") ||
+      !supabaseData.includes(".concat(auditoriaLocalPendiente)") ||
+      !supabaseData.includes("function obtenerFechaOrdenAuditoria") ||
+      supabaseData.includes("auditoria = auditoriaSupabase;")) {
+    errores.push("carga de auditoria Supabase debe conservar registros locales pendientes");
+  }
+
+  if (!mappers.includes("fechaIso: fecha.toISOString()")) {
+    errores.push("mapper de auditoria debe conservar fechaIso para ordenar y preservar pendientes");
+  }
 
   if (errores.length > 0) {
     throw new Error("Sincronizacion multi-equipo incompleta: " + errores.join(" | "));
@@ -691,6 +739,8 @@ function validarCatalogoPublicoProduccion(raizProyecto) {
     path.join(raizProyecto, "supabase", "sql", "catalogo-publico.sql");
   const repositorioPath =
     path.join(raizProyecto, "js", "database", "supabase-repository.js");
+  const mappersPath =
+    path.join(raizProyecto, "js", "database", "supabase-mappers.js");
   const catalogoPath =
     path.join(raizProyecto, "js", "public", "catalogo-whatsapp.js");
 
@@ -698,6 +748,8 @@ function validarCatalogoPublicoProduccion(raizProyecto) {
     fs.readFileSync(sqlPath, "utf8");
   const repositorio =
     fs.readFileSync(repositorioPath, "utf8");
+  const mappers =
+    fs.readFileSync(mappersPath, "utf8");
   const catalogo =
     fs.readFileSync(catalogoPath, "utf8");
 
@@ -733,10 +785,14 @@ function validarVendedoresMobileProduccion(raizProyecto) {
     path.join(raizProyecto, "js", "mobile", "vendedores-mobile.js");
   const repositorioPath =
     path.join(raizProyecto, "js", "database", "supabase-repository.js");
+  const mappersPath =
+    path.join(raizProyecto, "js", "database", "supabase-mappers.js");
   const vendedores =
     fs.readFileSync(vendedoresPath, "utf8");
   const repositorio =
     fs.readFileSync(repositorioPath, "utf8");
+  const mappers =
+    fs.readFileSync(mappersPath, "utf8");
   const errores = [];
 
   if (!vendedores.includes("iniciarSesionSupabase")) {
@@ -756,6 +812,30 @@ function validarVendedoresMobileProduccion(raizProyecto) {
   if (!vendedores.includes('String(marcaTiempo) + String(sufijoAleatorio).padStart(3, "0")') ||
       !vendedores.includes("Supabase no confirmo la cobranza")) {
     errores.push("cobranzas moviles deben usar codigo unico y exigir confirmacion Supabase");
+  }
+
+  if (!vendedores.includes("CLAVE_BORRADOR_PEDIDO_VENDEDOR") ||
+      !vendedores.includes("function guardarBorradorPedidoVendedor") ||
+      !vendedores.includes("function restaurarBorradorPedidoVendedor") ||
+      !vendedores.includes("function limpiarBorradorPedidoVendedor") ||
+      !vendedores.includes("Borrador de pedido recuperado") ||
+      !vendedores.includes('vendedorDom.observacion.addEventListener("input", guardarBorradorPedidoVendedor)')) {
+    errores.push("vendedores-mobile.js debe guardar y restaurar borradores de pedido locales");
+  }
+
+  if (!vendedores.includes("CLAVE_BORRADOR_CLIENTE_VENDEDOR") ||
+      !vendedores.includes("function guardarBorradorClienteVendedor") ||
+      !vendedores.includes("function restaurarBorradorClienteVendedor") ||
+      !vendedores.includes("Borrador de cliente recuperado") ||
+      !vendedores.includes('controlNuevoCliente.addEventListener("input", guardarBorradorClienteVendedor)')) {
+    errores.push("vendedores-mobile.js debe guardar borradores de alta rapida de clientes");
+  }
+
+  if (!vendedores.includes("function buscarClienteSimilarNuevoClienteVendedor") ||
+      !vendedores.includes("function confirmarAltaClienteSimilarVendedor") ||
+      !vendedores.includes("Alta cancelada. Usa el cliente existente") ||
+      !vendedores.includes("obtenerTelefonoComparableClienteVendedor")) {
+    errores.push("vendedores-mobile.js debe advertir duplicados antes de crear clientes desde celular");
   }
 
   if (!repositorio.includes("obtenerUsuarioSistemaPorEmailSupabase")) {
@@ -798,10 +878,22 @@ function validarImportacionesRobustas(raizProyecto) {
     path.join(raizProyecto, "js", "productos-admin.js");
   const clientesPath =
     path.join(raizProyecto, "js", "clientes.js");
+  const helpersPath =
+    path.join(raizProyecto, "js", "helpers.js");
+  const appPath =
+    path.join(raizProyecto, "js", "app.js");
+  const indexPath =
+    path.join(raizProyecto, "index.html");
   const productosAdmin =
     fs.readFileSync(productosAdminPath, "utf8");
   const clientes =
     fs.readFileSync(clientesPath, "utf8");
+  const helpers =
+    fs.readFileSync(helpersPath, "utf8");
+  const app =
+    fs.readFileSync(appPath, "utf8");
+  const html =
+    fs.readFileSync(indexPath, "utf8");
   const errores = [];
 
   if (!productosAdmin.includes("function detectarSeparadorImportacion")) {
@@ -827,6 +919,72 @@ function validarImportacionesRobustas(raizProyecto) {
   if (!clientes.includes("guardarZonas();") ||
       !clientes.includes('programarSincronizacionAutomatica("datosBase")')) {
     errores.push("importacion de clientes debe guardar y sincronizar zonas creadas");
+  }
+
+  if (!clientes.includes('"id", "codigo"') ||
+      !clientes.includes('"nombrefantasia"') ||
+      !clientes.includes('"direccin"')) {
+    errores.push("importacion de clientes debe reconocer CSV ID; Nombre Fantasia; Direccion; Tel; Lista; Zona");
+  }
+
+  if (!html.includes("clientesImportacionPreview") ||
+      !html.includes("productosImportacionPreview") ||
+      !app.includes("clientesImportacionPreview") ||
+      !app.includes("productosImportacionPreview") ||
+      !clientes.includes("function analizarImportacionClientes") ||
+      !productosAdmin.includes("function analizarImportacionProductos")) {
+    errores.push("importaciones deben tener previsualizacion antes de aplicar");
+  }
+
+  if (!helpers.includes("function generarRespaldoAutomaticoAntesDeOperacion") ||
+      !clientes.includes('generarRespaldoAutomaticoAntesDeOperacion("importacion-clientes")') ||
+      !productosAdmin.includes('generarRespaldoAutomaticoAntesDeOperacion("importacion-productos")')) {
+    errores.push("importaciones deben generar respaldo automatico antes de aplicar cambios");
+  }
+
+  if (!productosAdmin.includes("function obtenerIndiceColumnaImportacion") ||
+      !productosAdmin.includes("return mapa[nombre] >= 0 ? mapa[nombre] : -1;") ||
+      !clientes.includes("function obtenerIndiceClienteImportacion") ||
+      !clientes.includes("return mapa[nombre] >= 0 ? mapa[nombre] : -1;")) {
+    errores.push("CSV con encabezado no debe usar fallback posicional para columnas faltantes");
+  }
+
+  if (!clientes.includes("telefonoTexto || (clienteExistente ? clienteExistente.telefono") ||
+      !clientes.includes("zonaTexto !== \"\"") ||
+      !clientes.includes("Object.keys(datosComerciales)") ||
+      !productosAdmin.includes("rubroTexto !== \"\"") ||
+      !productosAdmin.includes("proveedorTexto !== \"\"")) {
+    errores.push("importacion debe preservar campos existentes cuando el CSV no trae la columna");
+  }
+
+  if (!clientes.includes("codigosDuplicados") ||
+      !productosAdmin.includes("codigosDuplicados") ||
+      !clientes.includes("La importacion queda bloqueada") ||
+      !productosAdmin.includes("La importacion queda bloqueada")) {
+    errores.push("importaciones deben bloquear codigos duplicados dentro del CSV");
+  }
+
+  if (!productosAdmin.includes('generarRespaldoAutomaticoAntesDeOperacion("importacion-precios")') ||
+      !productosAdmin.includes('generarRespaldoAutomaticoAntesDeOperacion("actualizacion-masiva-precios")') ||
+      !productosAdmin.includes('generarRespaldoAutomaticoAntesDeOperacion("correccion-temporal-productos")')) {
+    errores.push("importaciones y actualizaciones masivas de precios deben generar respaldo automatico");
+  }
+
+  if (!productosAdmin.includes("async function aplicarActualizacionMasivaPrecios") ||
+      !productosAdmin.includes("await sincronizarImportacionProductosAhora") ||
+      productosAdmin.includes("No se subio nada a Supabase")) {
+    errores.push("precios masivos e importados deben marcar pendiente y sincronizar con Supabase");
+  }
+
+  if (!html.includes('value="revision_precios"') ||
+      !html.includes('data-quick-action="revision-precios"') ||
+      !productosAdmin.includes("function obtenerProblemasPrecioProducto") ||
+      !productosAdmin.includes("function productoTienePreciosARevisar") ||
+      !productosAdmin.includes('vistaProductosActual !== "revision_precios"') ||
+      !app.includes('"revision-precios": "productos"') ||
+      !app.includes("lista inexistente") ||
+      !app.includes("obtenerProblemasPrecioProducto(producto)")) {
+    errores.push("dashboard/productos debe detectar listas y precios incompletos despues de importaciones");
   }
 
   if (errores.length > 0) {
@@ -916,6 +1074,11 @@ function validarDashboardAdministrativo(raizProyecto) {
     errores.push("Inicio debe tener panel de arranque rapido");
   }
 
+  if (!html.includes("dashboardEstadoArranquePanel") ||
+      !html.includes("dashboardEstadoArranqueLista")) {
+    errores.push("Inicio debe tener semaforo de estado de arranque");
+  }
+
   if (!estilos.includes(".dashboard-start-panel") || estilos.includes(".dashboard-control-card:nth-child(3)")) {
     errores.push("panel principal debe mostrar arranque rapido y no ocultar datos incompletos");
   }
@@ -924,8 +1087,35 @@ function validarDashboardAdministrativo(raizProyecto) {
     errores.push("app.js debe registrar dashboardDatosIncompletosLista en dom");
   }
 
+  if (!app.includes("dashboardEstadoArranquePanel: document.querySelector") ||
+      !app.includes("dashboardEstadoArranqueLista: document.querySelector")) {
+    errores.push("app.js debe registrar controles del semaforo de arranque");
+  }
+
   if (!app.includes("function obtenerDatosIncompletosParaDashboard")) {
     errores.push("dashboard debe calcular datos incompletos");
+  }
+
+  if (!app.includes("function obtenerPosiblesDuplicadosClientesDashboard") ||
+      !app.includes("function obtenerClaveClienteDuplicadoDashboard") ||
+      !app.includes("datosIncompletos.push(...obtenerPosiblesDuplicadosClientesDashboard())") ||
+      !app.includes("Posible duplicado")) {
+    errores.push("dashboard debe detectar posibles clientes duplicados por telefono o direccion");
+  }
+
+  if (!app.includes("function obtenerRevisionesArranqueSistema") ||
+      !app.includes("function renderizarEstadoArranqueSistema") ||
+      !app.includes("function obtenerResumenArranqueSistema") ||
+      !app.includes("haySincronizacionPendiente") ||
+      !app.includes("obtenerCantidadUsuariosVendedoresActivos") ||
+      !app.includes("renderizarEstadoArranqueSistema(datosIncompletos, productosCriticos)")) {
+    errores.push("dashboard debe tener semaforo de arranque para operar con datos reales");
+  }
+
+  if (!estilos.includes(".dashboard-readiness-panel") ||
+      !estilos.includes(".dashboard-readiness-panel.estado-critico") ||
+      !estilos.includes(".dashboard-readiness-row")) {
+    errores.push("dashboard debe tener estilos para el semaforo de arranque");
   }
 
   if (!app.includes("function crearFilaDashboard")) {
@@ -1166,8 +1356,14 @@ function validarPedidosOperativos(raizProyecto) {
     path.join(raizProyecto, "js", "app.js");
   const productosPath =
     path.join(raizProyecto, "js", "productos.js");
+  const productosAdminPath =
+    path.join(raizProyecto, "js", "productos-admin.js");
+  const comprasPath =
+    path.join(raizProyecto, "js", "compras.js");
   const habitualesPath =
     path.join(raizProyecto, "js", "pedido", "habituales.js");
+  const observacionesPath =
+    path.join(raizProyecto, "js", "pedido", "observaciones.js");
   const html =
     fs.readFileSync(indexPath, "utf8");
   const pedido =
@@ -1176,16 +1372,26 @@ function validarPedidosOperativos(raizProyecto) {
     fs.readFileSync(appPath, "utf8");
   const productos =
     fs.readFileSync(productosPath, "utf8");
+  const productosAdmin =
+    fs.readFileSync(productosAdminPath, "utf8");
+  const compras =
+    fs.readFileSync(comprasPath, "utf8");
   const habituales =
     fs.readFileSync(habitualesPath, "utf8");
+  const observaciones =
+    fs.readFileSync(observacionesPath, "utf8");
   const cuerpoGuardar =
     obtenerCuerpoFuncion(pedido, "guardarPedido");
   const cuerpoAtender =
     obtenerCuerpoFuncion(pedido, "atenderPedido");
+  const cuerpoStockVendible =
+    obtenerCuerpoFuncion(productos, "obtenerStockVendible");
   const cuerpoConfirmarEntrega =
     obtenerCuerpoFuncion(pedido, "confirmarEntregaPedido");
   const cuerpoEliminar =
     obtenerCuerpoFuncion(pedido, "eliminarPedido");
+  const cuerpoDuplicar =
+    obtenerCuerpoFuncion(pedido, "duplicarPedidoGuardado");
   const errores = [];
 
   if (!cuerpoGuardar.includes("try {") || !cuerpoGuardar.includes("finally")) {
@@ -1224,6 +1430,38 @@ function validarPedidosOperativos(raizProyecto) {
     errores.push("eliminarPedido debe bloquear pedidos atendidos o entregados");
   }
 
+  if (!pedido.includes("function duplicarPedidoGuardado") ||
+      !pedido.includes("duplicarPedidoGuardado(${pedido.id})") ||
+      !pedido.includes("Duplicar pedido") ||
+      !cuerpoDuplicar.includes('tienePermiso("ventas")') ||
+      !cuerpoDuplicar.includes("obtenerStockDisponibleProducto(producto, null)") ||
+      !cuerpoDuplicar.includes("validarCantidadPedidoProducto(producto, cantidadDuplicada)") ||
+      !cuerpoDuplicar.includes("pedidoEditando = null") ||
+      !cuerpoDuplicar.includes('"Preparo duplicado pedido"')) {
+    errores.push("pedidos debe permitir duplicar/repetir ventas usando permisos, stock actual y auditoria");
+  }
+
+  if (!pedido.includes("function obtenerFirmaPedidoCliente") ||
+      !pedido.includes("function buscarPedidoDuplicadoExacto") ||
+      !pedido.includes("function confirmarPedidoDuplicadoExacto") ||
+      !pedido.includes("permiteDuplicadoExacto") ||
+      !pedido.includes("Confirmo pedido duplicado") ||
+      !pedido.includes("firmaControlDuplicado") ||
+      !pedido.includes("Mismo cliente, mismos productos, cantidades, descuentos y forma de pago")) {
+    errores.push("pedidos debe advertir antes de crear duplicados exactos del mismo dia");
+  }
+
+  if (!pedido.includes("function escaparTextoPedido") ||
+      !pedido.includes("function obtenerHistorialAuditoriaPedido") ||
+      !pedido.includes("function auditoriaCorrespondeAPedido") ||
+      !pedido.includes("Historial de cambios") ||
+      !pedido.includes("escaparTextoPedido(clientePedidoTexto)") ||
+      !pedido.includes("escaparTextoPedido(item.producto.nombre)") ||
+      !pedido.includes("escaparTextoPedido(registroAuditoria.detalle") ||
+      !pedido.includes("observacionesSeguras")) {
+    errores.push("pedidos debe escapar textos cargados por usuarios y mostrar historial visible desde auditoria");
+  }
+
   if (!pedido.includes("function advertirSalidaConPedidoSinGuardar") ||
       !pedido.includes("event.returnValue") ||
       !app.includes('"beforeunload"') ||
@@ -1236,6 +1474,25 @@ function validarPedidosOperativos(raizProyecto) {
       !pedido.includes("guardandoPedidoEnCurso") ||
       !pedido.includes("pedidosOperacionEnCurso.size > 0")) {
     errores.push("pedidos debe advertir tambien por sincronizacion u operaciones en curso");
+  }
+
+  if (!pedido.includes("const CLAVE_PEDIDO_ACTUAL_LOCAL") ||
+      !pedido.includes("pedidoActualLocalInicializado") ||
+      !pedido.includes("function guardarPedidoActualLocal") ||
+      !pedido.includes("function restaurarPedidoActualLocalSiCorresponde") ||
+      !pedido.includes("pedidoActualLocalEstaVencido") ||
+      !pedido.includes("localStorage.setItem(") ||
+      !pedido.includes("guardarPedidoActualLocal();") ||
+      !app.includes("restaurarPedidoActualLocalSiCorresponde") ||
+      !app.includes("limpiarPedidoActualLocal();")) {
+    errores.push("pedidos debe guardar/restaurar borradores locales y limpiarlos al restablecer datos");
+  }
+
+  if (!observaciones.includes("function escaparTextoObservacionPedido") ||
+      !observaciones.includes("function guardarObservacionesPedidoActualLocalSiExiste") ||
+      !observaciones.includes("guardarPedidoActualLocal") ||
+      !observaciones.includes("escaparTextoObservacionPedido(observacion)")) {
+    errores.push("observaciones de pedidos deben escapar texto y activar autosave local");
   }
 
   if (!html.includes("pedidoRapidoModal") ||
@@ -1252,6 +1509,32 @@ function validarPedidosOperativos(raizProyecto) {
     errores.push("pedidos debe tener carga rapida por producto con cantidad y bonificacion");
   }
 
+  if (!productos.includes("function obtenerStockReservadoProducto(producto, pedidoIgnoradoId)") ||
+      !productos.includes('pedido.estado !== "PENDIENTE"') ||
+      !productos.includes("function obtenerStockDisponibleProducto(producto, pedidoIgnoradoId)") ||
+      !cuerpoStockVendible.includes("return obtenerStockDisponibleProducto(producto, pedidoIgnoradoId);")) {
+    errores.push("stock debe descontar pedidos pendientes para evitar sobreventa simultanea");
+  }
+
+  if (!pedido.includes("obtenerStockDisponibleProducto(producto, pedidoEditando ? pedidoEditando.id : null)") ||
+      !pedido.includes("obtenerStockDisponibleProducto(producto, pedido.id)")) {
+    errores.push("pedidos debe validar stock disponible reservado antes de agregar o atender");
+  }
+
+  if (!productos.includes("function registrarMovimientoStockProducto(producto, datosMovimiento)") ||
+      !productos.includes("usuarioCodigo: usuarioMovimiento.codigo") ||
+      !productos.includes("stockAnterior: stockAnterior") ||
+      !productos.includes("stockFinal: stockFinal") ||
+      !productos.includes("fechaIso: datos.fechaIso || ahora.toISOString()")) {
+    errores.push("movimientos de stock deben guardar trazabilidad con usuario, fecha y stock anterior/final");
+  }
+
+  [pedido, productos, productosAdmin, compras].forEach(function (contenido, indiceArchivo) {
+    if (!contenido.includes("registrarMovimientoStockProducto(producto")) {
+      errores.push("archivo de stock " + indiceArchivo + " debe registrar movimientos con el helper central");
+    }
+  });
+
   if (errores.length > 0) {
     throw new Error("Pedidos operativos incompletos: " + errores.join(" | "));
   }
@@ -1262,10 +1545,14 @@ function validarCuentaCorriente(raizProyecto) {
     path.join(raizProyecto, "index.html");
   const clientesPath =
     path.join(raizProyecto, "js", "clientes.js");
+  const pedidoPath =
+    path.join(raizProyecto, "js", "pedido.js");
   const html =
     fs.readFileSync(indexPath, "utf8");
   const clientes =
     fs.readFileSync(clientesPath, "utf8");
+  const pedido =
+    fs.readFileSync(pedidoPath, "utf8");
   const errores = [];
 
   if (!html.includes('id="pagoImporteInput" type="number" min="0.01" step="0.01"')) {
@@ -1305,6 +1592,27 @@ function validarCuentaCorriente(raizProyecto) {
       !clientes.includes('"pago:" + cliente.codigo') ||
       !clientes.includes('"notaCredito:" + cliente.codigo')) {
     errores.push("cuenta corriente debe bloquear pagos y notas de credito duplicadas en curso");
+  }
+
+  if (!clientes.includes("function importacionClienteTieneDato") ||
+      !clientes.includes("if (saldoImportadoInformado) {") ||
+      !clientes.includes("clienteExistente.saldo = saldoInicial") ||
+      !clientes.includes("historial: saldoImportadoInformado ? crearHistorialSaldoInicialCliente(saldoInicial) : []")) {
+    errores.push("importacion de clientes no debe pisar saldos si el CSV no trae saldo informado");
+  }
+
+  if (!clientes.includes("function crearMovimientoCuentaCliente") ||
+      !clientes.includes("usuarioCodigo: usuarioMovimiento.codigo") ||
+      !clientes.includes("saldoAnterior: saldoAnterior") ||
+      !clientes.includes("saldoPosterior: saldoPosterior") ||
+      !clientes.includes("fechaIso: datos.fechaIso || ahora.toISOString()")) {
+    errores.push("movimientos de cuenta corriente deben guardar usuario, fecha y saldo anterior/posterior");
+  }
+
+  if (!pedido.includes("crearMovimientoCuentaCliente({") ||
+      !pedido.includes("motivo: \"Pedido pasado a cuenta corriente\"") ||
+      !pedido.includes("motivo: \"Saldo pendiente de pedido entregado\"")) {
+    errores.push("pedidos debe registrar deudas en cuenta corriente con movimiento trazable");
   }
 
   if (errores.length > 0) {
@@ -1349,10 +1657,14 @@ function validarImpresionesAdministrativas(raizProyecto) {
 
   [
     "item.producto.nombre",
+    "descuentoTexto",
     "pedidoParaImprimir.cliente.nombre",
     "pedidoParaImprimir.cliente.direccion",
+    "pedidoParaImprimir.vendedor || \"Sin vendedor\"",
+    "pedidoParaImprimir.estadoCobro || \"-\"",
     "pieComprobante",
-    "textoQrPago"
+    "textoQrPago",
+    "urlCatalogoPublico"
   ].forEach(function (textoEsperado) {
     if (!impresion.includes("escaparTextoHtml(" + textoEsperado)) {
       errores.push("impresion de pedidos debe escapar " + textoEsperado);
@@ -1365,6 +1677,16 @@ function validarImpresionesAdministrativas(raizProyecto) {
       !impresion.includes("obtenerQrComprobanteHtml(pedidoParaImprimir.total)") ||
       !impresion.includes("formatearDinero(totalPago)")) {
     errores.push("impresion de pedidos debe mostrar QR fijo de Mercado Pago con fallback al alias y total del comprobante");
+  }
+
+  if (!impresion.includes("function obtenerUrlCatalogoPublico") ||
+      !impresion.includes("function obtenerQrCatalogoPublicoHtml") ||
+      !impresion.includes('new URL("/catalogo", origen)') ||
+      !impresion.includes("obtenerQrCatalogoPublicoHtml()") ||
+      !impresion.includes("pedidoParaImprimir.vendedor") ||
+      !impresion.includes("pedidoParaImprimir.estadoCobro") ||
+      impresion.includes('searchParams.set("cliente"')) {
+    errores.push("impresion de pedidos debe incluir vendedor, estado de cobro y QR generico de catalogo sin exponer codigo de cliente");
   }
 
   [
@@ -1412,8 +1734,24 @@ function validarImpresionesAdministrativas(raizProyecto) {
 function validarAuditoriaAdministracion(raizProyecto) {
   const auditoriaPath =
     path.join(raizProyecto, "js", "auditoria.js");
+  const clientesPath =
+    path.join(raizProyecto, "js", "clientes.js");
+  const pedidoPath =
+    path.join(raizProyecto, "js", "pedido.js");
+  const productosAdminPath =
+    path.join(raizProyecto, "js", "productos-admin.js");
+  const informesPath =
+    path.join(raizProyecto, "js", "informes.js");
   const auditoria =
     fs.readFileSync(auditoriaPath, "utf8");
+  const clientes =
+    fs.readFileSync(clientesPath, "utf8");
+  const pedido =
+    fs.readFileSync(pedidoPath, "utf8");
+  const productosAdmin =
+    fs.readFileSync(productosAdminPath, "utf8");
+  const informes =
+    fs.readFileSync(informesPath, "utf8");
   const cuerpoLimpiar =
     obtenerCuerpoFuncion(auditoria, "limpiarAuditoria");
   const errores = [];
@@ -1429,6 +1767,24 @@ function validarAuditoriaAdministracion(raizProyecto) {
   if (!cuerpoLimpiar.includes('tienePermiso("auditoria")')) {
     errores.push("limpiarAuditoria debe validar permiso de auditoria");
   }
+
+  if (!cuerpoLimpiar.includes('registrarAuditoria(') ||
+      !cuerpoLimpiar.includes('"Limpio registro"')) {
+    errores.push("limpiarAuditoria debe dejar registro nuevo despues de limpiar");
+  }
+
+  [
+    [auditoria, "Exporto auditoria CSV"],
+    [clientes, "Exporto clientes CSV"],
+    [clientes, "Exporto saldos CSV"],
+    [pedido, "Exporto pedidos CSV"],
+    [productosAdmin, "Exporto lista precios CSV"],
+    [informes, "Exporto informe CSV"]
+  ].forEach(function (regla) {
+    if (!regla[0].includes(regla[1])) {
+      errores.push("exportacion sensible sin auditoria: " + regla[1]);
+    }
+  });
 
   if (errores.length > 0) {
     throw new Error("Auditoria administracion incompleta: " + errores.join(" | "));
@@ -1511,6 +1867,8 @@ function validarSqlSupabaseIdempotente(raizProyecto) {
 function validarProteccionContraPerdidaDatos(raizProyecto) {
   const repositorioPath =
     path.join(raizProyecto, "js", "database", "supabase-repository.js");
+  const mappersPath =
+    path.join(raizProyecto, "js", "database", "supabase-mappers.js");
   const appPath =
     path.join(raizProyecto, "js", "app.js");
   const respaldoPath =
@@ -1519,6 +1877,8 @@ function validarProteccionContraPerdidaDatos(raizProyecto) {
     path.join(raizProyecto, "supabase", "sql", "limpiar-usuarios-duplicados.sql");
   const repositorio =
     fs.readFileSync(repositorioPath, "utf8");
+  const mappers =
+    fs.readFileSync(mappersPath, "utf8");
   const app =
     fs.readFileSync(appPath, "utf8");
   const respaldo =
@@ -1568,6 +1928,8 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     path.join(raizProyecto, "js", "public", "catalogo-whatsapp.js");
   const repositorioPath =
     path.join(raizProyecto, "js", "database", "supabase-repository.js");
+  const mappersPath =
+    path.join(raizProyecto, "js", "database", "supabase-mappers.js");
   const sqlCatalogoPath =
     path.join(raizProyecto, "supabase", "sql", "catalogo-publico.sql");
   const vendedoresPath =
@@ -1576,6 +1938,8 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     fs.readFileSync(catalogoPath, "utf8");
   const repositorio =
     fs.readFileSync(repositorioPath, "utf8");
+  const mappers =
+    fs.readFileSync(mappersPath, "utf8");
   const sqlCatalogo =
     fs.readFileSync(sqlCatalogoPath, "utf8");
   const vendedores =
@@ -1613,6 +1977,21 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     errores.push("catalogo publico debe guardar pedidos pendientes en Supabase para que aparezcan en admin");
   }
 
+  if (!catalogo.includes("CLAVE_PEDIDOS_PENDIENTES_CATALOGO") ||
+      !catalogo.includes("function guardarPedidoPendienteCatalogoLocal") ||
+      !catalogo.includes("function sincronizarPedidosPendientesCatalogo") ||
+      !catalogo.includes("await sincronizarPedidosPendientesCatalogo();") ||
+      catalogo.includes("Queres abrir WhatsApp igual?")) {
+    errores.push("catalogo publico debe dejar pedido pendiente local si Supabase falla y sincronizarlo luego");
+  }
+
+  if (!catalogo.includes("let firmaUltimoPedidoCatalogoGuardado") ||
+      !catalogo.includes("firmaUltimoPedidoCatalogoGuardado = firma") ||
+      !catalogo.includes("firmaPedidoActual === firmaUltimoPedidoCatalogoGuardado") ||
+      !catalogo.includes("Este pedido ya estaba guardado. Abriendo WhatsApp")) {
+    errores.push("catalogo publico debe evitar doble envio exacto del mismo pedido");
+  }
+
   if (!catalogo.includes("establecerCantidadCarrito") ||
       !catalogo.includes("normalizarCantidadCatalogo") ||
       !catalogo.includes("formatearCantidadCatalogo")) {
@@ -1623,6 +2002,14 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
       !catalogo.includes("pedidoCatalogoConfirmado") ||
       !catalogo.includes('window.addEventListener("beforeunload", advertirSalidaCatalogoConPedido)')) {
     errores.push("catalogo debe advertir antes de cerrar con carrito pendiente");
+  }
+
+  if (!catalogo.includes("function actualizarCatalogoAlVolver") ||
+      !catalogo.includes("function puedeActualizarCatalogoAlVolver") ||
+      !catalogo.includes("catalogoTienePedidoSinEnviar()") ||
+      !catalogo.includes('document.addEventListener("visibilitychange", actualizarCatalogoAlVolver)') ||
+      !catalogo.includes('window.addEventListener("focus", actualizarCatalogoAlVolver)')) {
+    errores.push("catalogo debe refrescar productos online al volver sin pisar carritos abiertos");
   }
 
   if (!vendedores.includes("clienteAsignadoAlVendedorActual")) {
@@ -1649,9 +2036,37 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     errores.push("vendedores debe advertir antes de cerrar con trabajo pendiente");
   }
 
+  if (!vendedores.includes("function actualizarDatosVendedorAlVolver") ||
+      !vendedores.includes("function puedeActualizarVendedorAlVolver") ||
+      !vendedores.includes("vendedorTieneTrabajoSinCerrar()") ||
+      !vendedores.includes('document.addEventListener("visibilitychange", actualizarDatosVendedorAlVolver)') ||
+      !vendedores.includes('window.addEventListener("focus", actualizarDatosVendedorAlVolver)')) {
+    errores.push("vendedores debe refrescar datos online al volver sin pisar pedidos o cobranzas en curso");
+  }
+
   if (!vendedores.includes("function obtenerMensajeLoginVendedor") ||
       !vendedores.includes("Usuario o clave incorrectos. Pedi al admin que actualice tu clave.")) {
     errores.push("vendedores-mobile.js debe mostrar mensajes claros de login");
+  }
+
+  if (!vendedores.includes("CLAVE_BORRADOR_PEDIDO_VENDEDOR") ||
+      !vendedores.includes("function guardarBorradorPedidoVendedor") ||
+      !vendedores.includes("function restaurarBorradorPedidoVendedor") ||
+      !vendedores.includes("limpiarBorradorPedidoVendedor();") ||
+      !vendedores.includes('vendedorDom.formaPago.addEventListener("change", guardarBorradorPedidoVendedor)')) {
+    errores.push("vendedores-mobile.js debe proteger pedidos en curso con borrador local");
+  }
+
+  if (!vendedores.includes("CLAVE_BORRADOR_CLIENTE_VENDEDOR") ||
+      !vendedores.includes("function guardarBorradorClienteVendedor") ||
+      !vendedores.includes("function restaurarBorradorClienteVendedor") ||
+      !vendedores.includes("function limpiarBorradorClienteVendedor")) {
+    errores.push("vendedores-mobile.js debe proteger altas rapidas de cliente con borrador local");
+  }
+
+  if (!vendedores.includes("function buscarClienteSimilarNuevoClienteVendedor") ||
+      !vendedores.includes("confirmarAltaClienteSimilarVendedor(clienteSimilar)")) {
+    errores.push("vendedores-mobile.js debe evitar altas duplicadas de clientes desde celular");
   }
 
   if (errores.length > 0) {
@@ -1659,9 +2074,50 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
   }
 }
 
+function validarVariablesEntornoEjemplo(raizProyecto) {
+  const envPath =
+    path.join(raizProyecto, ".env.example");
+  const errores = [];
+
+  if (!fs.existsSync(envPath)) {
+    throw new Error("Falta app/.env.example con variables necesarias sin claves reales");
+  }
+
+  const env =
+    fs.readFileSync(envPath, "utf8");
+
+  [
+    "SUPABASE_URL=",
+    "SUPABASE_ANON_KEY=",
+    "SUPABASE_SERVICE_ROLE_KEY="
+  ].forEach(function (variable) {
+    if (!env.includes(variable)) {
+      errores.push(".env.example debe incluir " + variable.replace("=", ""));
+    }
+  });
+
+  [
+    "aofoacncvivxxwnusboi",
+    "sb_publishable_UiKyYc21zsktfi6Mc2t9Sg_2FUQU8_4",
+    "sb_secret_"
+  ].forEach(function (valorReal) {
+    if (env.includes(valorReal)) {
+      errores.push(".env.example no debe contener claves reales ni datos del proyecto productivo");
+    }
+  });
+
+  if (!env.includes("Nunca pegues SUPABASE_SERVICE_ROLE_KEY en archivos frontend")) {
+    errores.push(".env.example debe advertir que service_role no va en frontend");
+  }
+
+  if (errores.length > 0) {
+    throw new Error("Variables de entorno incompletas: " + errores.join(" | "));
+  }
+}
 const archivosJavascript = listarJavascript(jsPath);
 const archivosHtml = listarHtml(raiz);
 
+validarVariablesEntornoEjemplo(raiz);
 validarSintaxisJavascript(archivosJavascript);
 
 archivosHtml.forEach(function (archivoHtml) {

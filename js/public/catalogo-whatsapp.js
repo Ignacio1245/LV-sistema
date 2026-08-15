@@ -1,11 +1,16 @@
 const telefonoDistribuidoraDesdeUrl =
   new URLSearchParams(window.location.search).get("wsp") || "";
 const CLAVE_TELEFONO_CATALOGO = "lv_catalogo_telefono_destino";
+const CLAVE_PEDIDOS_PENDIENTES_CATALOGO = "lv_catalogo_pedidos_pendientes";
 
 let productosCatalogo = [];
 let carritoCatalogo = [];
 let pedidoCatalogoEnCurso = false;
 let pedidoCatalogoConfirmado = false;
+let firmaUltimoPedidoCatalogoGuardado = "";
+let catalogoActualizandoAlVolver = false;
+let ultimaActualizacionCatalogoAlVolver = 0;
+const INTERVALO_ACTUALIZACION_CATALOGO_AL_VOLVER = 20000;
 
 const catalogoDom = {
   estadoConexion: document.getElementById("catalogoEstadoConexion"),
@@ -22,6 +27,44 @@ const catalogoDom = {
   botonEnviarWhatsapp: document.getElementById("catalogoBotonEnviarWhatsapp")
 };
 
+function leerPedidosPendientesCatalogo() {
+  try {
+    const pedidosPendientes =
+      JSON.parse(localStorage.getItem(CLAVE_PEDIDOS_PENDIENTES_CATALOGO) || "[]");
+
+    return Array.isArray(pedidosPendientes)
+      ? pedidosPendientes.filter(function (pedidoPendiente) {
+        return pedidoPendiente &&
+          typeof pedidoPendiente === "object" &&
+          pedidoPendiente.firma &&
+          pedidoPendiente.pedido;
+      })
+      : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function guardarPedidosPendientesCatalogo(pedidosPendientes) {
+  localStorage.setItem(
+    CLAVE_PEDIDOS_PENDIENTES_CATALOGO,
+    JSON.stringify(Array.isArray(pedidosPendientes) ? pedidosPendientes.slice(0, 25) : [])
+  );
+}
+
+function obtenerCantidadPedidosPendientesCatalogo() {
+  return leerPedidosPendientesCatalogo().length;
+}
+
+function actualizarEstadoCatalogo(mensaje) {
+  const cantidadPendiente =
+    obtenerCantidadPedidosPendientesCatalogo();
+
+  catalogoDom.estadoConexion.textContent =
+    mensaje + (cantidadPendiente > 0
+      ? " | " + cantidadPendiente + " pedido" + (cantidadPendiente === 1 ? "" : "s") + " pendiente" + (cantidadPendiente === 1 ? "" : "s")
+      : "");
+}
 function obtenerStockCatalogo(producto) {
   if (typeof obtenerStockTotalProducto === "function") {
     return obtenerStockTotalProducto(producto);
@@ -72,8 +115,7 @@ async function cargarProductosCatalogo() {
 
       productosCatalogo =
         filtrarProductosVisiblesCatalogo(productosDesdeSupabase);
-      catalogoDom.estadoConexion.textContent =
-        "Productos desde Supabase";
+      actualizarEstadoCatalogo("Productos desde Supabase");
       return;
     }
   } catch (error) {
@@ -82,8 +124,7 @@ async function cargarProductosCatalogo() {
 
   productosCatalogo =
     filtrarProductosVisiblesCatalogo(Array.isArray(productos) ? productos : []);
-  catalogoDom.estadoConexion.textContent =
-    "Modo prueba local";
+  actualizarEstadoCatalogo("Modo prueba local");
 }
 
 function normalizarTextoCatalogo(texto) {
@@ -503,6 +544,103 @@ function crearDatosPedidoCatalogoParaAdmin() {
   };
 }
 
+function crearFirmaPedidoCatalogo() {
+  const itemsFirma =
+    carritoCatalogo.map(function (itemCarrito) {
+      return [
+        Number(itemCarrito.producto.codigo) || 0,
+        Number(itemCarrito.cantidad) || 0
+      ].join(":");
+    }).join("|");
+
+  return [
+    catalogoDom.nombreCliente.value.trim(),
+    catalogoDom.direccionCliente.value.trim(),
+    catalogoDom.comentarioCliente.value.trim(),
+    itemsFirma
+  ].join("||");
+}
+
+function guardarPedidoPendienteCatalogoLocal(motivo) {
+  const firma =
+    crearFirmaPedidoCatalogo();
+  const pedidosPendientes =
+    leerPedidosPendientesCatalogo();
+  const yaExiste =
+    pedidosPendientes.some(function (pedidoPendiente) {
+      return pedidoPendiente.firma === firma;
+    });
+
+  if (!firma) {
+    throw new Error("No se pudo crear la firma del pedido.");
+  }
+
+  if (!yaExiste) {
+    pedidosPendientes.unshift({
+      id: String(Date.now()) + "-" + Math.floor(Math.random() * 100000),
+      firma: firma,
+      fechaIso: new Date().toISOString(),
+      motivo: motivo || "Pendiente de sincronizar",
+      pedido: crearDatosPedidoCatalogoParaAdmin()
+    });
+    guardarPedidosPendientesCatalogo(pedidosPendientes);
+  }
+
+  firmaUltimoPedidoCatalogoGuardado = firma;
+  actualizarEstadoCatalogo("Pedido pendiente en este dispositivo");
+  return !yaExiste;
+}
+
+async function sincronizarPedidosPendientesCatalogo() {
+  if (
+    typeof supabaseEstaConfigurado !== "function" ||
+    !supabaseEstaConfigurado() ||
+    typeof crearPedidoCatalogoPublicoSupabase !== "function"
+  ) {
+    actualizarEstadoCatalogo(catalogoDom.estadoConexion.textContent || "Catalogo listo");
+    return;
+  }
+
+  const pedidosPendientes =
+    leerPedidosPendientesCatalogo();
+
+  if (pedidosPendientes.length === 0) {
+    actualizarEstadoCatalogo(catalogoDom.estadoConexion.textContent || "Catalogo listo");
+    return;
+  }
+
+  const pendientesRestantes = [];
+  let pedidosSubidos = 0;
+
+  for (const pedidoPendiente of pedidosPendientes) {
+    try {
+      const resultado =
+        await crearPedidoCatalogoPublicoSupabase(pedidoPendiente.pedido);
+
+      if (!resultado) {
+        throw new Error("Supabase no confirmo el pedido.");
+      }
+
+      pedidosSubidos += 1;
+    } catch (error) {
+      pendientesRestantes.push({
+        ...pedidoPendiente,
+        motivo: error.message || pedidoPendiente.motivo || "No se pudo sincronizar"
+      });
+    }
+  }
+
+  guardarPedidosPendientesCatalogo(pendientesRestantes);
+
+  if (pedidosSubidos > 0) {
+    actualizarEstadoCatalogo(
+      pedidosSubidos + " pedido" + (pedidosSubidos === 1 ? "" : "s") + " pendiente" + (pedidosSubidos === 1 ? "" : "s") + " sincronizado" + (pedidosSubidos === 1 ? "" : "s")
+    );
+    return;
+  }
+
+  actualizarEstadoCatalogo("Catalogo listo");
+}
 async function guardarPedidoCatalogoEnAdmin() {
   if (
     typeof supabaseEstaConfigurado !== "function" ||
@@ -547,6 +685,45 @@ function advertirSalidaCatalogoConPedido(evento) {
   evento.preventDefault();
   evento.returnValue = "";
   return "";
+}
+
+function puedeActualizarCatalogoAlVolver() {
+  if (document.hidden || catalogoActualizandoAlVolver) {
+    return false;
+  }
+
+  if (catalogoTienePedidoSinEnviar()) {
+    return false;
+  }
+
+  if (Date.now() - ultimaActualizacionCatalogoAlVolver < INTERVALO_ACTUALIZACION_CATALOGO_AL_VOLVER) {
+    return false;
+  }
+
+  return typeof supabaseEstaConfigurado === "function" && supabaseEstaConfigurado();
+}
+
+async function actualizarCatalogoAlVolver() {
+  if (!puedeActualizarCatalogoAlVolver()) {
+    return;
+  }
+
+  catalogoActualizandoAlVolver = true;
+  ultimaActualizacionCatalogoAlVolver = Date.now();
+
+  try {
+    actualizarEstadoCatalogo("Actualizando catalogo...");
+    await cargarProductosCatalogo();
+    await sincronizarPedidosPendientesCatalogo();
+    renderizarProductosCatalogo();
+    renderizarCarritoCatalogo();
+    actualizarEstadoCatalogo("Catalogo actualizado");
+  } catch (error) {
+    console.warn("No se pudo actualizar catalogo al volver:", error);
+    actualizarEstadoCatalogo("No se pudo actualizar catalogo online");
+  } finally {
+    catalogoActualizandoAlVolver = false;
+  }
 }
 
 function marcarFormularioCatalogoPendiente() {
@@ -597,6 +774,15 @@ async function enviarPedidoPorWhatsapp(evento) {
     construirMensajePedidoCatalogo();
   const enlaceWhatsapp =
     "https://wa.me/" + telefonoDestino + "?text=" + encodeURIComponent(mensajePedido);
+  const firmaPedidoActual =
+    crearFirmaPedidoCatalogo();
+
+  if (firmaPedidoActual && firmaPedidoActual === firmaUltimoPedidoCatalogoGuardado) {
+    actualizarEstadoCatalogo("Este pedido ya estaba guardado. Abriendo WhatsApp...");
+    window.open(enlaceWhatsapp, "_blank", "noopener");
+    pedidoCatalogoConfirmado = true;
+    return;
+  }
 
   pedidoCatalogoEnCurso = true;
   catalogoDom.botonEnviarWhatsapp.disabled = true;
@@ -607,26 +793,33 @@ async function enviarPedidoPorWhatsapp(evento) {
     const resultadoGuardado =
       await guardarPedidoCatalogoEnAdmin();
 
-    catalogoDom.estadoConexion.textContent =
+    if (!resultadoGuardado.guardado) {
+      guardarPedidoPendienteCatalogoLocal(resultadoGuardado.motivo || "No se guardo en Supabase");
+    }
+
+    if (resultadoGuardado.guardado) {
+      firmaUltimoPedidoCatalogoGuardado = firmaPedidoActual || crearFirmaPedidoCatalogo();
+    }
+
+    actualizarEstadoCatalogo(
       resultadoGuardado.guardado && resultadoGuardado.resultado
         ? "Pedido #" + resultadoGuardado.resultado.numero + " guardado en admin. Abriendo WhatsApp..."
-        : "Pedido listo para WhatsApp.";
+        : "Pedido pendiente en este dispositivo. Abriendo WhatsApp..."
+    );
 
     window.open(enlaceWhatsapp, "_blank", "noopener");
     pedidoCatalogoConfirmado = true;
   } catch (error) {
     console.warn("No se pudo guardar pedido de catalogo en admin:", error);
-    const abrirIgual =
-      confirm("No se pudo guardar el pedido en administracion. Queres abrir WhatsApp igual?");
 
-    if (abrirIgual) {
-      catalogoDom.estadoConexion.textContent =
-        "Pedido no guardado en admin. WhatsApp abierto.";
+    try {
+      guardarPedidoPendienteCatalogoLocal(error.message || "No se pudo guardar en Supabase");
+      actualizarEstadoCatalogo("Pedido pendiente en este dispositivo. Abriendo WhatsApp...");
       window.open(enlaceWhatsapp, "_blank", "noopener");
       pedidoCatalogoConfirmado = true;
-    } else {
-      catalogoDom.estadoConexion.textContent =
-        "Pedido no enviado. Revisa conexion o Supabase.";
+    } catch (errorLocal) {
+      console.warn("No se pudo dejar pedido de catalogo pendiente:", errorLocal);
+      actualizarEstadoCatalogo("Pedido no enviado. No se pudo guardar online ni dejar pendiente local.");
     }
   } finally {
     pedidoCatalogoEnCurso = false;
@@ -639,6 +832,7 @@ async function iniciarCatalogoWhatsapp() {
     cargarTelefonoDestinoCatalogo();
 
   await cargarProductosCatalogo();
+  await sincronizarPedidosPendientesCatalogo();
   renderizarProductosCatalogo();
   renderizarCarritoCatalogo();
 }
@@ -652,5 +846,7 @@ catalogoDom.botonCopiarPedido.addEventListener("click", copiarPedidoCatalogo);
     controlFormulario.addEventListener("input", marcarFormularioCatalogoPendiente);
   });
 window.addEventListener("beforeunload", advertirSalidaCatalogoConPedido);
+document.addEventListener("visibilitychange", actualizarCatalogoAlVolver);
+window.addEventListener("focus", actualizarCatalogoAlVolver);
 
 iniciarCatalogoWhatsapp();
