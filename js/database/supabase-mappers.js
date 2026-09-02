@@ -1,4 +1,4 @@
-function normalizarNombreRolSupabase(nombreRol) {
+﻿function normalizarNombreRolSupabase(nombreRol) {
   return String(nombreRol || "")
     .trim()
     .replace(/[^a-z0-9]+/gi, "_")
@@ -52,7 +52,7 @@ function mapearProductoDesdeSupabase(producto) {
     unidad: producto.unidad || "",
     iva: Number(producto.iva) || 0,
     proveedorAlternativo: producto.proveedor_alternativo || "",
-    bonificacionVenta: Number(producto.bonificacion_venta) || 0,
+    bonificacionVenta: 0,
     activo: producto.activo !== false,
     bajaAutomaticaStock: producto.baja_automatica_stock === true,
     imagenUrl: producto.imagen_url || "",
@@ -99,7 +99,7 @@ function mapearProductoParaSupabase(producto) {
     pack: Number(producto.pack) || 0,
     unidad: producto.unidad || "",
     iva: Number(producto.iva) || 0,
-    bonificacion_venta: Number(producto.bonificacionVenta) || 0,
+    bonificacion_venta: 0,
     precios_lista: preciosLista,
     historial_precios: Array.isArray(producto.historialPrecios)
       ? producto.historialPrecios

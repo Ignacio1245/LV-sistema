@@ -8,18 +8,30 @@ const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8"
+  ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".svg": "image/svg+xml; charset=utf-8"
+};
+
+const rutasLimpias = {
+  "/admin": "index.html",
+  "/admin/": "index.html",
+  "/vendedores": "vendedores.html",
+  "/vendedores/": "vendedores.html",
+  "/catalogo": "catalogo.html",
+  "/catalogo/": "catalogo.html"
 };
 
 http.createServer(function (request, response) {
   const requestPath =
     decodeURIComponent((request.url || "/").split("?")[0]);
   const relativePath =
-    requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, "");
+    rutasLimpias[requestPath] ||
+    (requestPath === "/" ? "index.html" : requestPath.replace(/^\/+/, ""));
   let filePath =
     path.resolve(root, relativePath);
 
-  if (!filePath.startsWith(root)) {
+  if (filePath !== root && !filePath.startsWith(root + path.sep)) {
     response.writeHead(403);
     response.end("Forbidden");
     return;

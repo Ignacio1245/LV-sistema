@@ -1,4 +1,4 @@
-﻿let sesionSistemaActiva = false;
+let sesionSistemaActiva = false;
 const EMAIL_ACCESO_LOCAL_INICIAL = "admin@local";
 const CLAVE_ACCESO_LOCAL_INICIAL = "admin123";
 
@@ -68,7 +68,13 @@ function obtenerAdministradorLocalInicial() {
 }
 
 function puedeUsarAccesoLocalInicial() {
-  return !hayUsuariosConEmailConfigurado();
+  const hayProyectoSupabaseConfigurado =
+    typeof SUPABASE_URL === "string" &&
+    SUPABASE_URL.trim() !== "" &&
+    typeof SUPABASE_PUBLISHABLE_KEY === "string" &&
+    SUPABASE_PUBLISHABLE_KEY.trim() !== "";
+
+  return !hayProyectoSupabaseConfigurado && !hayUsuariosConEmailConfigurado();
 }
 
 function credencialesLocalesInicialesValidas(email, password) {
@@ -304,6 +310,10 @@ function cargarDatosOperativosDespuesDelLogin() {
         "Sesion iniciada. Datos cargados desde Supabase.",
         "sync-ok"
       );
+
+      if (typeof iniciarActualizacionEnTiempoRealSupabase === "function") {
+        iniciarActualizacionEnTiempoRealSupabase();
+      }
     })
     .catch(function (error) {
       console.error("No se pudieron cargar datos operativos despues del login:", error);
@@ -327,6 +337,12 @@ function obtenerMensajeLoginParaUsuario(error) {
   if (mensajeNormalizado.includes("email not confirmed") ||
       mensajeNormalizado.includes("not confirmed")) {
     return "El acceso existe en Supabase pero no esta confirmado. Hay que guardar el usuario desde admin con la funcion segura desplegada.";
+  }
+
+  if (mensajeNormalizado.includes("failed to fetch") ||
+      mensajeNormalizado.includes("networkerror") ||
+      mensajeNormalizado.includes("network request failed")) {
+    return "No se pudo conectar con Supabase. Revisa internet o si el proyecto esta pausado, y volve a intentar.";
   }
 
   if (mensajeNormalizado.includes("falta desplegar")) {
@@ -422,6 +438,10 @@ async function cerrarSesionSistema() {
     "Cerro sesion",
     usuarioActual.nombre + " | " + usuarioActual.rol
   );
+
+  if (typeof detenerActualizacionEnTiempoRealSupabase === "function") {
+    detenerActualizacionEnTiempoRealSupabase();
+  }
 
   if (usuarioSupabaseAutenticado()) {
     try {

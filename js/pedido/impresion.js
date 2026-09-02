@@ -94,8 +94,17 @@ function obtenerUrlCatalogoPublico() {
         window.location && window.location.origin
             ? window.location.origin
             : "https://lv-sistema.vercel.app";
+    const esServidorLocal =
+        window.location &&
+        (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
+    const usaCarpetaApp =
+        window.location && /^\/app(?:\/|$)/i.test(window.location.pathname);
+    const rutaCatalogo =
+        esServidorLocal && usaCarpetaApp
+            ? "/app/catalogo.html"
+            : "/catalogo";
 
-    return new URL("/catalogo", origen).toString();
+    return new URL(rutaCatalogo, origen).toString();
 }
 
 function obtenerQrCatalogoPublicoHtml() {

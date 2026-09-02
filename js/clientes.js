@@ -81,7 +81,70 @@ function obtenerDatosComercialesClienteDesdeFormulario() {
   };
 }
 
-function agregarCliente(event) {
+function clienteDebeConfirmarGuardadoOnline() {
+  return typeof puedeGuardarOperacionEnSupabase === "function" &&
+    puedeGuardarOperacionEnSupabase();
+}
+
+function avisarClienteSinConfirmacionOnline(accion) {
+  if (!clienteDebeConfirmarGuardadoOnline()) {
+    return;
+  }
+
+  alert(
+    accion + " quedo guardado localmente, pero Supabase no confirmo todo. " +
+    "Actualiza datos y revisa la conexion antes de seguir operando."
+  );
+}
+
+async function confirmarGuardadoClienteOnline(cliente, accion) {
+  if (typeof guardarClienteOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const clienteGuardadoOnline =
+    await guardarClienteOperacionSupabase(cliente);
+
+  if (clienteDebeConfirmarGuardadoOnline() && !clienteGuardadoOnline) {
+    avisarClienteSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
+
+async function confirmarMovimientoCuentaClienteOnline(cliente, movimiento, accion) {
+  if (typeof guardarMovimientoCuentaOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const movimientoGuardadoOnline =
+    await guardarMovimientoCuentaOperacionSupabase(cliente, movimiento);
+
+  if (clienteDebeConfirmarGuardadoOnline() && !movimientoGuardadoOnline) {
+    avisarClienteSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
+
+async function confirmarEliminacionClienteOnline(cliente, accion) {
+  if (typeof eliminarClienteOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const clienteEliminadoOnline =
+    await eliminarClienteOperacionSupabase(cliente);
+
+  if (clienteDebeConfirmarGuardadoOnline() && !clienteEliminadoOnline) {
+    avisarClienteSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
+async function agregarCliente(event) {
   event.preventDefault();
 
   if (!tienePermiso("clientes")) {
@@ -167,7 +230,13 @@ function agregarCliente(event) {
     actualizarDashboard();
     guardarClientes();
     guardarPedidos();
-    guardarClienteOperacionSupabase(clienteActual);
+
+    const clienteConfirmadoOnline =
+      await confirmarGuardadoClienteOnline(clienteActual, "El cliente");
+
+    if (!clienteConfirmadoOnline) {
+      return;
+    }
 
     registrarAuditoria(
       "Clientes",
@@ -199,7 +268,13 @@ function agregarCliente(event) {
   renderizarZonas();
   actualizarDashboard();
   guardarClientes();
-  guardarClienteOperacionSupabase(clienteNuevo);
+
+  const clienteConfirmadoOnline =
+    await confirmarGuardadoClienteOnline(clienteNuevo, "El cliente");
+
+  if (!clienteConfirmadoOnline) {
+    return;
+  }
 
   registrarAuditoria(
     "Clientes",
@@ -707,16 +782,89 @@ function importarClientesDesdeTextoPlano(texto) {
     guardarClientes();
     guardarZonas();
   });
-  programarSincronizacionAutomatica("clientes");
-  programarSincronizacionAutomatica("datosBase");
+
+  if (typeof programarSincronizacionAutomatica === "function") {
+    programarSincronizacionAutomatica("datosBase");
+  }
+
+  const resumenImportacion = {
+    creados: creados,
+    actualizados: actualizados,
+    errores: errores
+  };
 
   actualizarEstadoImportacionClientes(
     "Importacion local terminada. Creados: " + creados +
     " | Actualizados: " + actualizados +
     " | Errores: " + errores +
-    " | Sincronizacion online programada.",
-    errores > 0 ? "sync-error" : "sync-ok"
+    " | Subiendo a Supabase...",
+    errores > 0 ? "sync-error" : "sync-working"
   );
+
+  return resumenImportacion;
+}
+
+async function sincronizarImportacionClientesConSupabase(resumenImportacion) {
+  const resumen = resumenImportacion || {
+    creados: 0,
+    actualizados: 0,
+    errores: 0
+  };
+
+  if (typeof haySesionSupabaseParaSincronizar !== "function" || !haySesionSupabaseParaSincronizar()) {
+    if (typeof marcarSincronizacionPendiente === "function") {
+      marcarSincronizacionPendiente("clientes");
+      marcarSincronizacionPendiente("datosBase");
+    }
+
+    actualizarEstadoImportacionClientes(
+      "Importacion local lista, pero falta sesion Supabase. Queda pendiente de subir.",
+      "sync-error"
+    );
+    return;
+  }
+
+  try {
+    actualizarEstadoImportacionClientes(
+      "Subiendo clientes, saldos y zonas a Supabase...",
+      "sync-working"
+    );
+
+    const sincronizarAhora = async function () {
+      await sincronizarTipoLocalConSupabase("datosBase");
+      await sincronizarTipoLocalConSupabase("clientes");
+    };
+
+    if (typeof pausarSincronizacionAutomatica === "function") {
+      await pausarSincronizacionAutomatica(sincronizarAhora);
+    } else {
+      await sincronizarAhora();
+    }
+
+    if (typeof limpiarSincronizacionPendiente === "function") {
+      limpiarSincronizacionPendiente("datosBase");
+      limpiarSincronizacionPendiente("clientes");
+    }
+
+    actualizarEstadoImportacionClientes(
+      "Importacion subida a Supabase. Creados: " + resumen.creados +
+      " | Actualizados: " + resumen.actualizados +
+      " | Errores: " + resumen.errores + ".",
+      resumen.errores > 0 ? "sync-error" : "sync-ok"
+    );
+  } catch (error) {
+    console.error("No se pudo subir la importacion de clientes a Supabase:", error);
+
+    if (typeof marcarSincronizacionPendiente === "function") {
+      marcarSincronizacionPendiente("clientes");
+      marcarSincronizacionPendiente("datosBase");
+    }
+
+    actualizarEstadoImportacionClientes(
+      "Importacion local hecha, pero no se pudo subir a Supabase: " + (error.message || "error"),
+      "sync-error"
+    );
+  }
 }
 
 async function importarClientesDesdeTexto() {
@@ -779,7 +927,9 @@ async function importarClientesDesdeTexto() {
       return;
     }
 
-    importarClientesDesdeTextoPlano(texto);
+    const resultadoImportacion =
+      importarClientesDesdeTextoPlano(texto);
+    await sincronizarImportacionClientesConSupabase(resultadoImportacion);
     limpiarPrevisualizacionImportacionClientes();
   } catch (error) {
     console.error("Error importando clientes:", error);
@@ -864,6 +1014,7 @@ function renderizarClientes() {
         </td>
       </tr>
     `;
+    prepararTablaMovil(dom.clientsTable);
     return;
   }
 
@@ -907,6 +1058,8 @@ function renderizarClientes() {
 
     dom.clientsTable.appendChild(row);
   });
+
+  prepararTablaMovil(dom.clientsTable);
 }
 
 function exportarClientesCsv() {
@@ -984,7 +1137,7 @@ function mostrarResultadosCliente() {
   renderizarResultados(dom.clienteSearchResults, resultados, "cliente");
 }
 
-function cambiarEstadoCliente(codigo) {
+async function cambiarEstadoCliente(codigo) {
   if (!tienePermiso("clientes")) {
     alert("Tu rol no tiene permiso para modificar clientes.");
     return;
@@ -1021,7 +1174,19 @@ function cambiarEstadoCliente(codigo) {
   renderizarClientesConDeuda();
   actualizarDashboard();
   actualizarVistaBusqueda();
-  guardarClienteOperacionSupabase(cliente);
+
+  const clienteConfirmadoOnline =
+    await confirmarGuardadoClienteOnline(cliente, "El cambio de estado del cliente");
+
+  if (!clienteConfirmadoOnline) {
+    cliente.activo = !clienteActivo(cliente);
+    guardarClientes();
+    renderizarClientes();
+    renderizarClientesConDeuda();
+    actualizarDashboard();
+    actualizarVistaBusqueda();
+    return;
+  }
 
   registrarAuditoria(
     "Clientes",
@@ -1072,7 +1237,7 @@ function editarCliente(codigo) {
   dom.clientNameInput.focus();
 }
 
-function eliminarCliente(codigo) {
+async function eliminarCliente(codigo) {
   if (!tienePermiso("clientes")) {
     alert("Tu rol no tiene permiso para eliminar clientes.");
     return;
@@ -1106,7 +1271,14 @@ function eliminarCliente(codigo) {
 
   if (tienePedidos || tieneSaldo || tieneHistorial) {
     cliente.activo = false;
-    guardarClienteOperacionSupabase(cliente);
+
+    const clienteConfirmadoOnline =
+      await confirmarGuardadoClienteOnline(cliente, "La baja segura del cliente");
+
+    if (!clienteConfirmadoOnline) {
+      cliente.activo = true;
+      return;
+    }
 
     if (clienteSeleccionado && clienteSeleccionado.codigo === codigo) {
       limpiarPedidoActual();
@@ -1134,11 +1306,17 @@ function eliminarCliente(codigo) {
     return;
   }
 
+  const clienteEliminadoOnline =
+    await confirmarEliminacionClienteOnline(cliente, "La eliminacion del cliente");
+
+  if (!clienteEliminadoOnline) {
+    return;
+  }
+
   clientes =
     clientes.filter(function (clienteGuardado) {
       return clienteGuardado.codigo !== codigo;
     });
-  eliminarClienteOperacionSupabase(cliente);
 
   if (clienteSeleccionado && clienteSeleccionado.codigo === codigo) {
     limpiarPedidoActual();
@@ -2130,7 +2308,6 @@ function devolverStockPorNotaCredito(pedido, itemsCredito, motivo) {
 
     reconstruirStockProductoDesdeTotal(producto, stockFinal);
     reactivarProductoSiCorrespondePorStock(producto);
-    guardarProductoOperacionSupabase(producto);
   });
 }
 
@@ -2393,7 +2570,7 @@ function actualizarVistaNotaCreditoCliente() {
   `;
 }
 
-function registrarNotaCreditoDesdeFormulario(event) {
+async function registrarNotaCreditoDesdeFormulario(event) {
   event.preventDefault();
 
   if (!tienePermiso("cuentaCorriente")) {
@@ -2520,9 +2697,25 @@ function registrarNotaCreditoDesdeFormulario(event) {
   guardarClientes();
   guardarPedidos();
   guardarProductos();
-  guardarClienteOperacionSupabase(cliente);
-  guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
-  guardarPedidoOperacionSupabase(pedido);
+
+  const clienteGuardadoOnline =
+    await guardarClienteOperacionSupabase(cliente);
+  const movimientoCuentaGuardadoOnline =
+    await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
+  const pedidoGuardadoOnline =
+    await guardarPedidoOperacionSupabase(pedido);
+  const productosGuardadosOnline =
+    typeof guardarProductosPedidoOperacionSupabase === "function"
+      ? await guardarProductosPedidoOperacionSupabase(pedido)
+      : true;
+
+  if (
+    clienteDebeConfirmarGuardadoOnline() &&
+    (!clienteGuardadoOnline || !movimientoCuentaGuardadoOnline || !pedidoGuardadoOnline || !productosGuardadosOnline)
+  ) {
+    avisarClienteSinConfirmacionOnline("La nota de credito");
+  }
+
   renderizarClientes();
   renderizarClientesConDeuda();
   renderizarPedidos();
@@ -2877,8 +3070,19 @@ async function registrarPago(codigo, importeDirecto) {
     renderizarClientesConDeuda();
     actualizarDashboard();
     guardarClientes();
-    guardarClienteOperacionSupabase(cliente);
-    guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
+
+    const clienteGuardadoOnline =
+      await guardarClienteOperacionSupabase(cliente);
+    const movimientoCuentaGuardadoOnline =
+      await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
+
+    if (
+      clienteDebeConfirmarGuardadoOnline() &&
+      (!clienteGuardadoOnline || !movimientoCuentaGuardadoOnline)
+    ) {
+      avisarClienteSinConfirmacionOnline("El pago del cliente");
+      return false;
+    }
 
     registrarAuditoria(
       "Cuenta corriente",

@@ -2,6 +2,27 @@ let sincronizacionAutomaticaHabilitada = false;
 let sincronizacionAutomaticaPausada = false;
 const temporizadoresSincronizacion = {};
 let tiposSincronizacionPendientes = {};
+let canalActualizacionRapidaSupabase = null;
+let temporizadorActualizacionRapidaSupabase = null;
+let actualizacionRapidaSupabaseEnCurso = false;
+let ultimaTablaActualizacionRapidaSupabase = "";
+const TABLAS_ACTUALIZACION_RAPIDA_SUPABASE = [
+  "clientes",
+  "productos",
+  "pedidos",
+  "pedido_items",
+  "pagos_cliente",
+  "movimientos_stock",
+  "listas_precios",
+  "vendedores",
+  "proveedores",
+  "rubros",
+  "zonas",
+  "compras",
+  "usuarios",
+  "roles",
+  "configuracion_empresa"
+];
 
 function cargarSincronizacionPendienteGuardada() {
   const pendientesGuardados =
@@ -282,6 +303,124 @@ function desactivarSincronizacionAutomaticaSupabase() {
   Object.keys(temporizadoresSincronizacion).forEach(function (tipo) {
     clearTimeout(temporizadoresSincronizacion[tipo]);
   });
+}
+
+function normalizarNombreCanalSupabase(valor) {
+  return String(valor || "admin")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "admin";
+}
+
+function puedeEscucharCambiosSupabase() {
+  return typeof supabaseClient !== "undefined" &&
+    supabaseClient &&
+    typeof supabaseClient.channel === "function" &&
+    typeof haySesionSupabaseParaSincronizar === "function" &&
+    haySesionSupabaseParaSincronizar();
+}
+
+function detenerActualizacionEnTiempoRealSupabase() {
+  clearTimeout(temporizadorActualizacionRapidaSupabase);
+  temporizadorActualizacionRapidaSupabase = null;
+
+  if (!canalActualizacionRapidaSupabase) {
+    return;
+  }
+
+  const canalActual = canalActualizacionRapidaSupabase;
+  canalActualizacionRapidaSupabase = null;
+
+  try {
+    if (typeof supabaseClient !== "undefined" &&
+      supabaseClient &&
+      typeof supabaseClient.removeChannel === "function") {
+      supabaseClient.removeChannel(canalActual);
+    }
+  } catch (error) {
+    console.warn("No se pudo cerrar el canal realtime de Supabase:", error);
+  }
+}
+
+function iniciarActualizacionEnTiempoRealSupabase() {
+  if (!puedeEscucharCambiosSupabase() || canalActualizacionRapidaSupabase) {
+    return;
+  }
+
+  const emailSesion =
+    typeof obtenerEmailSesionSupabase === "function"
+      ? obtenerEmailSesionSupabase()
+      : "admin";
+  const canal =
+    supabaseClient.channel("lv-admin-cambios-" + normalizarNombreCanalSupabase(emailSesion));
+
+  TABLAS_ACTUALIZACION_RAPIDA_SUPABASE.forEach(function (tabla) {
+    canal.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: tabla },
+      function () {
+        programarActualizacionRapidaSupabase(tabla);
+      }
+    );
+  });
+
+  canal.subscribe(function (estado) {
+    if (estado === "SUBSCRIBED") {
+      informarOperacionSupabase("Actualizacion en vivo activa.", "sync-ok");
+    }
+
+    if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") {
+      informarOperacionSupabase(
+        "La actualizacion en vivo no conecto. Los datos se actualizan al cambiar de pantalla o con Actualizar.",
+        "sync-error"
+      );
+    }
+  });
+
+  canalActualizacionRapidaSupabase = canal;
+}
+
+function programarActualizacionRapidaSupabase(tabla) {
+  if (!haySesionSupabaseParaSincronizar()) {
+    detenerActualizacionEnTiempoRealSupabase();
+    return;
+  }
+
+  ultimaTablaActualizacionRapidaSupabase = tabla || "datos";
+  clearTimeout(temporizadorActualizacionRapidaSupabase);
+  temporizadorActualizacionRapidaSupabase = setTimeout(function () {
+    recargarDatosPorCambioSupabase();
+  }, 900);
+}
+
+async function recargarDatosPorCambioSupabase() {
+  if (actualizacionRapidaSupabaseEnCurso || !haySesionSupabaseParaSincronizar()) {
+    return;
+  }
+
+  actualizacionRapidaSupabaseEnCurso = true;
+
+  try {
+    await cargarTodoDesdeSupabaseAutomatico();
+
+    if (typeof renderizarPantallasDespuesDeActualizarDatos === "function") {
+      renderizarPantallasDespuesDeActualizarDatos();
+    }
+
+    informarOperacionSupabase(
+      "Datos actualizados en vivo" +
+        (ultimaTablaActualizacionRapidaSupabase ? " (" + ultimaTablaActualizacionRapidaSupabase + ")." : "."),
+      "sync-ok"
+    );
+  } catch (error) {
+    console.warn("No se pudo recargar datos por cambio Supabase:", error);
+    informarOperacionSupabase(
+      "No se pudo actualizar en vivo. Usa Actualizar datos si hace falta.",
+      "sync-error"
+    );
+  } finally {
+    actualizacionRapidaSupabaseEnCurso = false;
+  }
 }
 
 function puedeGuardarOperacionEnSupabase() {

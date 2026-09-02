@@ -1,4 +1,4 @@
-// Arranque limpio: los datos reales se cargan desde Supabase, respaldo o importacion.
+﻿// Arranque limpio: los datos reales se cargan desde Supabase, respaldo o importacion.
 let clientes = [];
 let productos = [];
 let pedidos = [
@@ -15,13 +15,6 @@ let proveedorPagos = [];
 
 let vendedoresSistema = [];
 
-const porcentajesListasPreciosBase = {
-  "lista 1": 50,
-  "lista 2": 15,
-  "lista 3": 20,
-  "lista 4": 10
-};
-
 function obtenerPorcentajePredeterminadoListaPrecio(nombreLista, porcentajeActual) {
   const porcentajeNumerico =
     Number(porcentajeActual);
@@ -30,7 +23,7 @@ function obtenerPorcentajePredeterminadoListaPrecio(nombreLista, porcentajeActua
     return porcentajeNumerico;
   }
 
-  return porcentajesListasPreciosBase[normalizarTexto(nombreLista || "")] || 0;
+  return 0;
 }
 
 let listasPrecios = [];

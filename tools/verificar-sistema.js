@@ -1681,7 +1681,7 @@ function validarImpresionesAdministrativas(raizProyecto) {
 
   if (!impresion.includes("function obtenerUrlCatalogoPublico") ||
       !impresion.includes("function obtenerQrCatalogoPublicoHtml") ||
-      !impresion.includes('new URL("/catalogo", origen)') ||
+      !impresion.includes('new URL(rutaCatalogo, origen)') ||
       !impresion.includes("obtenerQrCatalogoPublicoHtml()") ||
       !impresion.includes("pedidoParaImprimir.vendedor") ||
       !impresion.includes("pedidoParaImprimir.estadoCobro") ||

@@ -1,4 +1,4 @@
-function obtenerMovimientosGeneralesFiltrados() {
+﻿function obtenerMovimientosGeneralesFiltrados() {
   const textoBusqueda =
     normalizarTexto(dom.buscarMovimientoGeneralInput.value || "");
 
@@ -298,9 +298,7 @@ function renderizarStockValorizado() {
         producto.rubro || "Sin rubro";
       const stock =
         obtenerStockTotalProducto(producto);
-      const valorVenta =
-        stock * (Number(producto.precio) || 0);
-      const valorCosto =
+      const valorCompra =
         stock * (Number(producto.precioCompra) || 0);
 
       if (!acumulado[rubro]) {
@@ -308,33 +306,33 @@ function renderizarStockValorizado() {
           rubro: rubro,
           productos: 0,
           unidades: 0,
-          venta: 0,
-          costo: 0
+          valorCompra: 0
         };
       }
 
       acumulado[rubro].productos += 1;
       acumulado[rubro].unidades += stock;
-      acumulado[rubro].venta += valorVenta;
-      acumulado[rubro].costo += valorCosto;
+      acumulado[rubro].valorCompra += valorCompra;
 
       return acumulado;
     }, {});
   const rubrosResumen =
     Object.values(resumen).sort(function (primero, segundo) {
-      return segundo.venta - primero.venta;
+      return segundo.valorCompra - primero.valorCompra;
     });
   const totales =
     rubrosResumen.reduce(function (total, item) {
+      total.productos += item.productos;
       total.unidades += item.unidades;
-      total.venta += item.venta;
-      total.costo += item.costo;
+      total.valorCompra += item.valorCompra;
       return total;
-    }, { unidades: 0, venta: 0, costo: 0 });
+    }, { productos: 0, unidades: 0, valorCompra: 0 });
+  const costoPromedio =
+    totales.unidades > 0 ? totales.valorCompra / totales.unidades : 0;
 
-  dom.stockValorVentaResumen.textContent = formatearDinero(totales.venta);
-  dom.stockValorCostoResumen.textContent = formatearDinero(totales.costo);
-  dom.stockValorMargenResumen.textContent = formatearDinero(totales.venta - totales.costo);
+  dom.stockValorVentaResumen.textContent = formatearDinero(totales.valorCompra);
+  dom.stockValorCostoResumen.textContent = String(totales.productos);
+  dom.stockValorMargenResumen.textContent = formatearDinero(costoPromedio);
   dom.stockValorUnidadesResumen.textContent = totales.unidades;
 
   dom.stockValorizadoRubrosResumen.innerHTML =
@@ -343,7 +341,7 @@ function renderizarStockValorizado() {
         return `
           <div class="report-row">
             <span>${item.rubro} <small>${item.productos} productos | ${item.unidades} unidades</small></span>
-            <strong>${formatearDinero(item.venta)} venta | ${formatearDinero(item.costo)} costo</strong>
+            <strong>${formatearDinero(item.valorCompra)} compra</strong>
           </div>
         `;
       }).join("")

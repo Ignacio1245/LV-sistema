@@ -195,15 +195,7 @@ function obtenerPorcentajeListaPrecio(nombreLista) {
         return obtenerPorcentajePredeterminadoListaPrecio(nombreLista, null);
     }
 
-    const porcentajesBase =
-        {
-            lista1: 50,
-            lista2: 15,
-            lista3: 20,
-            lista4: 10
-        };
-
-    return porcentajesBase[nombreNormalizado] || 0;
+    return 0;
 }
 
 function renderizarOpcionesListasPreciosClientes() {
@@ -1604,7 +1596,38 @@ function obtenerMargenesProducto(producto) {
     return {};
 }
 
-function agregarProducto(event) {
+function productoDebeConfirmarGuardadoOnline() {
+    return typeof puedeGuardarOperacionEnSupabase === "function" &&
+        puedeGuardarOperacionEnSupabase();
+}
+
+function avisarProductoSinConfirmacionOnline(accion) {
+    if (!productoDebeConfirmarGuardadoOnline()) {
+        return;
+    }
+
+    alert(
+        accion + " quedo guardado localmente, pero Supabase no confirmo todo. " +
+        "Actualiza datos y revisa la conexion antes de seguir operando."
+    );
+}
+
+async function confirmarGuardadoProductoOnline(producto, accion) {
+    if (typeof guardarProductoOperacionSupabase !== "function") {
+        return true;
+    }
+
+    const productoGuardadoOnline =
+        await guardarProductoOperacionSupabase(producto);
+
+    if (productoDebeConfirmarGuardadoOnline() && !productoGuardadoOnline) {
+        avisarProductoSinConfirmacionOnline(accion);
+        return false;
+    }
+
+    return true;
+}
+async function agregarProducto(event) {
     event.preventDefault();
 
     if (!tienePermiso("productos")) {
@@ -1633,11 +1656,9 @@ function agregarProducto(event) {
     const pack = Number(dom.productPackInput.value) || 0;
     const unidad = dom.productUnitInput.value.trim();
     const iva = Number(dom.productIvaInput.value) || 0;
-    const bonificacionVenta = Number(dom.productSaleDiscountInput.value) || 0;
+    const bonificacionVenta = 0;
     const proveedor = asegurarProveedorPorNombre(dom.productProviderInput.value);
     const proveedorAlternativo = dom.productAltProviderInput.value.trim();
-    const margenesLista =
-        obtenerMargenesFormularioProducto();
 
     const formularioValido =
         validarFormularioProducto(codigo, nombre, precio, stock);
@@ -1658,7 +1679,7 @@ function agregarProducto(event) {
         preciosNuevos["Lista 2"] = precioLista2 > 0 ? precioLista2 : precio;
         preciosNuevos["Lista 3"] = precioLista3 > 0 ? precioLista3 : precio;
         preciosNuevos["Lista 4"] = precioLista4 > 0 ? precioLista4 : precio;
-        guardarMargenesEnPreciosLista(preciosNuevos, margenesLista);
+        delete preciosNuevos.__margenes;
 
         if (!Array.isArray(productoEditando.historialPrecios)) {
             productoEditando.historialPrecios = [];
@@ -1710,7 +1731,13 @@ function agregarProducto(event) {
         actualizarDashboard();
         actualizarStockTotal();
         guardarProductos();
-        guardarProductoOperacionSupabase(productoGuardadoOnline);
+
+        const productoConfirmadoOnline =
+            await confirmarGuardadoProductoOnline(productoGuardadoOnline, "El producto");
+
+        if (!productoConfirmadoOnline) {
+            return;
+        }
 
         registrarAuditoria(
             "Productos",
@@ -1738,7 +1765,7 @@ function agregarProducto(event) {
     preciosProductoNuevo["Lista 2"] = precioLista2 > 0 ? precioLista2 : precio;
     preciosProductoNuevo["Lista 3"] = precioLista3 > 0 ? precioLista3 : precio;
     preciosProductoNuevo["Lista 4"] = precioLista4 > 0 ? precioLista4 : precio;
-    guardarMargenesEnPreciosLista(preciosProductoNuevo, margenesLista);
+    delete preciosProductoNuevo.__margenes;
 
     const productoNuevo = {
         codigo: codigo,
@@ -1784,7 +1811,13 @@ function agregarProducto(event) {
     actualizarDashboard();
     actualizarStockTotal();
     guardarProductos();
-    guardarProductoOperacionSupabase(productoNuevo);
+
+    const productoConfirmadoOnline =
+        await confirmarGuardadoProductoOnline(productoNuevo, "El producto");
+
+    if (!productoConfirmadoOnline) {
+        return;
+    }
 
     registrarAuditoria(
         "Productos",
@@ -2425,7 +2458,7 @@ async function importarProductosDesdeTextoPlano(texto) {
             productoExistente.pack = packTexto !== "" ? obtenerNumeroImportacion(packTexto, 0) : Number(productoExistente.pack) || 0;
             productoExistente.unidad = unidad || productoExistente.unidad || "";
             productoExistente.iva = ivaTexto !== "" ? obtenerNumeroImportacion(ivaTexto, 0) : Number(productoExistente.iva) || 0;
-            productoExistente.bonificacionVenta = bonificacionVentaTexto !== "" ? obtenerNumeroImportacion(bonificacionVentaTexto, 0) : Number(productoExistente.bonificacionVenta) || 0;
+            productoExistente.bonificacionVenta = 0;
 
             if (typeof productoExistente.activo !== "boolean") {
                 productoExistente.activo = true;
@@ -2461,7 +2494,7 @@ async function importarProductosDesdeTextoPlano(texto) {
             pack: packTexto !== "" ? obtenerNumeroImportacion(packTexto, 0) : 0,
             unidad: unidad,
             iva: ivaTexto !== "" ? obtenerNumeroImportacion(ivaTexto, 0) : 0,
-            bonificacionVenta: bonificacionVentaTexto !== "" ? obtenerNumeroImportacion(bonificacionVentaTexto, 0) : 0,
+            bonificacionVenta: 0,
             proveedorAlternativo: "",
             activo: true,
             movimientosStock: [],
@@ -3263,12 +3296,10 @@ function editarProducto(codigo) {
         producto.preciosLista && producto.preciosLista["Lista 4"] !== producto.precio
             ? producto.preciosLista["Lista 4"]
             : "";
-    const margenesProducto =
-        obtenerMargenesProducto(producto);
-    dom.productMarginList1Input.value = margenesProducto["Lista 1"] || "";
-    dom.productMarginList2Input.value = margenesProducto["Lista 2"] || "";
-    dom.productMarginList3Input.value = margenesProducto["Lista 3"] || "";
-    dom.productMarginList4Input.value = margenesProducto["Lista 4"] || "";
+    dom.productMarginList1Input.value = "";
+    dom.productMarginList2Input.value = "";
+    dom.productMarginList3Input.value = "";
+    dom.productMarginList4Input.value = "";
     dom.productPurchasePriceInput.value = producto.precioCompra || "";
     dom.productStockModeInput.value = producto.tipoStock || "simple";
     dom.productUnitsPerBulkInput.value = producto.unidadesPorBulto || "";
@@ -3285,7 +3316,7 @@ function editarProducto(codigo) {
     dom.productPackInput.value = producto.pack || "";
     dom.productUnitInput.value = producto.unidad || "";
     dom.productIvaInput.value = producto.iva || "";
-    dom.productSaleDiscountInput.value = producto.bonificacionVenta || "";
+    dom.productSaleDiscountInput.value = "";
     dom.productProviderInput.value = producto.proveedor || "Sin proveedor";
     dom.productAltProviderInput.value = producto.proveedorAlternativo || "";
     dom.productCodeInput.disabled = true;
@@ -3294,7 +3325,7 @@ function editarProducto(codigo) {
     dom.productNameInput.focus();
 }
 
-function eliminarProducto(codigo) {
+async function eliminarProducto(codigo) {
     if (!tienePermiso("productos")) {
         alert("Tu rol no tiene permiso para eliminar productos.");
         return;
@@ -3351,7 +3382,15 @@ function eliminarProducto(codigo) {
         actualizarDashboard();
         actualizarStockTotal();
         guardarProductos();
-        guardarProductoOperacionSupabase(producto);
+
+        const productoConfirmadoOnline =
+            await confirmarGuardadoProductoOnline(producto, "La baja segura del producto");
+
+        if (!productoConfirmadoOnline) {
+            producto.activo = true;
+            guardarProductos();
+            return;
+        }
 
         registrarAuditoria(
             "Productos",
@@ -3363,7 +3402,8 @@ function eliminarProducto(codigo) {
         return;
     }
 
-    productos.splice(indice, 1);
+    producto.activo = false;
+    producto.bajaAutomaticaStock = false;
 
     if (
         productoSeleccionado &&
@@ -3382,11 +3422,24 @@ function eliminarProducto(codigo) {
     actualizarStockTotal();
     guardarProductos();
 
+    const productoConfirmadoOnline =
+        await confirmarGuardadoProductoOnline(producto, "La baja del producto");
+
+    if (!productoConfirmadoOnline) {
+        producto.activo = true;
+        guardarProductos();
+        renderizarProductos();
+        actualizarDashboard();
+        return;
+    }
+
     registrarAuditoria(
         "Productos",
-        "Elimino producto",
+        "Baja producto",
         producto.codigo + " - " + producto.nombre
     );
+
+    alert("Producto inactivado para mantener sincronizacion e historial.");
 }
 
 function renderizarProductos() {
@@ -3490,6 +3543,7 @@ function renderizarProductos() {
         </td>
       </tr>
     `;
+        prepararTablaMovil(dom.productsTable);
         renderizarMovimientosProductos();
         return;
     }
@@ -3623,6 +3677,8 @@ function renderizarProductos() {
 
         dom.productsTable.appendChild(row);
     });
+
+    prepararTablaMovil(dom.productsTable);
 
     renderizarMovimientosProductos();
 }
@@ -3927,7 +3983,7 @@ function buscarProductoDesdeScannerStock() {
     renderizarMovimientosProductos();
 }
 
-function aplicarMovimientoStock(producto, tipoMovimiento, cantidadMovimiento, motivoMovimiento) {
+async function aplicarMovimientoStock(producto, tipoMovimiento, cantidadMovimiento, motivoMovimiento) {
     if (!producto) {
         alert("Seleccione un producto valido.");
         return false;
@@ -3998,7 +4054,13 @@ function aplicarMovimientoStock(producto, tipoMovimiento, cantidadMovimiento, mo
     renderizarMovimientosGenerales();
     actualizarStockTotal();
     actualizarDashboard();
-    guardarProductoOperacionSupabase(producto);
+
+    const productoConfirmadoOnline =
+        await confirmarGuardadoProductoOnline(producto, "El movimiento de stock");
+
+    if (!productoConfirmadoOnline) {
+        return false;
+    }
 
     registrarAuditoria(
         "Stock",
@@ -4012,7 +4074,7 @@ function aplicarMovimientoStock(producto, tipoMovimiento, cantidadMovimiento, mo
     return true;
 }
 
-function registrarMovimientoManualStock(event) {
+async function registrarMovimientoManualStock(event) {
     event.preventDefault();
 
     if (!tienePermiso("movimientos")) {
@@ -4030,7 +4092,7 @@ function registrarMovimientoManualStock(event) {
         dom.stockMovementNoteInput.value.trim();
 
     const movimientoRegistrado =
-        aplicarMovimientoStock(
+        await aplicarMovimientoStock(
             producto,
             tipoMovimiento,
             cantidadMovimiento,
@@ -4048,7 +4110,7 @@ function registrarMovimientoManualStock(event) {
     actualizarVistaMovimientoStock();
 }
 
-function registrarMovimientoRapidoStock(tipoMovimiento) {
+async function registrarMovimientoRapidoStock(tipoMovimiento) {
     if (!tienePermiso("movimientos")) {
         alert("Tu rol no tiene permiso para registrar movimientos de stock.");
         return;
@@ -4062,7 +4124,7 @@ function registrarMovimientoRapidoStock(tipoMovimiento) {
         dom.stockQuickNoteInput.value.trim() || "Scanner stock";
 
     const movimientoRegistrado =
-        aplicarMovimientoStock(
+        await aplicarMovimientoStock(
             producto,
             tipoMovimiento,
             cantidadMovimiento,
@@ -4088,7 +4150,7 @@ function registrarMovimientoRapidoStock(tipoMovimiento) {
     dom.stockScannerInput.focus();
 }
 
-function cambiarEstadoProducto(codigo) {
+async function cambiarEstadoProducto(codigo) {
     if (!tienePermiso("productos")) {
         alert("Tu rol no tiene permiso para modificar productos.");
         return;
@@ -4139,7 +4201,19 @@ function cambiarEstadoProducto(codigo) {
     renderizarCatalogoProductosPedido();
     actualizarVistaBusqueda();
     actualizarDashboard();
-    guardarProductoOperacionSupabase(producto);
+
+    const productoConfirmadoOnline =
+        await confirmarGuardadoProductoOnline(producto, "El cambio de estado del producto");
+
+    if (!productoConfirmadoOnline) {
+        producto.activo = !productoActivo(producto);
+        guardarProductos();
+        renderizarProductos();
+        renderizarPedidoActual();
+        renderizarCatalogoProductosPedido();
+        actualizarDashboard();
+        return;
+    }
 
     registrarAuditoria(
         "Productos",

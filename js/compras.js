@@ -52,7 +52,7 @@ function actualizarVistaCompra() {
   `;
 }
 
-function registrarCompra(event) {
+async function registrarCompra(event) {
   event.preventDefault();
 
   if (!tienePermiso("compras")) {
@@ -149,7 +149,19 @@ function registrarCompra(event) {
   actualizarStockTotal();
   actualizarDashboard();
   renderizarCatalogoProductosPedido();
-  guardarProductoOperacionSupabase(producto);
+
+  const productoConfirmadoOnline =
+    typeof confirmarGuardadoProductoOnline === "function"
+      ? await confirmarGuardadoProductoOnline(producto, "La compra")
+      : await guardarProductoOperacionSupabase(producto);
+
+  if (
+    typeof productoDebeConfirmarGuardadoOnline === "function" &&
+    productoDebeConfirmarGuardadoOnline() &&
+    !productoConfirmadoOnline
+  ) {
+    return;
+  }
 
   registrarAuditoria(
     "Compras",

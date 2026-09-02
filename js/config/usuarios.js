@@ -1024,7 +1024,7 @@ function contarSuperadminsActivos() {
     }).length;
 }
 
-function cambiarEstadoUsuarioSistema(codigo) {
+async function cambiarEstadoUsuarioSistema(codigo) {
     if (!tienePermiso("configuracion")) {
         alert("No tenes permiso para modificar usuarios.");
         return;
@@ -1052,7 +1052,17 @@ function cambiarEstadoUsuarioSistema(codigo) {
     usuario.activo = !usuario.activo;
 
     guardarUsuariosSistema();
-    guardarUsuarioOperacionSupabase(usuario);
+    const usuarioGuardadoOnline =
+        await guardarUsuarioOperacionSupabase(usuario);
+
+    if (!usuarioGuardadoOnline) {
+        usuario.activo = !usuario.activo;
+        guardarUsuariosSistema();
+        renderizarUsuariosSistema();
+        alert("No se pudo guardar el cambio de estado en Supabase. Se deshizo el cambio local para evitar diferencias.");
+        return;
+    }
+
     registrarAuditoria(
         "Usuarios",
         usuario.activo ? "Activo usuario" : "Desactivo usuario",

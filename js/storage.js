@@ -1,4 +1,4 @@
-let guardadoSinSincronizar = false;
+﻿let guardadoSinSincronizar = false;
 
 function ejecutarSinProgramarSincronizacion(accion) {
     guardadoSinSincronizar = true;
@@ -347,7 +347,7 @@ function cargarDatos() {
             producto.pack = Number(producto.pack) || 0;
             producto.unidad = producto.unidad || "";
             producto.iva = Number(producto.iva) || 0;
-            producto.bonificacionVenta = Number(producto.bonificacionVenta) || 0;
+            producto.bonificacionVenta = 0;
             producto.proveedorAlternativo = producto.proveedorAlternativo || "";
             seActualizoEstadoProductoPorStock =
                 actualizarEstadoAutomaticoPorStock(producto, false) ||

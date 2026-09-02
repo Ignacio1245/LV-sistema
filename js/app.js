@@ -538,6 +538,30 @@ const dom = {
   cerrarMovimientosStock: document.querySelector("#cerrarMovimientosStock"),
 };
 
+function prepararTablaMovil(cuerpoTabla) {
+  if (!cuerpoTabla) {
+    return;
+  }
+
+  const tabla = cuerpoTabla.closest("table");
+  if (!tabla) {
+    return;
+  }
+
+  const etiquetas = Array.from(tabla.querySelectorAll("thead th")).map(function (encabezado) {
+    return encabezado.textContent.trim();
+  });
+
+  tabla.classList.add("mobile-card-table");
+  cuerpoTabla.querySelectorAll("tr").forEach(function (fila) {
+    fila.querySelectorAll("td").forEach(function (celda, indice) {
+      if (!celda.classList.contains("empty-table")) {
+        celda.dataset.label = etiquetas[indice] || "Dato";
+      }
+    });
+  });
+}
+
 let filtroEstadoPedidos = "PENDIENTE";
 let seccionDatosBaseActual = "precios";
 let vendedorEditando = null;
@@ -892,6 +916,16 @@ function obtenerCantidadUsuariosVendedoresActivos() {
   }).length;
 }
 
+function obtenerCantidadClientesSinVendedorAsignado() {
+  if (!Array.isArray(clientes)) {
+    return 0;
+  }
+
+  return clientes.filter(clienteActivo).filter(function (cliente) {
+    return normalizarTexto(cliente.vendedorAsignado || "") === "";
+  }).length;
+}
+
 function obtenerRevisionesArranqueSistema(datosIncompletos, productosCriticos) {
   const revisiones = [];
   const clientesActivos =
@@ -912,6 +946,8 @@ function obtenerRevisionesArranqueSistema(datosIncompletos, productosCriticos) {
     datosIncompletos.filter(function (dato) {
       return dato.texto === "Posible duplicado";
     }).length;
+  const clientesSinVendedorAsignado =
+    obtenerCantidadClientesSinVendedorAsignado();
   const hayPendientesSupabase =
     typeof haySincronizacionPendiente === "function" && haySincronizacionPendiente();
   const supabaseConfigurado =
@@ -978,6 +1014,14 @@ function obtenerRevisionesArranqueSistema(datosIncompletos, productosCriticos) {
       "aviso",
       "Accesos vendedores",
       "faltan usuarios moviles"
+    ));
+  }
+
+  if (vendedoresActivos > 0 && clientesSinVendedorAsignado > 0) {
+    revisiones.push(crearRevisionArranqueSistema(
+      "aviso",
+      "Clientes sin vendedor",
+      clientesSinVendedorAsignado + " no aparecen en celular"
     ));
   }
 
@@ -1987,7 +2031,7 @@ function editarVendedor(codigo) {
   dom.vendedorNombreInput.focus();
 }
 
-function alternarEstadoVendedor(codigo) {
+async function alternarEstadoVendedor(codigo) {
   if (!tienePermiso("configuracion")) {
     alert("Tu rol no tiene permiso para activar o desactivar vendedores.");
     return;
@@ -2010,12 +2054,37 @@ function alternarEstadoVendedor(codigo) {
     usuarioMovil.activo =
       vendedor.activo;
     guardarUsuariosSistema();
-    guardarUsuarioOperacionSupabase(usuarioMovil);
+    const usuarioMovilGuardadoOnline =
+      await guardarUsuarioOperacionSupabase(usuarioMovil);
+
+    if (!usuarioMovilGuardadoOnline) {
+      usuarioMovil.activo = !usuarioMovil.activo;
+      vendedor.activo = !vendedor.activo;
+      guardarUsuariosSistema();
+      renderizarUsuariosSistema();
+      alert("No se pudo actualizar el usuario movil en Supabase. Se deshizo el cambio.");
+      return;
+    }
+
     renderizarUsuariosSistema();
   }
 
   guardarVendedoresSistema();
-  guardarVendedorOperacionSupabase(vendedor);
+  const vendedorGuardadoOnline =
+    await guardarVendedorOperacionSupabase(vendedor);
+
+  if (!vendedorGuardadoOnline) {
+    vendedor.activo = !vendedor.activo;
+    if (usuarioMovil) {
+      usuarioMovil.activo = vendedor.activo;
+      guardarUsuariosSistema();
+      renderizarUsuariosSistema();
+    }
+    guardarVendedoresSistema();
+    alert("No se pudo actualizar el vendedor en Supabase. Se deshizo el cambio.");
+    return;
+  }
+
   renderizarVendedores();
   renderizarOpcionesVendedoresCliente();
 
@@ -2026,7 +2095,7 @@ function alternarEstadoVendedor(codigo) {
   );
 }
 
-function eliminarVendedor(codigo) {
+async function eliminarVendedor(codigo) {
   if (!tienePermiso("configuracion")) {
     alert("Tu rol no tiene permiso para eliminar vendedores.");
     return;
@@ -2056,23 +2125,45 @@ function eliminarVendedor(codigo) {
     return;
   }
 
-  vendedoresSistema =
-    vendedoresSistema.filter(function (vendedorGuardado) {
-      return vendedorGuardado.codigo !== codigo;
-    });
-
   const usuarioMovil =
     obtenerUsuarioSistemaVendedorPorEmail(vendedor.email);
 
   if (usuarioMovil && usuarioSistemaEsVendedorMovil(usuarioMovil)) {
     usuarioMovil.activo = false;
     guardarUsuariosSistema();
-    guardarUsuarioOperacionSupabase(usuarioMovil);
+    const usuarioMovilGuardadoOnline =
+      await guardarUsuarioOperacionSupabase(usuarioMovil);
+
+    if (!usuarioMovilGuardadoOnline) {
+      usuarioMovil.activo = true;
+      guardarUsuariosSistema();
+      renderizarUsuariosSistema();
+      alert("No se pudo desactivar el usuario movil en Supabase. No se elimina el vendedor.");
+      return;
+    }
+
     renderizarUsuariosSistema();
   }
 
+  const vendedorEliminadoOnline =
+    await eliminarVendedorOperacionSupabase(vendedor);
+
+  if (!vendedorEliminadoOnline) {
+    if (usuarioMovil && usuarioSistemaEsVendedorMovil(usuarioMovil)) {
+      usuarioMovil.activo = true;
+      guardarUsuariosSistema();
+      renderizarUsuariosSistema();
+    }
+    alert("No se pudo eliminar el vendedor en Supabase. No se borra localmente.");
+    return;
+  }
+
+  vendedoresSistema =
+    vendedoresSistema.filter(function (vendedorGuardado) {
+      return vendedorGuardado.codigo !== codigo;
+    });
+
   guardarVendedoresSistema();
-  eliminarVendedorOperacionSupabase(vendedor);
   renderizarVendedores();
   renderizarOpcionesVendedoresCliente();
 
@@ -2354,6 +2445,8 @@ function renderizarPantallasDespuesDeActualizarDatos() {
   renderizarVendedores();
   renderizarCompras();
   renderizarMovimientosGenerales();
+  renderizarAlertasStock();
+  renderizarStockValorizado();
   renderizarClientes();
   renderizarClientesConDeuda();
   renderizarProductos();
@@ -2363,6 +2456,12 @@ function renderizarPantallasDespuesDeActualizarDatos() {
   actualizarDashboard();
   actualizarStockTotal();
   renderizarAuditoria();
+  renderizarInformes();
+  renderizarPedidoActual();
+  actualizarClientePedidoSeleccionado();
+  if (typeof renderizarProductosHabitualesCliente === "function") {
+    renderizarProductosHabitualesCliente();
+  }
 }
 
 async function actualizarDatosDesdeSupabaseManual() {
@@ -3141,13 +3240,33 @@ function obtenerBaseUrlSistema() {
   return "https://lv-sistema.vercel.app";
 }
 
+function obtenerRutaSistemaParaEntorno(ruta) {
+  const esServidorLocal =
+    window.location.hostname === "127.0.0.1" ||
+    window.location.hostname === "localhost";
+  const usaCarpetaApp =
+    /^\/app(?:\/|$)/i.test(window.location.pathname);
+
+  if (!esServidorLocal || !usaCarpetaApp) {
+    return ruta;
+  }
+
+  const rutasLocales = {
+    "/admin": "/app/index.html",
+    "/vendedores": "/app/vendedores.html",
+    "/catalogo": "/app/catalogo.html"
+  };
+
+  return rutasLocales[ruta] || ruta;
+}
+
 function limpiarTelefonoSistema(telefono) {
   return String(telefono || "").replace(/[^\d]/g, "");
 }
 
 function construirLinkSistema(ruta, incluirWhatsapp) {
   const url =
-    new URL(ruta, obtenerBaseUrlSistema());
+    new URL(obtenerRutaSistemaParaEntorno(ruta), obtenerBaseUrlSistema());
   const whatsapp =
     limpiarTelefonoSistema(CONFIG.whatsapp);
 
@@ -3393,11 +3512,74 @@ function mostrarPagina(nombre) {
     mostrarSeccionInformes("resumen");
   }
 
+  actualizarNavegacionInferiorMovil(tituloPagina || nombre);
+  animarPaginaMovil(tituloPagina || nombre);
   actualizarDatosOnlineAlCambiarApartado(nombre);
 }
 
 function obtenerContenedorApp() {
   return document.querySelector(".app");
+}
+
+let temporizadorAvisoMovil = null;
+
+function darRespuestaTactilMovil() {
+  if (window.matchMedia("(max-width: 720px)").matches && navigator.vibrate) {
+    navigator.vibrate(8);
+  }
+}
+
+function mostrarAvisoAccionMovil(mensaje) {
+  const aviso = document.querySelector("#mobileActionToast");
+  if (!aviso || !window.matchMedia("(max-width: 720px)").matches) {
+    return;
+  }
+
+  aviso.textContent = mensaje;
+  aviso.classList.add("visible");
+  window.clearTimeout(temporizadorAvisoMovil);
+  temporizadorAvisoMovil = window.setTimeout(function () {
+    aviso.classList.remove("visible");
+  }, 1250);
+}
+
+function actualizarNavegacionInferiorMovil(nombrePagina) {
+  const paginaPrincipal =
+    nombrePagina === "cuenta" ? "clientes" : nombrePagina;
+  const paginasDirectas = ["dashboard", "ventas", "clientes", "productos"];
+
+  document.querySelectorAll("[data-mobile-page]").forEach(function (boton) {
+    const activo = boton.dataset.mobilePage === paginaPrincipal;
+    boton.classList.toggle("active", activo);
+    if (activo) {
+      boton.setAttribute("aria-current", "page");
+    } else {
+      boton.removeAttribute("aria-current");
+    }
+  });
+
+  const botonMas = document.querySelector("#mobileMoreButton");
+  if (botonMas) {
+    botonMas.classList.toggle("active", !paginasDirectas.includes(paginaPrincipal));
+  }
+}
+
+function animarPaginaMovil(nombrePagina) {
+  if (!window.matchMedia("(max-width: 720px)").matches ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return;
+  }
+
+  const paginaVisible = document.querySelector(".content > section:not(.hidden)");
+  if (paginaVisible && typeof paginaVisible.animate === "function") {
+    paginaVisible.animate(
+      [
+        { opacity: 0.68, transform: "translateY(7px)" },
+        { opacity: 1, transform: "translateY(0)" }
+      ],
+      { duration: 170, easing: "ease-out" }
+    );
+  }
 }
 
 let sidebarColapsadoActual = true;
@@ -3418,6 +3600,11 @@ function actualizarEstadoSidebar(colapsado) {
     "aria-expanded",
     String(!colapsado)
   );
+
+  const botonMas = document.querySelector("#mobileMoreButton");
+  if (botonMas) {
+    botonMas.setAttribute("aria-expanded", String(!colapsado));
+  }
 }
 
 function alternarSidebar() {
@@ -3468,6 +3655,26 @@ function configurarEventos() {
     });
 
   });
+
+  document.querySelectorAll("[data-mobile-page]").forEach(function (boton) {
+    boton.addEventListener("click", function () {
+      const pagina = boton.dataset.mobilePage;
+      darRespuestaTactilMovil();
+      mostrarPagina(pagina);
+      actualizarEstadoSidebar(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      mostrarAvisoAccionMovil("Abriendo " + boton.textContent.trim());
+    });
+  });
+
+  const botonMasMovil = document.querySelector("#mobileMoreButton");
+  if (botonMasMovil) {
+    botonMasMovil.addEventListener("click", function () {
+      darRespuestaTactilMovil();
+      actualizarEstadoSidebar(false);
+      mostrarAvisoAccionMovil("Menu completo");
+    });
+  }
 
   dom.quickActionButtons.forEach(function (button) {
 
@@ -4637,4 +4844,3 @@ async function iniciarApp() {
 }
 
 iniciarApp();
-

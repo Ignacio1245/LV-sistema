@@ -1,12 +1,19 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#102033">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LV Ventas">
   <title>Vendedores - Pedido movil</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/css/styles.css?v=20260715-pulido1">
-  <link rel="stylesheet" href="/css/vendedores-mobile.css?v=20260715-pulido1">
+  <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest-vendedores.webmanifest">
+  <link rel="stylesheet" href="./css/styles.css?v=20260902-mobile5">
+  <link rel="stylesheet" href="./css/vendedores-mobile.css?v=20260902-pedido-guiado1">
+  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260902-instalable2">
 </head>
 <body class="vendedores-mobile">
   <section id="vendedorLogin" class="vendedores-login vendedores-oculto" aria-labelledby="vendedorLoginTitulo">
@@ -23,6 +30,8 @@
       </label>
       <button type="submit" class="vendedores-principal">Entrar</button>
       <p id="vendedorLoginEstado" class="vendedores-login-estado">Usa tu usuario de vendedor y clave.</p>
+      <button class="install-app-button" type="button" data-install-app hidden>Instalar ventas en este celular</button>
+      <p class="install-app-help" data-install-ios-help hidden>En iPhone: toca Compartir y luego Agregar a inicio.</p>
     </form>
   </section>
 
@@ -37,6 +46,24 @@
         <button id="vendedorBotonSalir" type="button" class="vendedores-salir">Salir</button>
       </div>
     </header>
+
+    <div id="vendedorNavegacionFlujo" class="vendedores-navegacion-flujo vendedores-oculto">
+      <button id="vendedorVolverInicio" type="button" class="vendedores-volver-inicio">← Tareas</button>
+      <nav id="vendedorPasosPedido" class="vendedores-pasos-pedido vendedores-oculto" aria-label="Pasos del pedido">
+        <button type="button" data-vendedor-paso="cliente">
+          <span>1</span>
+          <strong>Cliente</strong>
+        </button>
+        <button type="button" data-vendedor-paso="productos">
+          <span>2</span>
+          <strong>Productos</strong>
+        </button>
+        <button type="button" data-vendedor-paso="resumen">
+          <span>3</span>
+          <strong>Revisar</strong>
+        </button>
+      </nav>
+    </div>
 
     <section id="vendedorInicio" class="vendedores-panel vendedores-inicio">
       <div>
@@ -134,10 +161,18 @@
     </section>
 
     <section id="vendedorSeccionProductos" class="vendedores-panel vendedores-oculto">
-      <label>
+      <div class="vendedores-contexto-pedido">
+        <div>
+          <span>Pedido para</span>
+          <strong id="vendedorClientePedidoNombre">Cliente</strong>
+        </div>
+        <button id="vendedorCambiarCliente" type="button" class="vendedores-secundario">Cambiar</button>
+      </div>
+      <label class="vendedores-productos-busqueda">
         Producto
         <input id="vendedorBusquedaProducto" type="search" placeholder="Codigo, producto, marca o rubro">
       </label>
+      <p id="vendedorProductoEstado" class="vendedores-producto-estado" role="status" aria-live="polite"></p>
       <div id="vendedorResultadosProductos" class="vendedores-productos"></div>
     </section>
 
@@ -177,19 +212,26 @@
         </select>
       </label>
       <label>
-        WhatsApp de la distribuidora
-        <input id="vendedorTelefonoDestino" type="tel" inputmode="tel" placeholder="Ej: 5491123456789">
-      </label>
-      <label>
         Observacion
         <textarea id="vendedorObservacion" rows="3" placeholder="Falta mercaderia, horario, cobranza, etc."></textarea>
       </label>
 
-      <div class="vendedores-acciones">
-        <button id="vendedorBotonLimpiar" type="button" class="vendedores-secundario">Limpiar</button>
-        <button id="vendedorBotonCopiar" type="button" class="vendedores-secundario">Copiar</button>
-        <button id="vendedorBotonWhatsapp" type="button" class="vendedores-principal">Guardar y WhatsApp</button>
+      <div class="vendedores-acciones vendedores-acciones-final">
+        <button id="vendedorBotonVolverProductos" type="button" class="vendedores-secundario">Seguir agregando</button>
+        <button id="vendedorBotonWhatsapp" type="button" class="vendedores-principal">Guardar y enviar</button>
       </div>
+
+      <details class="vendedores-opciones-envio">
+        <summary>Opciones del pedido</summary>
+        <label>
+          WhatsApp de la distribuidora
+          <input id="vendedorTelefonoDestino" type="tel" inputmode="tel" placeholder="Ej: 5491123456789">
+        </label>
+        <div class="vendedores-acciones">
+          <button id="vendedorBotonCopiar" type="button" class="vendedores-secundario">Copiar texto</button>
+          <button id="vendedorBotonLimpiar" type="button" class="vendedores-secundario vendedores-peligro-suave">Vaciar pedido</button>
+        </div>
+      </details>
       <p id="vendedorEstadoEnvio" class="vendedores-envio-estado"></p>
     </section>
 
@@ -240,18 +282,19 @@
       <span id="vendedorBarraItems">0 productos</span>
       <strong id="vendedorBarraTotal">$0</strong>
     </div>
-    <button id="vendedorBotonBarraWhatsapp" type="button">Enviar pedido</button>
+    <button id="vendedorBotonBarraWhatsapp" type="button">Revisar pedido</button>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/js/supabase-config.js"></script>
-  <script src="/js/data.js"></script>
-  <script src="/js/helpers.js"></script>
-  <script src="/js/productos.js"></script>
-  <script src="/js/database/supabase-mappers.js?v=20260714-roles1"></script>
-  <script src="/js/database/supabase-repository.js?v=20260714-roles1"></script>
-  <script src="/js/supabase-auth.js?v=20260713-loginclave1"></script>
-  <script src="/js/mobile/vendedores-mobile.js?v=20260801-duplicados1"></script>
+  <script src="./js/supabase-config.js"></script>
+  <script src="./js/data.js?v=20260816-listas0"></script>
+  <script src="./js/helpers.js"></script>
+  <script src="./js/productos.js"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260816-bonif0"></script>
+  <script src="./js/database/supabase-repository.js?v=20260714-roles1"></script>
+  <script src="./js/supabase-auth.js?v=20260713-loginclave1"></script>
+  <script src="./js/mobile/vendedores-mobile.js?v=20260902-pedido-guiado1"></script>
+  <script src="./js/public/instalacion-app.js?v=20260902-instalable2"></script>
 </body>
 </html>
 

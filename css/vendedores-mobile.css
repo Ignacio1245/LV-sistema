@@ -1311,6 +1311,12 @@ button.vendedores-producto,
   padding-bottom: max(10px, env(safe-area-inset-bottom));
 }
 
+@media (display-mode: standalone) {
+  .vendedores-encabezado {
+    padding-top: max(14px, env(safe-area-inset-top));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .vendedores-mobile *,
   .vendedores-mobile *::before,
@@ -1319,5 +1325,287 @@ button.vendedores-producto,
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+/* Controles tactiles: ninguna accion queda por debajo del alto recomendado */
+@media (max-width: 640px) {
+  .vendedores-login {
+    padding: 12px;
+  }
+
+  .vendedores-login-card {
+    width: 100%;
+    max-width: 420px;
+    min-width: 0;
+    padding: 18px;
+  }
+
+  .vendedores-mobile button {
+    min-height: 44px;
+  }
+
+  .vendedores-mobile input,
+  .vendedores-mobile select,
+  .vendedores-mobile textarea {
+    font-size: 16px;
+  }
+
+  .vendedores-vacio .vendedores-principal {
+    width: 100%;
+    padding: 10px 14px;
+  }
+
+  .vendedores-bonificacion-opciones button,
+  .vendedores-item-quitar,
+  .vendedores-salir {
+    min-height: 44px;
+  }
+}
+
+/* Pedido guiado para vendedores: una decision clara por pantalla */
+.vendedores-navegacion-flujo {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #c7d5e2;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgba(16, 32, 51, 0.08);
+}
+
+.vendedores-volver-inicio {
+  width: fit-content;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid #c4d1df;
+  border-radius: 8px;
+  color: #263d54;
+  background: #f7f9fb;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.vendedores-pasos-pedido {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.vendedores-pasos-pedido button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 7px 8px;
+  border: 1px solid #d5dee8;
+  border-radius: 8px;
+  color: #607084;
+  background: #f7f9fb;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: left;
+}
+
+.vendedores-pasos-pedido button span {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #8392a3;
+  font-size: 12px;
+}
+
+.vendedores-pasos-pedido button.active {
+  border-color: #0786ba;
+  color: #07577a;
+  background: #eaf7fc;
+  box-shadow: inset 0 0 0 1px rgba(7, 134, 186, 0.12);
+}
+
+.vendedores-pasos-pedido button.active span {
+  background: #0786ba;
+}
+
+.vendedores-pasos-pedido button.complete {
+  border-color: #a9d9ba;
+  color: #176837;
+  background: #effaf3;
+  cursor: pointer;
+}
+
+.vendedores-pasos-pedido button.complete span {
+  background: #188443;
+}
+
+.vendedores-contexto-pedido {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid #bcd8e5;
+  border-radius: 9px;
+  background: #edf8fc;
+}
+
+.vendedores-contexto-pedido div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.vendedores-contexto-pedido span {
+  color: #577086;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.vendedores-contexto-pedido strong {
+  overflow: hidden;
+  color: #12334a;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vendedores-contexto-pedido button {
+  flex: 0 0 auto;
+}
+
+.vendedores-productos-busqueda {
+  display: grid;
+  gap: 5px;
+}
+
+.vendedores-producto-estado {
+  position: fixed;
+  right: 14px;
+  bottom: 92px;
+  left: 14px;
+  z-index: 55;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 11px 14px;
+  border-radius: 9px;
+  color: #ffffff;
+  background: #176d37;
+  box-shadow: 0 10px 25px rgba(15, 29, 45, 0.24);
+  font-size: 13px;
+  font-weight: 900;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.vendedores-producto-estado.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.vendedores-opciones-envio {
+  border: 1px solid #d1dae4;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.vendedores-opciones-envio summary {
+  min-height: 44px;
+  padding: 11px 13px;
+  color: #334b62;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.vendedores-opciones-envio[open] summary {
+  border-bottom: 1px solid #d1dae4;
+}
+
+.vendedores-opciones-envio > label,
+.vendedores-opciones-envio > .vendedores-acciones {
+  margin: 11px;
+}
+
+.vendedores-peligro-suave {
+  border-color: #e9b8b3 !important;
+  color: #a72d23 !important;
+  background: #fff4f2 !important;
+}
+
+.vendedores-acciones-final {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
+}
+
+@media (max-width: 640px) {
+  .vendedores-flujo-activo .vendedores-encabezado {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .vendedores-flujo-activo .vendedores-encabezado h1 {
+    font-size: 20px;
+  }
+
+  .vendedores-flujo-activo .vendedores-encabezado .vendedores-estado {
+    display: none;
+  }
+
+  .vendedores-flujo-activo .vendedores-sesion {
+    display: block;
+  }
+
+  .vendedores-flujo-activo .vendedores-sesion > div {
+    display: none;
+  }
+
+  .vendedores-navegacion-flujo {
+    padding: 8px;
+  }
+
+  .vendedores-volver-inicio {
+    min-height: 44px;
+  }
+
+  .vendedores-pasos-pedido button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    min-height: 58px;
+    padding: 6px 4px;
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .vendedores-productos-busqueda {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    margin: -2px -2px 0;
+    padding: 8px 2px;
+    background: #ffffff;
+  }
+
+  .vendedores-producto-controles {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .vendedores-producto-controles > label {
+    min-width: 0;
+  }
+
+  .vendedores-producto-controles > button {
+    min-width: 92px;
+  }
+
+  .vendedores-acciones-final {
+    grid-template-columns: 1fr;
   }
 }

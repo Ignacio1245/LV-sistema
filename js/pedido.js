@@ -494,7 +494,7 @@ function borrarPedidoActual() {
 
 async function guardarYAtenderPedidoActual() {
     const pedidoGuardado =
-        guardarPedido(undefined, { omitirGuardadoSupabase: true });
+        await guardarPedido(undefined, { omitirGuardadoSupabase: true });
 
     if (!pedidoGuardado) {
         return;
@@ -535,6 +535,25 @@ function avisarPedidoSinConfirmacionOnline(accion) {
     );
 }
 
+async function confirmarGuardadoPedidoOnline(pedido, omitirGuardadoSupabase, accion) {
+    if (omitirGuardadoSupabase) {
+        return true;
+    }
+
+    if (typeof guardarPedidoOperacionSupabase !== "function") {
+        return true;
+    }
+
+    const pedidoGuardadoOnline =
+        await guardarPedidoOperacionSupabase(pedido);
+
+    if (pedidoDebeConfirmarGuardadoOnline() && !pedidoGuardadoOnline) {
+        avisarPedidoSinConfirmacionOnline(accion);
+        return false;
+    }
+
+    return true;
+}
 function obtenerPedidoLocalPorId(idPedido) {
     return pedidos.find(function (pedidoGuardado) {
         return pedidoGuardado.id === idPedido;
@@ -1471,7 +1490,7 @@ function renderizarPedidoActual() {
 
 }
 
-function guardarPedido(estadoPedido, opcionesGuardado) {
+async function guardarPedido(estadoPedido, opcionesGuardado) {
     if (!tienePermiso("ventas")) {
         alert("Tu rol no tiene permiso para guardar pedidos.");
         return null;
@@ -1589,8 +1608,19 @@ function guardarPedido(estadoPedido, opcionesGuardado) {
             estadoFinal;
 
         guardarPedidos();
-        if (!omitirGuardadoSupabase) {
-            guardarPedidoOperacionSupabase(pedidoGuardado);
+
+        const pedidoConfirmadoOnline =
+            await confirmarGuardadoPedidoOnline(
+                pedidoGuardado,
+                omitirGuardadoSupabase,
+                "El pedido"
+            );
+
+        if (!pedidoConfirmadoOnline) {
+            renderizarPedidos();
+            actualizarDashboard();
+            renderizarProductosHabitualesCliente();
+            return pedidoGuardado;
         }
 
         registrarAuditoria(
@@ -1671,8 +1701,20 @@ function guardarPedido(estadoPedido, opcionesGuardado) {
     pedidos.unshift(nuevoPedido);
 
     guardarPedidos();
-    if (!omitirGuardadoSupabase) {
-        guardarPedidoOperacionSupabase(nuevoPedido);
+
+    const pedidoConfirmadoOnline =
+        await confirmarGuardadoPedidoOnline(
+            nuevoPedido,
+            omitirGuardadoSupabase,
+            "El pedido"
+        );
+
+    if (!pedidoConfirmadoOnline) {
+        pedidoEditando = nuevoPedido;
+        renderizarPedidos();
+        actualizarDashboard();
+        renderizarProductosHabitualesCliente();
+        return nuevoPedido;
     }
 
     registrarAuditoria(
@@ -1833,6 +1875,8 @@ function renderizarPedidos() {
       </tr>
     `;
 
+        prepararTablaMovil(dom.pedidosTable);
+
         return;
 
     }
@@ -1949,12 +1993,6 @@ function renderizarPedidos() {
         <button class="btn btn-secondary" onclick="verDetallePedido(${pedido.id})">
           Ver
         </button>
-        <button class="btn btn-secondary" onclick="duplicarPedidoGuardado(${pedido.id})">
-          Duplicar
-        </button>
-        <button class="btn btn-secondary" onclick="imprimirPedidoGuardado(${pedido.id})">
-          Imprimir
-        </button>
         ${pedido.estado === "CANCELADO"
                 ? `
       <button class="btn btn-danger" onclick="eliminarPedido(${pedido.id})">
@@ -1970,6 +2008,8 @@ function renderizarPedidos() {
         dom.pedidosTable.appendChild(row);
 
     });
+
+    prepararTablaMovil(dom.pedidosTable);
 
 }
 

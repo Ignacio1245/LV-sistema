@@ -162,7 +162,54 @@ function renderizarRubros() {
     }).join("");
 }
 
-function agregarRubro(event) {
+function rubroDebeConfirmarGuardadoOnline() {
+  return typeof puedeGuardarOperacionEnSupabase === "function" &&
+    puedeGuardarOperacionEnSupabase();
+}
+
+function avisarRubroSinConfirmacionOnline(accion) {
+  if (!rubroDebeConfirmarGuardadoOnline()) {
+    return;
+  }
+
+  alert(
+    accion + " quedo guardado localmente, pero Supabase no confirmo todo. " +
+    "Actualiza datos y revisa la conexion antes de seguir operando."
+  );
+}
+
+async function confirmarGuardadoRubroOnline(rubro, accion) {
+  if (typeof guardarRubroOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const rubroGuardadoOnline =
+    await guardarRubroOperacionSupabase(rubro);
+
+  if (rubroDebeConfirmarGuardadoOnline() && !rubroGuardadoOnline) {
+    avisarRubroSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
+
+async function confirmarEliminacionRubroOnline(rubro, accion) {
+  if (typeof eliminarRubroOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const rubroEliminadoOnline =
+    await eliminarRubroOperacionSupabase(rubro);
+
+  if (rubroDebeConfirmarGuardadoOnline() && !rubroEliminadoOnline) {
+    avisarRubroSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
+async function agregarRubro(event) {
   event.preventDefault();
 
   if (!tienePermiso("rubros")) {
@@ -193,7 +240,7 @@ function agregarRubro(event) {
   }
 
   if (rubroEditando !== null) {
-    actualizarRubroEditado(nombre, descripcion);
+    await actualizarRubroEditado(nombre, descripcion);
     return;
   }
 
@@ -206,7 +253,14 @@ function agregarRubro(event) {
 
   rubros.push(nuevoRubro);
   guardarRubros();
-  guardarRubroOperacionSupabase(nuevoRubro);
+
+  const rubroConfirmadoOnline =
+    await confirmarGuardadoRubroOnline(nuevoRubro, "El rubro");
+
+  if (!rubroConfirmadoOnline) {
+    return;
+  }
+
   dom.rubroForm.reset();
   renderizarRubros();
 
@@ -217,7 +271,7 @@ function agregarRubro(event) {
   );
 }
 
-function actualizarRubroEditado(nombre, descripcion) {
+async function actualizarRubroEditado(nombre, descripcion) {
   if (!tienePermiso("rubros")) {
     alert("Tu rol no tiene permiso para editar rubros.");
     return;
@@ -247,7 +301,14 @@ function actualizarRubroEditado(nombre, descripcion) {
 
   guardarRubros();
   guardarProductos();
-  guardarRubroOperacionSupabase(rubro);
+
+  const rubroConfirmadoOnline =
+    await confirmarGuardadoRubroOnline(rubro, "El rubro");
+
+  if (!rubroConfirmadoOnline) {
+    return;
+  }
+
   cancelarEdicionRubro();
   renderizarRubros();
   renderizarProductos();
@@ -290,7 +351,7 @@ function cancelarEdicionRubro() {
   dom.cancelarEdicionRubroButton.classList.add("hidden");
 }
 
-function eliminarRubro(codigo) {
+async function eliminarRubro(codigo) {
   if (!tienePermiso("rubros")) {
     alert("Tu rol no tiene permiso para eliminar rubros.");
     return;
@@ -320,13 +381,19 @@ function eliminarRubro(codigo) {
     return;
   }
 
+  const rubroEliminadoOnline =
+    await confirmarEliminacionRubroOnline(rubro, "La eliminacion del rubro");
+
+  if (!rubroEliminadoOnline) {
+    return;
+  }
+
   rubros =
     rubros.filter(function (rubroGuardado) {
       return rubroGuardado.codigo !== codigo;
     });
 
   guardarRubros();
-  eliminarRubroOperacionSupabase(rubro);
   renderizarRubros();
 
   registrarAuditoria(

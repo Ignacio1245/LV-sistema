@@ -358,7 +358,7 @@ for all to authenticated using (public.usuario_puede_escribir_cliente(vendedor_a
 create policy "productos lectura usuario activo" on productos
 for select to authenticated using (public.usuario_sistema_activo());
 create policy "productos escritura permiso" on productos
-for all to authenticated using (public.usuario_tiene_permiso('productos') or public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('compras') or public.usuario_tiene_permiso('ventas')) with check (public.usuario_tiene_permiso('productos') or public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('compras') or public.usuario_tiene_permiso('ventas'));
+for all to authenticated using (public.usuario_tiene_permiso('productos') or public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('compras')) with check (public.usuario_tiene_permiso('productos') or public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('compras'));
 
 create policy "producto precios lectura usuario activo" on producto_precios
 for select to authenticated using (public.usuario_sistema_activo());
@@ -383,7 +383,7 @@ for all to authenticated using (public.usuario_puede_acceder_pago_cliente(client
 create policy "movimientos stock lectura permiso" on movimientos_stock
 for select to authenticated using (public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('productos') or public.usuario_tiene_permiso('ventas'));
 create policy "movimientos stock escritura permiso" on movimientos_stock
-for all to authenticated using (public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('productos')) with check (public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('ventas') or public.usuario_tiene_permiso('productos'));
+for all to authenticated using (public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('productos')) with check (public.usuario_tiene_permiso('movimientos') or public.usuario_tiene_permiso('productos'));
 
 create policy "auditoria lectura permiso" on auditoria
 for select to authenticated using (public.usuario_tiene_permiso('auditoria'));

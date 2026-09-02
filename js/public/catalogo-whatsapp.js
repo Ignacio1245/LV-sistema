@@ -10,7 +10,16 @@ let pedidoCatalogoConfirmado = false;
 let firmaUltimoPedidoCatalogoGuardado = "";
 let catalogoActualizandoAlVolver = false;
 let ultimaActualizacionCatalogoAlVolver = 0;
+let canalActualizacionCatalogoSupabase = null;
+let temporizadorActualizacionCatalogoSupabase = null;
+let catalogoDatosPendientesDeActualizar = false;
+let catalogoRecargandoPorCambioSupabase = false;
+let ultimaTablaActualizacionCatalogoSupabase = "";
 const INTERVALO_ACTUALIZACION_CATALOGO_AL_VOLVER = 20000;
+const TABLAS_ACTUALIZACION_CATALOGO_SUPABASE = [
+  "productos",
+  "listas_precios"
+];
 
 const catalogoDom = {
   estadoConexion: document.getElementById("catalogoEstadoConexion"),
@@ -18,6 +27,8 @@ const catalogoDom = {
   listaProductos: document.getElementById("catalogoListaProductos"),
   itemsCarrito: document.getElementById("catalogoItemsCarrito"),
   totalPedido: document.getElementById("catalogoTotalPedido"),
+  resumenMovil: document.getElementById("catalogoResumenMovil"),
+  resumenMovilDetalle: document.getElementById("catalogoResumenMovilDetalle"),
   formularioCliente: document.getElementById("catalogoFormularioCliente"),
   nombreCliente: document.getElementById("catalogoNombreCliente"),
   direccionCliente: document.getElementById("catalogoDireccionCliente"),
@@ -106,6 +117,9 @@ function filtrarProductosVisiblesCatalogo(listaProductos) {
 }
 
 async function cargarProductosCatalogo() {
+  let falloConexionSupabase =
+    false;
+
   try {
     if (typeof supabaseEstaConfigurado === "function" && supabaseEstaConfigurado()) {
       const productosDesdeSupabase =
@@ -120,11 +134,16 @@ async function cargarProductosCatalogo() {
     }
   } catch (error) {
     console.warn("No se pudo cargar Supabase para catalogo:", error);
+    falloConexionSupabase = true;
   }
 
   productosCatalogo =
     filtrarProductosVisiblesCatalogo(Array.isArray(productos) ? productos : []);
-  actualizarEstadoCatalogo("Modo prueba local");
+  actualizarEstadoCatalogo(
+    falloConexionSupabase
+      ? "Sin conexion con Supabase. Reintenta en unos minutos."
+      : "Modo prueba local"
+  );
 }
 
 function normalizarTextoCatalogo(texto) {
@@ -270,6 +289,44 @@ function buscarItemCarrito(producto) {
   });
 }
 
+function reconciliarCarritoCatalogoConProductosActuales() {
+  if (!Array.isArray(carritoCatalogo) || carritoCatalogo.length === 0) {
+    return;
+  }
+
+  const productosPorCodigo = {};
+
+  productosCatalogo.forEach(function (producto) {
+    productosPorCodigo[String(producto.codigo)] = producto;
+  });
+
+  carritoCatalogo = carritoCatalogo.map(function (itemCarrito) {
+    const productoActualizado =
+      productosPorCodigo[String(itemCarrito.producto && itemCarrito.producto.codigo)];
+
+    if (!productoActualizado) {
+      return null;
+    }
+
+    const cantidadMaxima =
+      obtenerCantidadMaximaProducto(productoActualizado);
+    const cantidadActualizada =
+      normalizarCantidadCatalogo(
+        productoActualizado,
+        Math.min(Number(itemCarrito.cantidad) || 0, cantidadMaxima)
+      );
+
+    if (cantidadActualizada <= 0) {
+      return null;
+    }
+
+    return {
+      producto: productoActualizado,
+      cantidad: cantidadActualizada
+    };
+  }).filter(Boolean);
+}
+
 function obtenerCantidadMaximaProducto(producto) {
   return Math.max(1, Math.floor(obtenerStockCatalogo(producto)));
 }
@@ -396,10 +453,30 @@ function calcularTotalCatalogo() {
   }, 0);
 }
 
+function actualizarResumenMovilCatalogo() {
+  if (!catalogoDom.resumenMovil || !catalogoDom.resumenMovilDetalle) {
+    return;
+  }
+
+  const cantidadProductos =
+    carritoCatalogo.length;
+  const etiquetaProductos =
+    cantidadProductos === 1 ? "producto" : "productos";
+
+  catalogoDom.resumenMovilDetalle.textContent =
+    cantidadProductos + " " + etiquetaProductos + " · " +
+    formatearPrecioCatalogo(calcularTotalCatalogo());
+  catalogoDom.resumenMovil.classList.toggle(
+    "catalogo-resumen-movil-activo",
+    cantidadProductos > 0
+  );
+}
+
 function renderizarCarritoCatalogo() {
   catalogoDom.itemsCarrito.innerHTML = "";
   catalogoDom.totalPedido.textContent =
     formatearPrecioCatalogo(calcularTotalCatalogo());
+  actualizarResumenMovilCatalogo();
 
   if (carritoCatalogo.length === 0) {
     const mensajeVacio = document.createElement("p");
@@ -714,6 +791,8 @@ async function actualizarCatalogoAlVolver() {
   try {
     actualizarEstadoCatalogo("Actualizando catalogo...");
     await cargarProductosCatalogo();
+    reconciliarCarritoCatalogoConProductosActuales();
+    catalogoDatosPendientesDeActualizar = false;
     await sincronizarPedidosPendientesCatalogo();
     renderizarProductosCatalogo();
     renderizarCarritoCatalogo();
@@ -723,6 +802,111 @@ async function actualizarCatalogoAlVolver() {
     actualizarEstadoCatalogo("No se pudo actualizar catalogo online");
   } finally {
     catalogoActualizandoAlVolver = false;
+  }
+}
+
+function puedeEscucharCambiosCatalogoSupabase() {
+  return typeof supabaseEstaConfigurado === "function" &&
+    supabaseEstaConfigurado() &&
+    typeof supabaseClient !== "undefined" &&
+    supabaseClient &&
+    typeof supabaseClient.channel === "function";
+}
+
+function detenerActualizacionTiempoRealCatalogo() {
+  clearTimeout(temporizadorActualizacionCatalogoSupabase);
+  temporizadorActualizacionCatalogoSupabase = null;
+
+  if (!canalActualizacionCatalogoSupabase) {
+    return;
+  }
+
+  const canalActual = canalActualizacionCatalogoSupabase;
+  canalActualizacionCatalogoSupabase = null;
+
+  try {
+    if (typeof supabaseClient !== "undefined" &&
+      supabaseClient &&
+      typeof supabaseClient.removeChannel === "function") {
+      supabaseClient.removeChannel(canalActual);
+    }
+  } catch (error) {
+    console.warn("No se pudo cerrar realtime del catalogo:", error);
+  }
+}
+
+function iniciarActualizacionTiempoRealCatalogo() {
+  if (!puedeEscucharCambiosCatalogoSupabase() || canalActualizacionCatalogoSupabase) {
+    return;
+  }
+
+  const canal =
+    supabaseClient.channel("lv-catalogo-cambios");
+
+  TABLAS_ACTUALIZACION_CATALOGO_SUPABASE.forEach(function (tabla) {
+    canal.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: tabla },
+      function () {
+        programarActualizacionCatalogoPorCambioSupabase(tabla);
+      }
+    );
+  });
+
+  canal.subscribe(function (estado) {
+    if (estado === "SUBSCRIBED") {
+      actualizarEstadoCatalogo("Catalogo en vivo activo");
+    }
+
+    if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") {
+      actualizarEstadoCatalogo("Catalogo online activo. Se actualiza al volver a la pantalla");
+    }
+  });
+
+  canalActualizacionCatalogoSupabase = canal;
+}
+
+function programarActualizacionCatalogoPorCambioSupabase(tabla) {
+  if (!puedeEscucharCambiosCatalogoSupabase()) {
+    detenerActualizacionTiempoRealCatalogo();
+    return;
+  }
+
+  ultimaTablaActualizacionCatalogoSupabase = tabla || "productos";
+  clearTimeout(temporizadorActualizacionCatalogoSupabase);
+  temporizadorActualizacionCatalogoSupabase = setTimeout(function () {
+    recargarCatalogoPorCambioSupabase();
+  }, 900);
+}
+
+async function recargarCatalogoPorCambioSupabase() {
+  if (catalogoRecargandoPorCambioSupabase || !puedeEscucharCambiosCatalogoSupabase()) {
+    return;
+  }
+
+  if (catalogoTienePedidoSinEnviar()) {
+    catalogoDatosPendientesDeActualizar = true;
+    actualizarEstadoCatalogo("Hay cambios nuevos. Se actualiza al terminar el pedido");
+    return;
+  }
+
+  catalogoRecargandoPorCambioSupabase = true;
+
+  try {
+    await cargarProductosCatalogo();
+    reconciliarCarritoCatalogoConProductosActuales();
+    catalogoDatosPendientesDeActualizar = false;
+    renderizarProductosCatalogo();
+    renderizarCarritoCatalogo();
+    actualizarEstadoCatalogo(
+      "Catalogo actualizado en vivo" +
+        (ultimaTablaActualizacionCatalogoSupabase ? " (" + ultimaTablaActualizacionCatalogoSupabase + ")" : "")
+    );
+  } catch (error) {
+    console.warn("No se pudo actualizar catalogo por cambio Supabase:", error);
+    actualizarEstadoCatalogo("No se pudo actualizar catalogo online");
+  } finally {
+    catalogoRecargandoPorCambioSupabase = false;
   }
 }
 
@@ -781,6 +965,9 @@ async function enviarPedidoPorWhatsapp(evento) {
     actualizarEstadoCatalogo("Este pedido ya estaba guardado. Abriendo WhatsApp...");
     window.open(enlaceWhatsapp, "_blank", "noopener");
     pedidoCatalogoConfirmado = true;
+    if (catalogoDatosPendientesDeActualizar) {
+      programarActualizacionCatalogoPorCambioSupabase("pendiente");
+    }
     return;
   }
 
@@ -809,6 +996,9 @@ async function enviarPedidoPorWhatsapp(evento) {
 
     window.open(enlaceWhatsapp, "_blank", "noopener");
     pedidoCatalogoConfirmado = true;
+    if (catalogoDatosPendientesDeActualizar) {
+      programarActualizacionCatalogoPorCambioSupabase("pendiente");
+    }
   } catch (error) {
     console.warn("No se pudo guardar pedido de catalogo en admin:", error);
 
@@ -817,6 +1007,9 @@ async function enviarPedidoPorWhatsapp(evento) {
       actualizarEstadoCatalogo("Pedido pendiente en este dispositivo. Abriendo WhatsApp...");
       window.open(enlaceWhatsapp, "_blank", "noopener");
       pedidoCatalogoConfirmado = true;
+      if (catalogoDatosPendientesDeActualizar) {
+        programarActualizacionCatalogoPorCambioSupabase("pendiente");
+      }
     } catch (errorLocal) {
       console.warn("No se pudo dejar pedido de catalogo pendiente:", errorLocal);
       actualizarEstadoCatalogo("Pedido no enviado. No se pudo guardar online ni dejar pendiente local.");
@@ -832,9 +1025,11 @@ async function iniciarCatalogoWhatsapp() {
     cargarTelefonoDestinoCatalogo();
 
   await cargarProductosCatalogo();
+  reconciliarCarritoCatalogoConProductosActuales();
   await sincronizarPedidosPendientesCatalogo();
   renderizarProductosCatalogo();
   renderizarCarritoCatalogo();
+  iniciarActualizacionTiempoRealCatalogo();
 }
 
 catalogoDom.busquedaProducto.addEventListener("input", renderizarProductosCatalogo);

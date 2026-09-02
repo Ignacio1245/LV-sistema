@@ -1,0 +1,44 @@
+.install-app-button {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid #93a8bf;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17324d;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.install-app-button:hover {
+  background: #eef6fc;
+  border-color: #5e7e9e;
+}
+
+.install-app-help {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #c8d7e6;
+  border-radius: 8px;
+  background: #f6faff;
+  color: #40566e;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.catalogo-install-wrap {
+  display: grid;
+  gap: 8px;
+  margin: -6px 0 16px;
+}
+
+.catalogo-install-wrap .install-app-button {
+  width: fit-content;
+}
+
+@media (max-width: 560px) {
+  .catalogo-install-wrap .install-app-button {
+    width: 100%;
+  }
+}

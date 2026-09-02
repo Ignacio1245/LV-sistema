@@ -1,12 +1,19 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#142231">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LV Sistema">
   <title>LV Sistema</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/css/styles.css?v=20260815-arranque1">
+  <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest-admin.webmanifest">
+  <link rel="stylesheet" href="./css/styles.css?v=20260902-mobile5">
+  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260902-instalable2">
 </head>
 
 <body class="login-required">
@@ -29,10 +36,12 @@
       </label>
 
       <div class="sync-status" id="loginStatus">
-        Acceso inicial local: admin o admin@local / admin123. Luego configura usuarios reales con Supabase.
+        Ingresa con el email y la clave autorizados en Supabase.
       </div>
 
       <button class="primary-button" type="submit">Ingresar</button>
+      <button class="install-app-button" type="button" data-install-app hidden>Instalar en este celular</button>
+      <p class="install-app-help" data-install-ios-help hidden>En iPhone: toca Compartir y luego Agregar a inicio.</p>
     </form>
   </section>
 
@@ -805,9 +814,9 @@
             </div>
 
             <div class="list-tools">
-              <input id="buscarPedidoTabla" class="table-search"
+              <input id="buscarPedidoTabla" class="table-search" aria-label="Buscar pedidos"
                 placeholder="Buscar por numero, cliente, codigo, fecha, estado, pago o total...">
-              <input id="pedidoFechaFiltro" type="date" title="Filtrar por dia">
+              <input id="pedidoFechaFiltro" type="date" title="Filtrar por dia" aria-label="Filtrar pedidos por dia">
               <button class="secondary-button" id="limpiarFiltrosPedidoButton" type="button">Limpiar filtros</button>
               <button class="secondary-button" id="exportarPedidosButton" type="button">Exportar CSV</button>
             </div>
@@ -1018,7 +1027,7 @@
             </div>
 
             <div class="list-tools" id="clientesListadoBloque">
-              <input id="buscarClienteTabla" class="table-search"
+              <input id="buscarClienteTabla" class="table-search" aria-label="Buscar clientes"
                 placeholder="Buscar cliente por codigo, nombre, telefono, direccion o zona...">
               <button class="secondary-button" id="exportarClientesButton" type="button">
                 Exportar CSV
@@ -1144,7 +1153,7 @@
               </form>
 
               <div class="list-tools">
-                <input id="buscarVendedorInput" class="table-search" placeholder="Buscar vendedor por codigo, nombre, usuario o rol...">
+                <input id="buscarVendedorInput" class="table-search" aria-label="Buscar vendedores" placeholder="Buscar vendedor por codigo, nombre, usuario o rol...">
                 <div class="filter-tabs" aria-label="Filtro de vendedores">
                   <button class="filter-tab active" type="button" data-seller-status-filter="activos">Activos</button>
                   <button class="filter-tab" type="button" data-seller-status-filter="inactivos">Inactivos</button>
@@ -1532,7 +1541,7 @@
           </div>
 
           <div class="list-tools">
-            <input id="buscarProveedorInput" class="table-search"
+            <input id="buscarProveedorInput" class="table-search" aria-label="Buscar proveedores"
               placeholder="Buscar proveedor por nombre, telefono, contacto u observacion...">
             <div class="filter-tabs" aria-label="Filtro de proveedores">
               <button class="filter-tab active" type="button" data-provider-status-filter="activos">Activos</button>
@@ -1695,9 +1704,9 @@
 
           <div class="product-module-content">
             <div class="list-tools" id="productosListadoBloque">
-              <input id="buscarProductoTabla" class="table-search"
+              <input id="buscarProductoTabla" class="table-search" aria-label="Buscar productos"
                 placeholder="Buscar producto por codigo, nombre, rubro o proveedor...">
-              <select id="productosVistaInput" title="Vista actual">
+              <select id="productosVistaInput" title="Vista actual" aria-label="Vista de productos">
                 <option value="descripcion">Descripcion</option>
                 <option value="precio">Precio</option>
                 <option value="stock">Stock</option>
@@ -1859,7 +1868,7 @@
                     <div>
                       <p class="eyebrow">Precio</p>
                       <h4>Compra y listas de venta</h4>
-                      <span>Calcula precios desde compra y margen. Lista 2, 3 y 4 usan Lista 1 si quedan vacias.</span>
+                      <span>Carga precio de compra y precios de venta. Sin margenes automaticos ni bonificacion por defecto.</span>
                     </div>
                   </div>
                   <div class="form-grid">
@@ -1868,32 +1877,16 @@
                       <input id="productPurchasePriceInput" type="number" min="0">
                     </label>
                     <label>
-                      Margen Lista 1 %
-                      <input id="productMarginList1Input" type="number" min="0" step="0.01" placeholder="Ej: 35">
-                    </label>
-                    <label>
                       Precio Lista 1
                       <input id="productPriceInput" type="number" min="0">
-                    </label>
-                    <label>
-                      Margen Lista 2 %
-                      <input id="productMarginList2Input" type="number" min="0" step="0.01" placeholder="Opcional">
                     </label>
                     <label>
                       Precio Lista 2
                       <input id="productPriceList2Input" type="number" min="0" placeholder="Opcional">
                     </label>
                     <label>
-                      Margen Lista 3 %
-                      <input id="productMarginList3Input" type="number" min="0" step="0.01" placeholder="Opcional">
-                    </label>
-                    <label>
                       Precio Lista 3
                       <input id="productPriceList3Input" type="number" min="0" placeholder="Opcional">
-                    </label>
-                    <label>
-                      Margen Lista 4 %
-                      <input id="productMarginList4Input" type="number" min="0" step="0.01" placeholder="Opcional">
                     </label>
                     <label>
                       Precio Lista 4
@@ -1903,11 +1896,12 @@
                       IVA %
                       <input id="productIvaInput" type="number" min="0" step="0.01" placeholder="Ej: 21">
                     </label>
-                    <label>
-                      Bonif. venta %
-                      <input id="productSaleDiscountInput" type="number" min="0" max="100" step="0.01" placeholder="Ej: 10">
-                    </label>
                   </div>
+                  <input id="productMarginList1Input" type="hidden" value="">
+                  <input id="productMarginList2Input" type="hidden" value="">
+                  <input id="productMarginList3Input" type="hidden" value="">
+                  <input id="productMarginList4Input" type="hidden" value="">
+                  <input id="productSaleDiscountInput" type="hidden" value="">
                 </section>
 
                 <section class="product-form-section">
@@ -2496,17 +2490,17 @@
           </div>
 
           <div class="list-tools">
-            <input id="buscarAuditoriaInput" class="table-search"
+            <input id="buscarAuditoriaInput" class="table-search" aria-label="Buscar en auditoria"
               placeholder="Buscar por usuario, modulo, accion, fecha o detalle...">
-            <input id="auditoriaFechaDesdeFiltro" type="date" title="Auditoria desde">
-            <input id="auditoriaFechaHastaFiltro" type="date" title="Auditoria hasta">
-            <select id="auditoriaUsuarioFiltro">
+            <input id="auditoriaFechaDesdeFiltro" type="date" title="Auditoria desde" aria-label="Auditoria desde">
+            <input id="auditoriaFechaHastaFiltro" type="date" title="Auditoria hasta" aria-label="Auditoria hasta">
+            <select id="auditoriaUsuarioFiltro" aria-label="Filtrar auditoria por usuario">
               <option value="TODOS">Todos los usuarios</option>
             </select>
-            <select id="auditoriaModuloFiltro">
+            <select id="auditoriaModuloFiltro" aria-label="Filtrar auditoria por modulo">
               <option value="TODOS">Todos los modulos</option>
             </select>
-            <select id="auditoriaAccionFiltro">
+            <select id="auditoriaAccionFiltro" aria-label="Filtrar auditoria por accion">
               <option value="TODAS">Todas las acciones</option>
             </select>
             <button class="secondary-button" id="limpiarFiltrosAuditoriaButton" type="button">
@@ -2548,20 +2542,20 @@
 
         <div class="reports-layout">
           <div class="list-tools">
-            <input id="informesMesFiltro" type="month" title="Filtrar informes por mes">
-            <select id="informesVendedorFiltro">
+            <input id="informesMesFiltro" type="month" title="Filtrar informes por mes" aria-label="Mes del informe">
+            <select id="informesVendedorFiltro" aria-label="Filtrar informes por vendedor">
               <option value="TODOS">Todos los vendedores</option>
             </select>
-            <select id="informesZonaFiltro">
+            <select id="informesZonaFiltro" aria-label="Filtrar informes por zona">
               <option value="TODAS">Todas las zonas</option>
             </select>
-            <select id="informesClienteFiltro">
+            <select id="informesClienteFiltro" aria-label="Filtrar informes por cliente">
               <option value="TODOS">Todos los clientes</option>
             </select>
-            <select id="informesRubroFiltro">
+            <select id="informesRubroFiltro" aria-label="Filtrar informes por rubro">
               <option value="TODOS">Todos los rubros</option>
             </select>
-            <select id="informesEstadoFiltro">
+            <select id="informesEstadoFiltro" aria-label="Filtrar informes por estado">
               <option value="TODOS">Todos los estados</option>
               <option value="PENDIENTE">Pendientes</option>
               <option value="ATENDIDO">Atendidos</option>
@@ -3014,9 +3008,9 @@
           </section>
 
           <div class="list-tools">
-            <input id="buscarMovimientoGeneralInput" class="table-search"
+            <input id="buscarMovimientoGeneralInput" class="table-search" aria-label="Buscar movimientos"
               placeholder="Buscar por producto, codigo, tipo, comprobante o fecha...">
-            <select id="movimientoTipoFiltro">
+            <select id="movimientoTipoFiltro" aria-label="Filtrar movimientos por tipo">
               <option value="TODOS">Todos los movimientos</option>
               <option value="ENTRADAS">Entradas</option>
               <option value="SALIDAS">Salidas</option>
@@ -3189,15 +3183,15 @@
         <div class="movement-layout hidden" id="movimientosValorizadoBloque">
           <div class="movement-summary">
             <article>
-              <span>Valor venta</span>
+              <span>Valor stock</span>
               <strong id="stockValorVentaResumen">$0</strong>
             </article>
             <article>
-              <span>Valor costo</span>
-              <strong id="stockValorCostoResumen">$0</strong>
+              <span>Productos</span>
+              <strong id="stockValorCostoResumen">0</strong>
             </article>
             <article>
-              <span>Diferencia</span>
+              <span>Costo promedio</span>
               <strong id="stockValorMargenResumen">$0</strong>
             </article>
             <article>
@@ -3209,7 +3203,7 @@
           <section class="report-card">
             <div class="report-card-header">
               <h4>Stock valorizado por rubro</h4>
-              <span>Valor estimado de inventario usando costo y Lista 1.</span>
+              <span>Valor estimado de inventario usando precio de compra.</span>
             </div>
             <div id="stockValorizadoRubrosResumen" class="report-list"></div>
           </section>
@@ -3345,58 +3339,79 @@
         </div>
       </div>
     </main>
+
+    <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Navegacion principal movil">
+      <button class="mobile-bottom-nav-item active" type="button" data-mobile-page="dashboard">
+        <span aria-hidden="true">IN</span>
+        <strong>Inicio</strong>
+      </button>
+      <button class="mobile-bottom-nav-item" type="button" data-mobile-page="ventas">
+        <span aria-hidden="true">PD</span>
+        <strong>Pedidos</strong>
+      </button>
+      <button class="mobile-bottom-nav-item" type="button" data-mobile-page="clientes">
+        <span aria-hidden="true">CL</span>
+        <strong>Clientes</strong>
+      </button>
+      <button class="mobile-bottom-nav-item" type="button" data-mobile-page="productos">
+        <span aria-hidden="true">PR</span>
+        <strong>Productos</strong>
+      </button>
+      <button class="mobile-bottom-nav-item" id="mobileMoreButton" type="button" aria-label="Abrir menu completo">
+        <span aria-hidden="true">···</span>
+        <strong>Mas</strong>
+      </button>
+    </nav>
+
+    <div class="mobile-action-toast" id="mobileActionToast" role="status" aria-live="polite"></div>
   </div>
 
   <!-- Supabase y autenticacion -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/js/supabase-config.js?v=20260618-entrega2"></script>
-  <script src="/js/supabase-auth.js?v=20260713-loginclave1"></script>
+  <script src="./js/supabase-config.js?v=20260618-entrega2"></script>
+  <script src="./js/supabase-auth.js?v=20260713-loginclave1"></script>
 
   <!-- Datos base y utilidades compartidas -->
-  <script src="/js/data.js?v=20260620-ventas1"></script>
-  <script src="/js/helpers.js?v=20260717-importsegura1"></script>
+  <script src="./js/data.js?v=20260816-listas0"></script>
+  <script src="./js/helpers.js?v=20260717-importsegura1"></script>
 
   <!-- Modulos administrativos principales -->
-  <script src="/js/clientes.js?v=20260719-auditoria2"></script>
-  <script src="/js/rubros.js?v=20260620-supabase1"></script>
-  <script src="/js/zonas.js?v=20260620-supabase1"></script>
-  <script src="/js/proveedores.js?v=20260712-cierre2"></script>
-  <script src="/js/compras.js?v=20260717-stocktraza1"></script>
-  <script src="/js/movimientos.js?v=20260620-stock1"></script>
-  <script src="/js/productos.js?v=20260717-stocktraza1"></script>
-  <script src="/js/productos-admin.js?v=20260801-controlprecios1"></script>
+  <script src="./js/clientes.js?v=20260902-mobile3"></script>
+  <script src="./js/rubros.js?v=20260816-online-confirm1"></script>
+  <script src="./js/zonas.js?v=20260816-online-confirm1"></script>
+  <script src="./js/proveedores.js?v=20260816-online-confirm1"></script>
+  <script src="./js/compras.js?v=20260816-online-confirm1"></script>
+  <script src="./js/movimientos.js?v=20260816-stockcompra1"></script>
+  <script src="./js/productos.js?v=20260717-stocktraza1"></script>
+  <script src="./js/productos-admin.js?v=20260902-mobile3"></script>
 
   <!-- Persistencia local y repositorio Supabase -->
-  <script src="/js/data-store.js?v=20260626-local1"></script>
-  <script src="/js/storage.js?v=20260714-simultaneo1"></script>
-  <script src="/js/database/supabase-mappers.js?v=20260719-auditoria1"></script>
-  <script src="/js/database/supabase-repository.js?v=20260714-roles1"></script>
-  <script src="/js/supabase-data.js?v=20260801-pendientes1"></script>
+  <script src="./js/data-store.js?v=20260626-local1"></script>
+  <script src="./js/storage.js?v=20260816-bonif0"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260816-bonif0"></script>
+  <script src="./js/database/supabase-repository.js?v=20260714-roles1"></script>
+  <script src="./js/supabase-data.js?v=20260816-realtime1"></script>
 
   <!-- Configuracion, usuarios y permisos -->
-  <script src="/js/config/configuracion.js?v=20260618-loginfix2"></script>
-  <script src="/js/config/permisos.js?v=20260618-loginfix2"></script>
-  <script src="/js/config/usuarios.js?v=20260714-rolesfix1"></script>
-  <script src="/js/config/login.js?v=20260815-loginrescate1"></script>
+  <script src="./js/config/configuracion.js?v=20260618-loginfix2"></script>
+  <script src="./js/config/permisos.js?v=20260618-loginfix2"></script>
+  <script src="./js/config/usuarios.js?v=20260816-online-confirm1"></script>
+  <script src="./js/config/login.js?v=20260902-seguridad1"></script>
 
   <!-- Control administrativo -->
-  <script src="/js/auditoria.js?v=20260719-auditoria2"></script>
-  <script src="/js/informes.js?v=20260719-auditoria2"></script>
-  <script src="/js/respaldo.js?v=20260712-seguro1"></script>
+  <script src="./js/auditoria.js?v=20260719-auditoria2"></script>
+  <script src="./js/informes.js?v=20260719-auditoria2"></script>
+  <script src="./js/respaldo.js?v=20260712-seguro1"></script>
 
   <!-- Pedidos y comprobantes -->
-  <script src="/js/pedido.js?v=20260801-autosave1"></script>
-  <script src="/js/pedido/habituales.js?v=20260618-loginfix2"></script>
-  <script src="/js/pedido/observaciones.js?v=20260801-autosave1"></script>
-  <script src="/js/pedido/impresion.js?v=20260731-remito1"></script>
+  <script src="./js/pedido.js?v=20260902-acciones1"></script>
+  <script src="./js/pedido/habituales.js?v=20260618-loginfix2"></script>
+  <script src="./js/pedido/observaciones.js?v=20260801-autosave1"></script>
+  <script src="./js/pedido/impresion.js?v=20260902-local1"></script>
 
   <!-- Inicializacion de pantalla y eventos -->
-  <script src="/js/app.js?v=20260815-arranque1"></script>
+  <script src="./js/app.js?v=20260902-mobile5"></script>
+  <script src="./js/public/instalacion-app.js?v=20260902-instalable2"></script>
 </body>
 
 </html>
-
-
-
-
-

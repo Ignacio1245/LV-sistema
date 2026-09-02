@@ -1,12 +1,19 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#eef3f8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="LV Catálogo">
   <title>Catalogo - Distribuidora</title>
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/css/styles.css?v=20260715-pulido1">
-  <link rel="stylesheet" href="/css/catalogo.css?v=20260715-pulido1">
+  <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest-catalogo.webmanifest">
+  <link rel="stylesheet" href="./css/styles.css?v=20260902-mobile5">
+  <link rel="stylesheet" href="./css/catalogo.css?v=20260902-instalable1">
+  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260902-instalable2">
 </head>
 <body class="catalogo-publico">
   <main class="catalogo-layout">
@@ -19,6 +26,11 @@
         <span id="catalogoEstadoConexion" class="catalogo-estado">Cargando productos...</span>
       </header>
 
+      <div class="catalogo-install-wrap">
+        <button class="install-app-button" type="button" data-install-app hidden>Agregar catálogo a inicio</button>
+        <p class="install-app-help" data-install-ios-help hidden>En iPhone: toca Compartir y luego Agregar a inicio.</p>
+      </div>
+
       <div class="catalogo-busqueda">
         <label for="catalogoBusquedaProducto">Buscar producto</label>
         <input id="catalogoBusquedaProducto" type="search" placeholder="Nombre, marca, rubro o codigo">
@@ -27,7 +39,7 @@
       <div id="catalogoListaProductos" class="catalogo-lista-productos"></div>
     </section>
 
-    <aside class="catalogo-panel catalogo-carrito-panel" aria-labelledby="catalogoCarritoTitulo">
+    <aside id="catalogoCarrito" class="catalogo-panel catalogo-carrito-panel" aria-labelledby="catalogoCarritoTitulo">
       <header class="catalogo-carrito-encabezado">
         <div>
           <p class="catalogo-etiqueta">Pedido</p>
@@ -64,13 +76,19 @@
     </aside>
   </main>
 
+  <a id="catalogoResumenMovil" class="catalogo-resumen-movil" href="#catalogoCarrito">
+    <span>Ver pedido</span>
+    <strong id="catalogoResumenMovilDetalle">0 productos · $0</strong>
+  </a>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="/js/supabase-config.js"></script>
-  <script src="/js/data.js"></script>
-  <script src="/js/helpers.js"></script>
-  <script src="/js/productos.js"></script>
-  <script src="/js/database/supabase-mappers.js"></script>
-  <script src="/js/database/supabase-repository.js?v=20260713-conectado1"></script>
-  <script src="/js/public/catalogo-whatsapp.js?v=20260801-refresco1"></script>
+  <script src="./js/supabase-config.js"></script>
+  <script src="./js/data.js?v=20260816-listas0"></script>
+  <script src="./js/helpers.js"></script>
+  <script src="./js/productos.js"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260816-bonif0"></script>
+  <script src="./js/database/supabase-repository.js?v=20260713-conectado1"></script>
+  <script src="./js/public/catalogo-whatsapp.js?v=20260902-mobile2"></script>
+  <script src="./js/public/instalacion-app.js?v=20260902-instalable2"></script>
 </body>
 </html>

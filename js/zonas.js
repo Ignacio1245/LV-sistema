@@ -181,7 +181,54 @@ function renderizarZonas() {
     }).join("");
 }
 
-function agregarZona(event) {
+function zonaDebeConfirmarGuardadoOnline() {
+  return typeof puedeGuardarOperacionEnSupabase === "function" &&
+    puedeGuardarOperacionEnSupabase();
+}
+
+function avisarZonaSinConfirmacionOnline(accion) {
+  if (!zonaDebeConfirmarGuardadoOnline()) {
+    return;
+  }
+
+  alert(
+    accion + " quedo guardada localmente, pero Supabase no confirmo todo. " +
+    "Actualiza datos y revisa la conexion antes de seguir operando."
+  );
+}
+
+async function confirmarGuardadoZonaOnline(zona, accion) {
+  if (typeof guardarZonaOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const zonaGuardadaOnline =
+    await guardarZonaOperacionSupabase(zona);
+
+  if (zonaDebeConfirmarGuardadoOnline() && !zonaGuardadaOnline) {
+    avisarZonaSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
+
+async function confirmarEliminacionZonaOnline(zona, accion) {
+  if (typeof eliminarZonaOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const zonaEliminadaOnline =
+    await eliminarZonaOperacionSupabase(zona);
+
+  if (zonaDebeConfirmarGuardadoOnline() && !zonaEliminadaOnline) {
+    avisarZonaSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
+async function agregarZona(event) {
   event.preventDefault();
 
   if (!tienePermiso("zonas")) {
@@ -239,7 +286,14 @@ function agregarZona(event) {
     dom.zonaSubmitButton.textContent = "Agregar zona";
     guardarZonas();
     guardarClientes();
-    guardarZonaOperacionSupabase(zona);
+
+    const zonaConfirmadaOnline =
+      await confirmarGuardadoZonaOnline(zona, "La zona");
+
+    if (!zonaConfirmadaOnline) {
+      return;
+    }
+
     renderizarZonas();
     renderizarClientes();
 
@@ -261,7 +315,14 @@ function agregarZona(event) {
 
   zonas.push(nuevaZona);
   guardarZonas();
-  guardarZonaOperacionSupabase(nuevaZona);
+
+  const zonaConfirmadaOnline =
+    await confirmarGuardadoZonaOnline(nuevaZona, "La zona");
+
+  if (!zonaConfirmadaOnline) {
+    return;
+  }
+
   dom.zonaForm.reset();
   renderizarZonas();
 
@@ -294,7 +355,7 @@ function editarZona(codigo) {
   dom.zonaNombreInput.focus();
 }
 
-function eliminarZona(codigo) {
+async function eliminarZona(codigo) {
   if (!tienePermiso("zonas")) {
     alert("Tu rol no tiene permiso para eliminar zonas.");
     return;
@@ -324,13 +385,19 @@ function eliminarZona(codigo) {
     return;
   }
 
+  const zonaEliminadaOnline =
+    await confirmarEliminacionZonaOnline(zona, "La eliminacion de la zona");
+
+  if (!zonaEliminadaOnline) {
+    return;
+  }
+
   zonas =
     zonas.filter(function (zonaGuardada) {
       return zonaGuardada.codigo !== codigo;
     });
 
   guardarZonas();
-  eliminarZonaOperacionSupabase(zona);
   renderizarZonas();
 
   registrarAuditoria(

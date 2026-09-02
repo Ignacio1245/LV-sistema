@@ -1,6 +1,53 @@
 let proveedorEditando = null;
 let filtroEstadoProveedores = "activos";
 
+function proveedorDebeConfirmarGuardadoOnline() {
+  return typeof puedeGuardarOperacionEnSupabase === "function" &&
+    puedeGuardarOperacionEnSupabase();
+}
+
+function avisarProveedorSinConfirmacionOnline(accion) {
+  if (!proveedorDebeConfirmarGuardadoOnline()) {
+    return;
+  }
+
+  alert(
+    accion + " quedo guardado localmente, pero Supabase no confirmo todo. " +
+    "Actualiza datos y revisa la conexion antes de seguir operando."
+  );
+}
+
+async function confirmarGuardadoProveedorOnline(proveedor, accion) {
+  if (typeof guardarProveedorOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const proveedorGuardadoOnline =
+    await guardarProveedorOperacionSupabase(proveedor);
+
+  if (proveedorDebeConfirmarGuardadoOnline() && !proveedorGuardadoOnline) {
+    avisarProveedorSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
+
+async function confirmarEliminacionProveedorOnline(proveedor, accion) {
+  if (typeof eliminarProveedorOperacionSupabase !== "function") {
+    return true;
+  }
+
+  const proveedorEliminadoOnline =
+    await eliminarProveedorOperacionSupabase(proveedor);
+
+  if (proveedorDebeConfirmarGuardadoOnline() && !proveedorEliminadoOnline) {
+    avisarProveedorSinConfirmacionOnline(accion);
+    return false;
+  }
+
+  return true;
+}
 function obtenerSiguienteCodigoProveedor() {
   if (proveedores.length === 0) {
     return 1;
@@ -265,7 +312,7 @@ function actualizarVistaPagoProveedor() {
   `;
 }
 
-function registrarPagoProveedor(event) {
+async function registrarPagoProveedor(event) {
   event.preventDefault();
 
   if (!tienePermiso("proveedores")) {
@@ -309,7 +356,15 @@ function registrarPagoProveedor(event) {
 
   proveedorPagos.unshift(pago);
   guardarProveedorPagos();
-  guardarProveedorPagoOperacionSupabase(pago);
+
+  const pagoConfirmadoOnline =
+    await guardarProveedorPagoOperacionSupabase(pago);
+
+  if (proveedorDebeConfirmarGuardadoOnline() && !pagoConfirmadoOnline) {
+    avisarProveedorSinConfirmacionOnline("El pago a proveedor");
+    return;
+  }
+
   dom.proveedorPagoForm.reset();
   actualizarVistaMedioPagoProveedor();
   dom.proveedorPagoPreview.innerHTML = `
@@ -502,7 +557,7 @@ function imprimirComprobantePagoProveedor(codigoPago) {
   ventana.document.close();
 }
 
-function agregarProveedor(event) {
+async function agregarProveedor(event) {
   event.preventDefault();
 
   if (!tienePermiso("proveedores")) {
@@ -556,7 +611,14 @@ function agregarProveedor(event) {
 
     guardarProveedores();
     guardarProductos();
-    guardarProveedorOperacionSupabase(proveedor);
+
+    const proveedorConfirmadoOnline =
+      await confirmarGuardadoProveedorOnline(proveedor, "El proveedor");
+
+    if (!proveedorConfirmadoOnline) {
+      return;
+    }
+
     limpiarFormularioProveedor();
     renderizarProveedores();
     renderizarProductos();
@@ -580,7 +642,14 @@ function agregarProveedor(event) {
 
   proveedores.push(nuevoProveedor);
   guardarProveedores();
-  guardarProveedorOperacionSupabase(nuevoProveedor);
+
+  const proveedorConfirmadoOnline =
+    await confirmarGuardadoProveedorOnline(nuevoProveedor, "El proveedor");
+
+  if (!proveedorConfirmadoOnline) {
+    return;
+  }
+
   limpiarFormularioProveedor();
   renderizarProveedores();
 
@@ -616,7 +685,7 @@ function editarProveedor(codigo) {
   dom.proveedorNombreInput.focus();
 }
 
-function cambiarEstadoProveedor(codigo) {
+async function cambiarEstadoProveedor(codigo) {
   if (!tienePermiso("proveedores")) {
     alert("Tu rol no tiene permiso para modificar proveedores.");
     return;
@@ -635,7 +704,17 @@ function cambiarEstadoProveedor(codigo) {
 
   seleccionarFiltroEstadoProveedores(proveedor.activo ? "activos" : "inactivos");
   guardarProveedores();
-  guardarProveedorOperacionSupabase(proveedor);
+
+  const proveedorConfirmadoOnline =
+    await confirmarGuardadoProveedorOnline(proveedor, "El cambio de estado del proveedor");
+
+  if (!proveedorConfirmadoOnline) {
+    proveedor.activo = !proveedorActivo(proveedor);
+    guardarProveedores();
+    renderizarProveedores();
+    return;
+  }
+
   renderizarProveedores();
 
   registrarAuditoria(
@@ -645,7 +724,7 @@ function cambiarEstadoProveedor(codigo) {
   );
 }
 
-function eliminarProveedor(codigo) {
+async function eliminarProveedor(codigo) {
   if (!tienePermiso("proveedores")) {
     alert("Tu rol no tiene permiso para eliminar proveedores.");
     return;
@@ -675,13 +754,19 @@ function eliminarProveedor(codigo) {
     return;
   }
 
+  const proveedorEliminadoOnline =
+    await confirmarEliminacionProveedorOnline(proveedor, "La eliminacion del proveedor");
+
+  if (!proveedorEliminadoOnline) {
+    return;
+  }
+
   proveedores =
     proveedores.filter(function (proveedorGuardado) {
       return proveedorGuardado.codigo !== codigo;
     });
 
   guardarProveedores();
-  eliminarProveedorOperacionSupabase(proveedor);
   renderizarProveedores();
 
   registrarAuditoria(

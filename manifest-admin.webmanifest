@@ -1,0 +1,33 @@
+{
+  "id": "/admin",
+  "name": "LV Sistema - Administración",
+  "short_name": "LV Sistema",
+  "description": "Administración de ventas, clientes, productos y cuentas de LV Sistema.",
+  "lang": "es-AR",
+  "start_url": "/admin",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef3f8",
+  "theme_color": "#142231",
+  "icons": [
+    {
+      "src": "/assets/icons/lv-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Vendedores",
+      "short_name": "Ventas",
+      "url": "/vendedores"
+    },
+    {
+      "name": "Catálogo público",
+      "short_name": "Catálogo",
+      "url": "/catalogo"
+    }
+  ]
+}

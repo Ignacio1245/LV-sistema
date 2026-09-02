@@ -563,6 +563,57 @@
   .catalogo-carrito-panel {
     border-left-width: 0;
     border-top: 4px solid var(--cat-primary);
+    scroll-margin-top: 12px;
+  }
+}
+
+.catalogo-resumen-movil {
+  display: none;
+}
+
+@media (display-mode: standalone) {
+  .catalogo-layout {
+    padding-top: max(18px, env(safe-area-inset-top));
+  }
+}
+
+@media (max-width: 560px) {
+  .catalogo-publico {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+
+  .catalogo-publico input,
+  .catalogo-publico textarea {
+    font-size: 16px;
+  }
+
+  .catalogo-resumen-movil.catalogo-resumen-movil-activo {
+    position: fixed;
+    z-index: 60;
+    right: 9px;
+    bottom: max(9px, env(safe-area-inset-bottom));
+    left: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 56px;
+    padding: 10px 14px;
+    border: 1px solid #075b82;
+    border-radius: 10px;
+    color: #ffffff;
+    background: #075b82;
+    box-shadow: 0 14px 30px rgba(16, 32, 51, 0.28);
+    text-decoration: none;
+  }
+
+  .catalogo-resumen-movil span {
+    font-weight: 900;
+  }
+
+  .catalogo-resumen-movil strong {
+    color: #ffffff;
+    text-align: right;
   }
 }
 /* Accesibilidad final catalogo */
