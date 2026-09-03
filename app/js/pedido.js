@@ -1836,7 +1836,8 @@ function obtenerPedidosFiltrados() {
                 filtroFecha === "" ||
                 fechaPedidoFiltro === filtroFecha;
 
-            return coincideBusqueda && coincideEstado && coincideFecha;
+            const coincideOrigen = typeof filtroOrigenPedidos === "undefined" || filtroOrigenPedidos !== "CATALOGO" || esPedidoCatalogo(pedido);
+            return coincideOrigen && coincideBusqueda && coincideEstado && coincideFecha;
         }).sort(function (primero, segundo) {
             return (segundo.numero || segundo.id) - (primero.numero || primero.id);
         });
@@ -1849,6 +1850,7 @@ function renderizarPedidos() {
     dom.pedidosTable.innerHTML = "";
 
     actualizarMenuPedidos();
+    if (typeof actualizarBandejaCatalogo === "function") actualizarBandejaCatalogo();
 
     const pedidosFiltrados =
         obtenerPedidosFiltrados();
@@ -1889,6 +1891,12 @@ function renderizarPedidos() {
             pedido.cliente && pedido.cliente.codigo !== undefined
                 ? pedido.cliente.codigo + " - " + pedido.cliente.nombre
                 : "Sin cliente";
+        const delCatalogo = typeof esPedidoCatalogo === "function" && esPedidoCatalogo(pedido);
+        const enBandejaCatalogo = delCatalogo && filtroOrigenPedidos === "CATALOGO";
+        const entregaCatalogo = delCatalogo ? obtenerDatosEntregaCatalogo(pedido) : null;
+        const etiquetaEstado = enBandejaCatalogo
+            ? ({ PENDIENTE: "POR PREPARAR", ATENDIDO: "LISTO PARA ENTREGAR" }[pedido.estado] || pedido.estado)
+            : pedido.estado;
 
         row.innerHTML = `
 
@@ -1898,6 +1906,10 @@ function renderizarPedidos() {
 
       <td>
         ${escaparTextoPedido(clientePedidoTexto)}
+        ${delCatalogo ? '<small class="catalogo-pedido-origen">Catalogo</small>' : ''}
+        ${enBandejaCatalogo ? '<small class="catalogo-pedido-contacto">Entrega: ' + escaparTextoPedido(entregaCatalogo.direccion) +
+            '<br>Telefono: ' + escaparTextoPedido(entregaCatalogo.telefono || 'Sin telefono') +
+            (entregaCatalogo.comentario ? '<br>Nota: ' + escaparTextoPedido(entregaCatalogo.comentario) : '') + '</small>' : ''}
       </td>
 
       <td>
@@ -1908,7 +1920,7 @@ function renderizarPedidos() {
             ${pedido.saldoPendiente > 0
                     ? " | Saldo: " + formatearDinero(pedido.saldoPendiente)
                     : ""}
-            | ${pedido.estadoCobro === "CUENTA_CORRIENTE" ? "Cuenta corriente" : "Cobrado"}
+            | ${obtenerEtiquetaCobroPedido(pedido)}
           </small>`
                 : ""
             }
@@ -1920,7 +1932,7 @@ function renderizarPedidos() {
 
       <td>
         <span class="status ${pedido.estado.toLowerCase()}">
-          ${escaparTextoPedido(pedido.estado)}
+          ${escaparTextoPedido(etiquetaEstado)}
         </span>
         ${pedido.estadoCobro
                 ? `<small class="payment-detail">
@@ -1952,7 +1964,7 @@ function renderizarPedidos() {
         ${pedido.estado === "PENDIENTE"
                 ? `
             <button class="btn btn-atender" onclick="atenderPedido(${pedido.id})">
-              Atender
+              ${enBandejaCatalogo ? "Marcar preparado" : "Atender"}
             </button>
 
             <button class="btn btn-danger" onclick="cancelarPedido(${pedido.id})">
@@ -1991,7 +2003,7 @@ function renderizarPedidos() {
             }
 
         <button class="btn btn-secondary" onclick="verDetallePedido(${pedido.id})">
-          Ver
+          ${enBandejaCatalogo ? "Ver pedido" : "Ver"}
         </button>
         ${pedido.estado === "CANCELADO"
                 ? `
@@ -2566,11 +2578,11 @@ function entregarPedido(id) {
 
     dom.entregaPedidoResumen.innerHTML =
         "<strong>Pedido #" + (pedido.numero || pedido.id) + "</strong>" +
-        "<span>Cliente: " + pedido.cliente.nombre + "</span>" +
+        "<span>Cliente: " + escaparTextoPedido(pedido.cliente.nombre) + "</span>" +
         "<span>Total: " + formatearDinero(pedido.total) + "</span>";
 
     dom.entregaPagoInput.value =
-        Number(pedido.total) || 0;
+        typeof esPedidoCatalogo === "function" && esPedidoCatalogo(pedido) ? 0 : Number(pedido.total) || 0;
 
     actualizarVistaEntregaPedido();
 

@@ -8,6 +8,9 @@ const path = require("path");
 const CHROME_PATH = process.env.CHROME_PATH ||
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const BASE_URL = process.argv[2] || "http://127.0.0.1:5600";
+if (!["127.0.0.1", "localhost", "[::1]"].includes(new URL(BASE_URL).hostname)) {
+  throw new Error("La auditoria interactiva solo puede ejecutarse contra un servidor local aislado.");
+}
 const OUTPUT_PATH = path.join(os.tmpdir(), "lv-sistema-mobile-audit");
 const MOBILE_COMPACTO = { width: 360, height: 800, deviceScaleFactor: 1, mobile: true };
 const MOBILE = { width: 390, height: 844, deviceScaleFactor: 1, mobile: true };
@@ -781,8 +784,10 @@ async function auditarCatalogo(cliente) {
     cliente,
     BASE_URL + "/catalogo.html",
     MOBILE,
-    "typeof renderizarProductosCatalogo === 'function' && typeof renderizarCarritoCatalogo === 'function' && typeof renderizarFiltrosRubrosCatalogo === 'function'"
+    "typeof catalogoInicializacion !== 'undefined'"
   );
+  await evaluar(cliente, "catalogoInicializacion");
+  await evaluar(cliente, "detenerActualizacionTiempoRealCatalogo();");
   await evaluar(cliente, `(() => {
     localStorage.removeItem(CLAVE_BORRADOR_CATALOGO);
     carritoCatalogo = [];
@@ -858,10 +863,79 @@ async function auditarCatalogo(cliente) {
     throw new Error("El carrito movil fallo: " + JSON.stringify(carritoEstado));
   }
 
+  const confirmacion = await evaluar(cliente, `(async () => {
+    catalogoDom.nombreCliente.value = "Cliente de prueba";
+    catalogoDom.direccionCliente.value = "Calle de prueba 123";
+    catalogoDom.telefonoCliente.value = "1112345678";
+    catalogoDom.telefonoDestino.value = "5491112345678";
+    let llamadas = 0;
+    const original = crearPedidoCatalogoPublicoSupabase;
+    const contactoOriginal = obtenerConfiguracionCatalogoPublicoSupabase;
+    obtenerConfiguracionCatalogoPublicoSupabase = async function () { return { whatsapp: "5491112345678" }; };
+    crearPedidoCatalogoPublicoSupabase = async function () {
+      llamadas += 1;
+      return { numero: 999, total: 8500, cliente_codigo: 15 };
+    };
+    try {
+      await enviarPedidoPorWhatsapp({ preventDefault() {} });
+      await enviarPedidoPorWhatsapp({ preventDefault() {} });
+      return { llamadas, items: carritoCatalogo.length, confirmado: leerEnvioCatalogo().estado,
+        enlace: catalogoDom.resultadoWhatsapp.href, visible: !catalogoDom.resultado.hidden };
+    } finally { crearPedidoCatalogoPublicoSupabase = original; obtenerConfiguracionCatalogoPublicoSupabase = contactoOriginal; }
+  })()`);
+  if (confirmacion.llamadas !== 1 || confirmacion.items !== 0 || confirmacion.confirmado !== "confirmado" || !confirmacion.visible || !confirmacion.enlace.includes("wa.me")) {
+    throw new Error("Confirmacion aislada de catalogo fallo: " + JSON.stringify(confirmacion));
+  }
+  resultados.push(await capturar(cliente, "catalogo-confirmacion-mobile"));
+
   await evaluar(cliente, `cerrarCarritoCatalogo();`);
   await cliente.enviar("Emulation.setDeviceMetricsOverride", DESKTOP);
   await esperar(80);
   resultados.push(await capturar(cliente, "catalogo-desktop"));
+  return resultados;
+}
+
+async function auditarBandejaCatalogo(cliente) {
+  await navegar(cliente, BASE_URL + "/", DESKTOP, "typeof abrirBandejaCatalogo === 'function' && typeof aplicarUsuarioSistemaAutenticado === 'function'");
+  await evaluar(cliente, `(() => {
+    aplicarUsuarioSistemaAutenticado(obtenerAdministradorLocalInicial());
+    desactivarSincronizacionAutomaticaSupabase();
+    document.querySelector(".app").classList.add("sidebar-collapsed");
+  })()`);
+  await cargarDatosFicticiosAdmin(cliente);
+  await evaluar(cliente, `(() => {
+    const base = pedidos[0];
+    pedidos.splice(0, pedidos.length,
+      { ...base, id: 700, numero: 700, origen: "administracion", estado: "PENDIENTE" },
+      { ...base, id: 701, numero: 701, origen: "catalogo", estado: "PENDIENTE", importePagado: 0, estadoCobro: "",
+        observaciones: ["Pedido desde catalogo publico", "Direccion de entrega: Av. Central 1234", "Telefono de contacto: 1112345678", "Comentario: Entregar despues de las 16 hs"] },
+      { ...base, id: 702, numero: 702, origen: "catalogo", estado: "ATENDIDO", importePagado: 0, estadoCobro: "" },
+      { ...base, id: 703, numero: 703, origen: "catalogo", estado: "ENTREGADO", importePagado: 0, estadoCobro: "CUENTA_CORRIENTE", saldoPendiente: 8500 }
+    );
+    abrirBandejaCatalogo();
+  })()`);
+  const estado = await evaluar(cliente, `(() => ({
+    ids: obtenerPedidosFiltrados().map(p => p.id),
+    aviso: !document.getElementById("catalogoPedidosAviso").hidden,
+    direccion: dom.pedidosTable.textContent.includes("Av. Central 1234"),
+    telefono: dom.pedidosTable.textContent.includes("1112345678"),
+    cobro: dom.pedidosTable.textContent.includes("Sin cobro registrado"),
+    preparado: dom.pedidosTable.textContent.includes("Marcar preparado")
+  }))()`);
+  if (JSON.stringify(estado.ids) !== "[701]" || !estado.aviso || !estado.direccion || !estado.telefono || !estado.cobro || !estado.preparado) {
+    throw new Error("Bandeja de catalogo incorrecta: " + JSON.stringify(estado));
+  }
+  const resultados = [await capturar(cliente, "admin-catalogo-desktop")];
+  await evaluar(cliente, `document.querySelector('[data-catalogo-estado="ATENDIDO"]').click(); entregarPedido(702);`);
+  const pago = await evaluar(cliente, "Number(dom.entregaPagoInput.value)");
+  if (pago !== 0) throw new Error("La entrega del catalogo presupone un cobro");
+  resultados.push(await capturar(cliente, "admin-catalogo-entrega-desktop"));
+  await evaluar(cliente, "cerrarEntregaPedidoModal(); abrirBandejaCatalogo();");
+  await cliente.enviar("Emulation.setDeviceMetricsOverride", MOBILE);
+  resultados.push(await capturar(cliente, "admin-catalogo-mobile"));
+  await evaluar(cliente, "salirBandejaCatalogo();");
+  const todos = await evaluar(cliente, "obtenerPedidosFiltrados().map(p=>p.id).sort()");
+  if (JSON.stringify(todos) !== "[700,701]") throw new Error("Volver a todas las ventas conserva el filtro de origen");
   return resultados;
 }
 
@@ -889,6 +963,10 @@ async function ejecutar() {
     cliente = new ClienteCdp(pagina.webSocketDebuggerUrl);
     await cliente.conectar();
     await cliente.enviar("Page.enable");
+    await cliente.enviar("Network.enable");
+    await cliente.enviar("Network.setBlockedURLs", {
+      urls: ["*supabase.co*", "*supabase.in*", "*wa.me*", "*api.whatsapp.com*"]
+    });
     await cliente.enviar("Runtime.enable");
     const resultados = [];
     const auditoriaCompacta = await auditarAdmin(cliente, MOBILE_COMPACTO, "compacto");
@@ -898,6 +976,7 @@ async function ejecutar() {
     resultados.push(...auditoriaMovil);
     resultados.push(...auditoriaTablet);
     resultados.push(...await auditarEditoresAdmin(cliente));
+    resultados.push(...await auditarBandejaCatalogo(cliente));
     resultados.push(...await auditarVendedores(cliente));
     resultados.push(...await auditarCatalogo(cliente));
     const aplicacionesInstalables = [];

@@ -1969,7 +1969,7 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     errores.push("catalogo-whatsapp.js debe usar la funcion publica segura de Supabase");
   }
 
-  if (!catalogo.includes("guardarPedidoCatalogoEnAdmin") ||
+  if (!catalogo.includes("procesarEnvioCatalogo") ||
       !catalogo.includes("crearPedidoCatalogoPublicoSupabase") ||
       !repositorio.includes("crear_pedido_catalogo_publico") ||
       !sqlCatalogo.includes("function public.crear_pedido_catalogo_publico") ||
@@ -1979,19 +1979,20 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     errores.push("catalogo publico debe guardar pedidos pendientes en Supabase para que aparezcan en admin");
   }
 
-  if (!catalogo.includes("CLAVE_PEDIDOS_PENDIENTES_CATALOGO") ||
-      !catalogo.includes("function guardarPedidoPendienteCatalogoLocal") ||
-      !catalogo.includes("function sincronizarPedidosPendientesCatalogo") ||
-      !catalogo.includes("await sincronizarPedidosPendientesCatalogo();") ||
-      catalogo.includes("Queres abrir WhatsApp igual?")) {
-    errores.push("catalogo publico debe dejar pedido pendiente local si Supabase falla y sincronizarlo luego");
+  if (!catalogo.includes("CLAVE_ENVIO_CATALOGO") ||
+      !catalogo.includes("function guardarEnvioCatalogo") ||
+      !catalogo.includes("function restaurarEnvioCatalogo") ||
+      !catalogo.includes("esRechazoDefinitivoCatalogo") ||
+      catalogo.includes("function guardarPedidoPendienteCatalogoLocal")) {
+    errores.push("catalogo debe conservar el ID de reintento sin reenviar pedidos legacy automaticamente");
   }
 
-  if (!catalogo.includes("let firmaUltimoPedidoCatalogoGuardado") ||
-      !catalogo.includes("firmaUltimoPedidoCatalogoGuardado = firma") ||
-      !catalogo.includes("firmaPedidoActual === firmaUltimoPedidoCatalogoGuardado") ||
-      !catalogo.includes("Este pedido ya estaba guardado. Abriendo WhatsApp")) {
-    errores.push("catalogo publico debe evitar doble envio exacto del mismo pedido");
+  if (!catalogo.includes("pedido.solicitud_id = crypto.randomUUID()") ||
+      !catalogo.includes("confirmarEnvioCatalogo") ||
+      !sqlCatalogo.includes("catalogo_solicitudes") ||
+      !sqlCatalogo.includes("pg_advisory_xact_lock") ||
+      !sqlCatalogo.includes("anterior.payload <> pedido")) {
+    errores.push("catalogo debe evitar duplicados en el servidor y detectar reintentos con contenido distinto");
   }
 
   if (!catalogo.includes("establecerCantidadCarrito") ||
@@ -2158,6 +2159,7 @@ validarImportarExportarRespaldo(raiz);
 validarSqlSupabaseIdempotente(raiz);
 validarProteccionContraPerdidaDatos(raiz);
 validarAccesosPublicosYMoviles(raiz);
+childProcess.execFileSync(process.execPath, [path.join(raiz, "tools/probar-catalogo-envios.cjs")], { stdio: "pipe" });
 
 console.log("Sistema verificado OK");
 console.log("HTML revisados: " + archivosHtml.length);

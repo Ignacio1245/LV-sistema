@@ -62,6 +62,7 @@ async function obtenerProductosSupabase() {
 }
 
 async function obtenerProductosCatalogoPublicoSupabase() {
+  // Esta consulta solo devuelve productos publicables, no datos de clientes.
   const { data, error } =
     await supabaseClient.rpc("obtener_catalogo_publico");
 
@@ -71,6 +72,15 @@ async function obtenerProductosCatalogoPublicoSupabase() {
 
   return (data || [])
     .map(mapearProductoDesdeSupabase)
+    .map(function (producto) {
+      // El RPC publico ya descuenta reservas. No reconstruir bultos desde el stock fisico anterior.
+      if (producto && producto.tipoStock === "bultos") {
+        const unidades = Math.max(1, Number(producto.unidadesPorBulto) || 1);
+        producto.stockBultos = Math.floor(producto.stock / unidades);
+        producto.stockUnidades = producto.stock % unidades;
+      }
+      return producto;
+    })
     .filter(Boolean);
 }
 
@@ -87,6 +97,12 @@ async function crearPedidoCatalogoPublicoSupabase(pedidoCatalogo) {
   return Array.isArray(data) && data.length > 0
     ? data[0]
     : null;
+}
+
+async function obtenerConfiguracionCatalogoPublicoSupabase() {
+  const { data, error } = await supabaseClient.rpc("obtener_configuracion_catalogo_publico");
+  if (error) throw error;
+  return Array.isArray(data) && data.length ? data[0] : { whatsapp: "" };
 }
 
 async function obtenerClientesSupabase() {
@@ -615,6 +631,8 @@ async function obtenerConfiguracionEmpresaSupabase() {
     await supabaseClient
       .from("configuracion_empresa")
       .select("*")
+      .order("actualizado_en", { ascending: false })
+      .order("id", { ascending: true })
       .limit(1)
       .maybeSingle();
 
@@ -628,6 +646,7 @@ async function obtenerConfiguracionEmpresaSupabase() {
 async function guardarConfiguracionEmpresaSupabase(configuracion) {
   const configuracionSupabase =
     mapearConfiguracionParaSupabase(configuracion);
+  configuracionSupabase.actualizado_en = new Date().toISOString();
 
   const consulta =
     configuracion.idSupabase

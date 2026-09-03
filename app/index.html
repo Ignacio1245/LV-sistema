@@ -196,6 +196,7 @@
         </div>
 
         <div class="topbar-actions">
+          <button id="catalogoPedidosAviso" class="catalogo-pedidos-aviso" type="button" aria-live="polite" hidden>Catalogo · 0 por preparar</button>
           <button id="logoutButton" class="secondary-button" type="button">Salir</button>
         </div>
       </header>
@@ -760,6 +761,10 @@
         <div class="orders-workspace">
           <aside class="orders-menu-card" aria-label="Menu de pedidos">
             <p>Menu pedidos</p>
+            <button id="catalogoPedidosMenu" class="orders-menu-item" type="button" aria-pressed="false">
+              <span>Pedidos del catalogo</span><strong id="catalogoPedidosCount">0</strong>
+            </button>
+            <button id="catalogoVolverPedidos" class="orders-menu-item" type="button" hidden>Ver todas las ventas</button>
 
             <button class="orders-menu-new" id="pedidoMenuNuevoButton" type="button">
               + Nuevo pedido
@@ -787,6 +792,17 @@
           </aside>
 
           <div class="orders-list-panel">
+            <section id="catalogoBandejaHeader" class="catalogo-bandeja-header" aria-labelledby="catalogoBandejaTitulo" hidden>
+              <p class="eyebrow">Pedidos recibidos online</p>
+              <h4 id="catalogoBandejaTitulo">Pedidos del catalogo</h4>
+              <p>Revisa el pedido y marcalo preparado cuando este listo para salir. La entrega y el cobro se registran por separado.</p>
+              <div class="catalogo-bandeja-etapas" aria-label="Etapas de pedidos del catalogo">
+                <button type="button" data-catalogo-estado="PENDIENTE"><span>1 · Por preparar</span><strong>0</strong></button>
+                <button type="button" data-catalogo-estado="ATENDIDO"><span>2 · Listos para entregar</span><strong>0</strong></button>
+                <button type="button" data-catalogo-estado="ENTREGADO"><span>3 · Entregados</span><strong>0</strong></button>
+                <button type="button" data-catalogo-estado="TODOS"><span>Todos, incluidos cancelados</span><strong>0</strong></button>
+              </div>
+            </section>
             <div class="orders-summary-grid">
               <article class="orders-summary-card">
                 <span>Borradores</span>
@@ -2116,7 +2132,8 @@
 
             <label>
               WhatsApp
-              <input id="whatsappInput" type="text">
+              <input id="whatsappInput" type="tel" placeholder="Ej: 5491112345678" inputmode="tel">
+              <small>Numero comercial con codigo de pais y area. El catalogo lo usa automaticamente; el cliente no lo completa.</small>
             </label>
 
             <label>
@@ -3436,8 +3453,8 @@
   <!-- Persistencia local y repositorio Supabase -->
   <script src="./js/data-store.js?v=20260626-local1"></script>
   <script src="./js/storage.js?v=20260816-bonif0"></script>
-  <script src="./js/database/supabase-mappers.js?v=20260903-catalogo-admin1"></script>
-  <script src="./js/database/supabase-repository.js?v=20260714-roles1"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260904-envios-seguros1"></script>
+  <script src="./js/database/supabase-repository.js?v=20260904-envios-seguros1"></script>
   <script src="./js/supabase-data.js?v=20260816-realtime1"></script>
 
   <!-- Configuracion, usuarios y permisos -->
@@ -3458,6 +3475,7 @@
   <script src="./js/pedido/impresion.js?v=20260902-local1"></script>
 
   <!-- Inicializacion de pantalla y eventos -->
+  <script src="./js/catalogo-admin.js?v=20260904-bandeja1"></script>
   <script src="./js/app.js?v=20260902-ui-practica2"></script>
   <script src="./js/ui-practica.js?v=20260902-ui-practica2"></script>
   <script src="./js/public/instalacion-app.js?v=20260902-instalable2"></script>

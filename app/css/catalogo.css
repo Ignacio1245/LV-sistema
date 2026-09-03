@@ -1430,3 +1430,25 @@ button[aria-busy="true"] {
     grid-template-columns: 1fr;
   }
 }
+/* Confirmacion persistente: nunca confundir borrador con pedido recibido. */
+.catalogo-resultado-pedido {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #9cc9d8;
+  border-radius: 14px;
+  background: #edf8fc;
+  color: #143a4c;
+  overflow-wrap: anywhere;
+}
+.catalogo-resultado-pedido[hidden], .catalogo-resultado-pedido a[hidden] { display: none; }
+.catalogo-resultado-pedido p { margin: 0 0 12px; line-height: 1.5; }
+.catalogo-resultado-pedido a {
+  display: flex;
+  min-height: 46px;
+  padding: 10px 14px;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: 10px;
+}
+[inert] { opacity: .65; }

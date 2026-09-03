@@ -189,11 +189,12 @@ function convertirFechaPedidoParaSupabase(fechaPedido) {
 
 function mapearPedidoParaSupabase(pedido) {
   return {
+    origen: pedido.origen || (Array.isArray(pedido.observaciones) && pedido.observaciones.includes("Pedido desde catalogo publico") ? "catalogo" : "administracion"),
     numero: Number(pedido.numero || pedido.id) || 0,
     cliente_id: pedido.cliente && pedido.cliente.idSupabase
       ? pedido.cliente.idSupabase
       : null,
-    vendedor_id: null,
+    vendedor_id: pedido.vendedorIdSupabase || null,
     vendedor: pedido.vendedor || "Sin vendedor",
     zona: pedido.zona || (pedido.cliente ? pedido.cliente.zona : "") || "Sin zona",
     estado: pedido.estado || "PENDIENTE",
@@ -283,6 +284,8 @@ function mapearPedidoDesdeSupabase(pedido) {
     idSupabase: pedido.id,
     numero: Number(pedido.numero) || 0,
     id: Number(pedido.numero) || Date.now(),
+    origen: pedido.origen || "administracion",
+    vendedorIdSupabase: pedido.vendedor_id || null,
     cliente: clientePedido,
     vendedor: pedido.vendedor || "Sin vendedor",
     zona: clientePedido && clientePedido.zona
@@ -502,7 +505,8 @@ function mapearConfiguracionDesdeSupabase(configuracion) {
     impresionPie: configuracion.impresion_pie || "Gracias por su compra.",
     impresionMostrarQr: configuracion.impresion_mostrar_qr !== false,
     impresionQrTexto: configuracion.impresion_qr_texto || "",
-    stockMinimo: Number(configuracion.stock_minimo) || 10,
+    stockMinimo: configuracion.stock_minimo != null && Number.isFinite(Number(configuracion.stock_minimo))
+      ? Math.max(0, Number(configuracion.stock_minimo)) : 10,
     permitirStockNegativo: configuracion.permitir_stock_negativo === true
   };
 }

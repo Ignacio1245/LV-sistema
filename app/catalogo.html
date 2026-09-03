@@ -12,7 +12,7 @@
   <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest-catalogo.webmanifest">
   <link rel="stylesheet" href="./css/styles.css?v=20260902-mobile5">
-  <link rel="stylesheet" href="./css/catalogo.css?v=20260903-catalogo-pro1">
+  <link rel="stylesheet" href="./css/catalogo.css?v=20260904-envios-seguros1">
   <link rel="stylesheet" href="./css/instalacion-app.css?v=20260902-instalable2">
 </head>
 <body class="catalogo-publico">
@@ -86,27 +86,37 @@
         </div>
         <label>
           Nombre del cliente
-          <input id="catalogoNombreCliente" type="text" autocomplete="organization" placeholder="Ej: Kiosco El Sol" required>
+          <input id="catalogoNombreCliente" type="text" autocomplete="organization" placeholder="Ej: Kiosco El Sol" maxlength="120" required>
         </label>
         <label>
           Direccion
-          <input id="catalogoDireccionCliente" type="text" autocomplete="street-address" placeholder="Calle, numero y localidad">
-        </label>
-        <label id="catalogoTelefonoDestinoLabel">
-          WhatsApp de la distribuidora
-          <input id="catalogoTelefonoDestino" type="tel" inputmode="tel" placeholder="Ej: 5491123456789">
-          <small>Es el numero que recibe el pedido.</small>
+          <input id="catalogoDireccionCliente" type="text" autocomplete="street-address" placeholder="Calle, numero y localidad" maxlength="180" required>
         </label>
         <label>
+          Tu telefono
+          <input id="catalogoTelefonoCliente" type="tel" inputmode="tel" autocomplete="tel" placeholder="Tu numero con codigo de area" maxlength="30" required>
+        </label>
+        <label>
+          Codigo de cliente (opcional)
+          <input id="catalogoCodigoCliente" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="10" placeholder="Si ya tenes uno en la distribuidora">
+          <small>Usa el telefono registrado para vincular tu ficha. Si no sabes tu codigo, dejalo vacio.</small>
+        </label>
+        <input id="catalogoTelefonoDestino" type="hidden">
+        <p id="catalogoContactoAyuda" class="catalogo-contacto-ayuda">Tu pedido se guarda directamente en la distribuidora.</p>
+        <label>
           Comentario
-          <textarea id="catalogoComentarioCliente" rows="3" placeholder="Horario, forma de pago o aclaracion"></textarea>
+          <textarea id="catalogoComentarioCliente" rows="3" maxlength="400" placeholder="Horario, forma de pago o aclaracion"></textarea>
         </label>
 
         <div class="catalogo-acciones">
           <button id="catalogoBotonCopiarPedido" type="button" class="btn-secondary">Copiar pedido</button>
-          <button id="catalogoBotonEnviarWhatsapp" type="submit" class="btn-primary">Confirmar y enviar</button>
+          <button id="catalogoBotonEnviarWhatsapp" type="submit" class="btn-primary">Confirmar pedido</button>
         </div>
       </form>
+      <section id="catalogoResultadoPedido" class="catalogo-resultado-pedido" role="status" aria-live="polite" hidden>
+        <p id="catalogoResultadoTexto"></p>
+        <a id="catalogoResultadoWhatsapp" class="btn-primary" target="_blank" rel="noopener noreferrer" hidden>Enviar por WhatsApp</a>
+      </section>
     </aside>
   </main>
 
@@ -122,9 +132,9 @@
   <script src="./js/data.js?v=20260816-listas0"></script>
   <script src="./js/helpers.js"></script>
   <script src="./js/productos.js"></script>
-  <script src="./js/database/supabase-mappers.js?v=20260903-catalogo-admin1"></script>
-  <script src="./js/database/supabase-repository.js?v=20260713-conectado1"></script>
-  <script src="./js/public/catalogo-whatsapp.js?v=20260903-catalogo-admin1"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260904-envios-seguros1"></script>
+  <script src="./js/database/supabase-repository.js?v=20260904-envios-seguros1"></script>
+  <script src="./js/public/catalogo-whatsapp.js?v=20260904-envios-seguros1"></script>
   <script src="./js/public/instalacion-app.js?v=20260902-instalable2"></script>
 </body>
 </html>
