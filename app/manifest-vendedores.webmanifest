@@ -1,0 +1,21 @@
+{
+  "id": "/vendedores",
+  "name": "LV Sistema - Ventas móviles",
+  "short_name": "LV Ventas",
+  "description": "Carga de pedidos y clientes para vendedores de LV Sistema.",
+  "lang": "es-AR",
+  "start_url": "/vendedores",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#eef3f8",
+  "theme_color": "#102033",
+  "icons": [
+    {
+      "src": "/assets/icons/lv-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

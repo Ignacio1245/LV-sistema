@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">LV Sistema</title>
+  <rect width="512" height="512" rx="112" fill="#142231"/>
+  <path d="M96 104h64v240h136v64H96z" fill="#ffffff"/>
+  <path d="M218 104h70l64 211 64-211h70l-101 304h-66z" fill="#ffffff"/>
+  <rect x="96" y="424" width="320" height="24" rx="12" fill="#1698c7"/>
+</svg>

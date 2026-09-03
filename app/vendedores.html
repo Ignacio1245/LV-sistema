@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#102033">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LV Ventas">
+  <title>Vendedores - Pedido movil</title>
+  <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest-vendedores.webmanifest">
+  <link rel="stylesheet" href="./css/styles.css?v=20260902-mobile5">
+  <link rel="stylesheet" href="./css/vendedores-mobile.css?v=20260902-pedido-guiado1">
+  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260902-instalable2">
+</head>
+<body class="vendedores-mobile">
+  <section id="vendedorLogin" class="vendedores-login vendedores-oculto" aria-labelledby="vendedorLoginTitulo">
+    <form id="vendedorLoginForm" class="vendedores-login-card">
+      <p class="vendedores-etiqueta">Ventas moviles</p>
+      <h1 id="vendedorLoginTitulo">Ingresar</h1>
+      <label>
+        Usuario
+        <input id="vendedorLoginEmail" type="text" autocomplete="username" placeholder="Nombre o email">
+      </label>
+      <label>
+        Clave
+        <input id="vendedorLoginPassword" type="password" autocomplete="current-password" placeholder="Clave">
+      </label>
+      <button type="submit" class="vendedores-principal">Entrar</button>
+      <p id="vendedorLoginEstado" class="vendedores-login-estado">Usa tu usuario de vendedor y clave.</p>
+      <button class="install-app-button" type="button" data-install-app hidden>Instalar ventas en este celular</button>
+      <p class="install-app-help" data-install-ios-help hidden>En iPhone: toca Compartir y luego Agregar a inicio.</p>
+    </form>
+  </section>
+
+  <main id="vendedorContenido" class="vendedores-layout vendedores-oculto">
+    <header class="vendedores-encabezado">
+      <div>
+        <p class="vendedores-etiqueta">Ventas moviles</p>
+        <h1 id="vendedorNombreEncabezado">Vendedor</h1>
+      </div>
+      <div class="vendedores-sesion">
+        <span id="vendedorEstadoConexion" class="vendedores-estado">Cargando...</span>
+        <button id="vendedorBotonSalir" type="button" class="vendedores-salir">Salir</button>
+      </div>
+    </header>
+
+    <div id="vendedorNavegacionFlujo" class="vendedores-navegacion-flujo vendedores-oculto">
+      <button id="vendedorVolverInicio" type="button" class="vendedores-volver-inicio">← Tareas</button>
+      <nav id="vendedorPasosPedido" class="vendedores-pasos-pedido vendedores-oculto" aria-label="Pasos del pedido">
+        <button type="button" data-vendedor-paso="cliente">
+          <span>1</span>
+          <strong>Cliente</strong>
+        </button>
+        <button type="button" data-vendedor-paso="productos">
+          <span>2</span>
+          <strong>Productos</strong>
+        </button>
+        <button type="button" data-vendedor-paso="resumen">
+          <span>3</span>
+          <strong>Revisar</strong>
+        </button>
+      </nav>
+    </div>
+
+    <section id="vendedorInicio" class="vendedores-panel vendedores-inicio">
+      <div>
+        <p class="vendedores-etiqueta">Trabajo de calle</p>
+        <h2>Elegir tarea</h2>
+      </div>
+      <div class="vendedores-jornada" aria-label="Resumen de jornada">
+        <article>
+          <span>Clientes</span>
+          <strong id="vendedorMetricaClientes">0</strong>
+        </article>
+        <article>
+          <span>Productos</span>
+          <strong id="vendedorMetricaProductos">0</strong>
+        </article>
+        <article>
+          <span>Con deuda</span>
+          <strong id="vendedorMetricaDeuda">0</strong>
+        </article>
+        <article>
+          <span>Pedido</span>
+          <strong id="vendedorMetricaPedido">$0</strong>
+        </article>
+      </div>
+      <div class="vendedores-modulos">
+        <button id="vendedorModuloVenta" type="button" class="vendedores-modulo-card" data-vendedor-modulo="venta">
+          <strong>Venta</strong>
+          <span>Cliente y pedido</span>
+        </button>
+        <button id="vendedorModuloClientes" type="button" class="vendedores-modulo-card" data-vendedor-modulo="clientes">
+          <strong>Cobrar</strong>
+          <span>Deuda y cobranza</span>
+        </button>
+        <button id="vendedorModuloCatalogo" type="button" class="vendedores-modulo-card" data-vendedor-modulo="catalogo">
+          <strong>Catalogo</strong>
+          <span>Link por WhatsApp</span>
+        </button>
+      </div>
+    </section>
+
+    <section id="vendedorSeccionClientes" class="vendedores-panel vendedores-datos vendedores-oculto">
+      <div class="vendedores-flujo-cabecera">
+        <p id="vendedorFlujoPaso" class="vendedores-etiqueta">Paso 1</p>
+        <h2 id="vendedorFlujoTitulo">Buscar cliente</h2>
+      </div>
+      <label>
+        Vendedor
+        <input id="vendedorNombre" type="text" autocomplete="name" placeholder="Nombre del vendedor">
+      </label>
+      <label class="vendedores-oculto">
+        Zona
+        <select id="vendedorZonaCliente">
+          <option value="">Seleccionar zona</option>
+        </select>
+      </label>
+      <label>
+        Cliente
+        <input id="vendedorBusquedaCliente" type="search" placeholder="Codigo o nombre del cliente">
+      </label>
+      <div id="vendedorClientesRecientes" class="vendedores-recientes"></div>
+      <div id="vendedorResultadosClientes" class="vendedores-resultados"></div>
+      <div id="vendedorClienteSeleccionado" class="vendedores-seleccion">Sin cliente seleccionado</div>
+      <div class="vendedores-acciones vendedores-acciones-cliente">
+        <button id="vendedorBotonNuevoCliente" type="button" class="vendedores-secundario">Nuevo cliente</button>
+        <button id="vendedorBotonEnviarCatalogo" type="button" class="vendedores-secundario">Enviar catalogo</button>
+      </div>
+
+      <form id="vendedorNuevoClienteForm" class="vendedores-alta-cliente vendedores-oculto">
+        <div>
+          <p class="vendedores-etiqueta">Alta rapida</p>
+          <h3>Crear cliente</h3>
+        </div>
+        <label>
+          Nombre
+          <input id="vendedorNuevoClienteNombre" type="text" autocomplete="organization" placeholder="Nombre o razon social">
+        </label>
+        <label>
+          Telefono
+          <input id="vendedorNuevoClienteTelefono" type="tel" inputmode="tel" placeholder="Telefono o WhatsApp">
+        </label>
+        <label>
+          Direccion
+          <input id="vendedorNuevoClienteDireccion" type="text" autocomplete="street-address" placeholder="Direccion">
+        </label>
+        <label>
+          Zona
+          <input id="vendedorNuevoClienteZona" type="text" placeholder="Zona">
+        </label>
+        <div class="vendedores-acciones">
+          <button id="vendedorGuardarNuevoCliente" type="submit" class="vendedores-principal">Guardar cliente</button>
+          <button id="vendedorCancelarNuevoCliente" type="button" class="vendedores-secundario">Cancelar</button>
+        </div>
+        <p id="vendedorNuevoClienteEstado" class="vendedores-envio-estado"></p>
+      </form>
+    </section>
+
+    <section id="vendedorSeccionProductos" class="vendedores-panel vendedores-oculto">
+      <div class="vendedores-contexto-pedido">
+        <div>
+          <span>Pedido para</span>
+          <strong id="vendedorClientePedidoNombre">Cliente</strong>
+        </div>
+        <button id="vendedorCambiarCliente" type="button" class="vendedores-secundario">Cambiar</button>
+      </div>
+      <label class="vendedores-productos-busqueda">
+        Producto
+        <input id="vendedorBusquedaProducto" type="search" placeholder="Codigo, producto, marca o rubro">
+      </label>
+      <p id="vendedorProductoEstado" class="vendedores-producto-estado" role="status" aria-live="polite"></p>
+      <div id="vendedorResultadosProductos" class="vendedores-productos"></div>
+    </section>
+
+    <section id="vendedorSeccionCatalogo" class="vendedores-panel vendedores-catalogo-panel vendedores-oculto">
+      <div class="vendedores-resumen-titulo">
+        <div>
+          <h2>Catalogo</h2>
+          <p class="vendedores-texto-ayuda">Se envia al WhatsApp del cliente si tiene telefono cargado.</p>
+        </div>
+      </div>
+      <div class="vendedores-acciones vendedores-acciones-catalogo">
+        <button id="vendedorBotonEnviarCatalogoPanel" type="button" class="vendedores-principal">Enviar por WhatsApp</button>
+        <button id="vendedorBotonCopiarCatalogo" type="button" class="vendedores-secundario">Copiar link</button>
+      </div>
+      <p id="vendedorCatalogoEstado" class="vendedores-envio-estado"></p>
+    </section>
+
+    <section id="vendedorSeccionPedido" class="vendedores-panel vendedores-resumen vendedores-oculto">
+      <div class="vendedores-resumen-titulo">
+        <div>
+          <h2>Pedido</h2>
+          <div class="vendedores-metricas">
+            <span><strong id="vendedorCantidadItems">0</strong> productos</span>
+            <span><strong id="vendedorCantidadUnidades">0</strong> unidades</span>
+          </div>
+        </div>
+        <strong id="vendedorTotalPedido">$0</strong>
+      </div>
+      <div id="vendedorItemsPedido" class="vendedores-items"></div>
+
+      <label>
+        Forma de pago
+        <select id="vendedorFormaPago">
+          <option value="CUENTA_CORRIENTE">Cuenta corriente</option>
+          <option value="EFECTIVO">Contado</option>
+          <option value="TRANSFERENCIA">Transferencia</option>
+        </select>
+      </label>
+      <label>
+        Observacion
+        <textarea id="vendedorObservacion" rows="3" placeholder="Falta mercaderia, horario, cobranza, etc."></textarea>
+      </label>
+
+      <div class="vendedores-acciones vendedores-acciones-final">
+        <button id="vendedorBotonVolverProductos" type="button" class="vendedores-secundario">Seguir agregando</button>
+        <button id="vendedorBotonWhatsapp" type="button" class="vendedores-principal">Guardar y enviar</button>
+      </div>
+
+      <details class="vendedores-opciones-envio">
+        <summary>Opciones del pedido</summary>
+        <label>
+          WhatsApp de la distribuidora
+          <input id="vendedorTelefonoDestino" type="tel" inputmode="tel" placeholder="Ej: 5491123456789">
+        </label>
+        <div class="vendedores-acciones">
+          <button id="vendedorBotonCopiar" type="button" class="vendedores-secundario">Copiar texto</button>
+          <button id="vendedorBotonLimpiar" type="button" class="vendedores-secundario vendedores-peligro-suave">Vaciar pedido</button>
+        </div>
+      </details>
+      <p id="vendedorEstadoEnvio" class="vendedores-envio-estado"></p>
+    </section>
+
+    <section id="vendedorSeccionCobranza" class="vendedores-panel vendedores-cobranza vendedores-oculto">
+      <div class="vendedores-resumen-titulo">
+        <div>
+          <h2>Cobranza</h2>
+          <p id="vendedorCobranzaCliente" class="vendedores-texto-ayuda">Elegi un cliente para ver su saldo.</p>
+        </div>
+        <strong id="vendedorCobranzaSaldo">$0</strong>
+      </div>
+
+      <label>
+        Importe cobrado
+        <input id="vendedorCobranzaImporte" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0">
+      </label>
+
+      <label>
+        Medio de pago
+        <select id="vendedorCobranzaMedio">
+          <option value="EFECTIVO">Efectivo</option>
+          <option value="TRANSFERENCIA">Transferencia</option>
+          <option value="CHEQUE">Cheque</option>
+          <option value="MERCADO_PAGO">Mercado Pago</option>
+        </select>
+      </label>
+
+      <label>
+        Comprobante
+        <input id="vendedorCobranzaComprobante" type="text" placeholder="Nro, alias, banco o detalle">
+      </label>
+
+      <label>
+        Observacion
+        <textarea id="vendedorCobranzaObservacion" rows="2" placeholder="Aclaracion de cobranza"></textarea>
+      </label>
+
+      <div class="vendedores-acciones">
+        <button id="vendedorBotonCobrarSaldo" type="button" class="vendedores-secundario">Total deuda</button>
+        <button id="vendedorBotonGuardarCobranza" type="button" class="vendedores-principal">Guardar cobranza</button>
+      </div>
+      <p id="vendedorCobranzaEstado" class="vendedores-envio-estado"></p>
+    </section>
+  </main>
+
+  <div id="vendedorBarraPedido" class="vendedores-barra-pedido vendedores-oculto">
+    <div>
+      <span id="vendedorBarraItems">0 productos</span>
+      <strong id="vendedorBarraTotal">$0</strong>
+    </div>
+    <button id="vendedorBotonBarraWhatsapp" type="button">Revisar pedido</button>
+  </div>
+
+  <div id="vendedorConfirmacion" class="vendedores-confirmacion-fondo vendedores-oculto" aria-hidden="true">
+    <section class="vendedores-confirmacion" role="dialog" aria-modal="true" aria-labelledby="vendedorConfirmacionTitulo" aria-describedby="vendedorConfirmacionMensaje">
+      <p class="vendedores-etiqueta">Confirmacion</p>
+      <h2 id="vendedorConfirmacionTitulo">Confirmar accion</h2>
+      <p id="vendedorConfirmacionMensaje">Revisa la informacion antes de continuar.</p>
+      <div class="vendedores-confirmacion-acciones">
+        <button id="vendedorConfirmacionCancelar" type="button" class="vendedores-secundario">Volver</button>
+        <button id="vendedorConfirmacionAceptar" type="button" class="vendedores-principal">Continuar</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./js/supabase-config.js"></script>
+  <script src="./js/data.js?v=20260816-listas0"></script>
+  <script src="./js/helpers.js"></script>
+  <script src="./js/productos.js"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260816-bonif0"></script>
+  <script src="./js/database/supabase-repository.js?v=20260714-roles1"></script>
+  <script src="./js/supabase-auth.js?v=20260713-loginclave1"></script>
+  <script src="./js/mobile/vendedores-mobile.js?v=20260902-confirmaciones1"></script>
+  <script src="./js/public/instalacion-app.js?v=20260902-instalable2"></script>
+</body>
+</html>
+
+
+

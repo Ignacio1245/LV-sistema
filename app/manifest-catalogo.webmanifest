@@ -1,0 +1,21 @@
+{
+  "id": "/catalogo",
+  "name": "LV Sistema - Catálogo",
+  "short_name": "LV Catálogo",
+  "description": "Catálogo público para preparar pedidos por WhatsApp.",
+  "lang": "es-AR",
+  "start_url": "/catalogo",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef3f8",
+  "theme_color": "#eef3f8",
+  "icons": [
+    {
+      "src": "/assets/icons/lv-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
