@@ -266,6 +266,8 @@ const dom = {
   pedidoResumenCuentaCantidad: document.querySelector("#pedidoResumenCuentaCantidad"),
   productStatusFilterButtons: document.querySelectorAll("[data-product-status-filter]"),
   clientStatusFilterButtons: document.querySelectorAll("[data-client-status-filter]"),
+  clientDebtFilterButtons: document.querySelectorAll("[data-client-debt-filter]"),
+  clientesOrdenInput: document.getElementById("clientesOrdenInput"),
   sellerStatusFilterButtons: document.querySelectorAll("[data-seller-status-filter]"),
   buscarVendedorInput: document.querySelector("#buscarVendedorInput"),
   vendedoresTable: document.querySelector("#vendedoresTable"),
@@ -583,7 +585,7 @@ function renderizarListaDashboard(contenedor, items, crearFila, mensajeVacio) {
 
   if (items.length === 0) {
     contenedor.innerHTML =
-      `<div class="dashboard-empty">${mensajeVacio}</div>`;
+      html`<div class="dashboard-empty">${mensajeVacio}</div>`;
     return;
   }
 
@@ -592,10 +594,10 @@ function renderizarListaDashboard(contenedor, items, crearFila, mensajeVacio) {
 }
 
 function crearFilaDashboard(textoPrincipal, textoDetalle) {
-  return `
+  return html`
     <div class="dashboard-alert-row">
-      <span>${escaparTextoHtml(textoPrincipal)}</span>
-      <strong>${escaparTextoHtml(textoDetalle)}</strong>
+      <span>${textoPrincipal}</span>
+      <strong>${textoDetalle}</strong>
     </div>
   `;
 }
@@ -1019,9 +1021,9 @@ function obtenerRevisionesArranqueSistema(datosIncompletos, productosCriticos) {
 
   if (vendedoresActivos > 0 && clientesSinVendedorAsignado > 0) {
     revisiones.push(crearRevisionArranqueSistema(
-      "aviso",
+      "info",
       "Clientes sin vendedor",
-      clientesSinVendedorAsignado + " no aparecen en celular"
+      clientesSinVendedorAsignado + " compartido" + (clientesSinVendedorAsignado === 1 ? "" : "s") + " entre vendedores"
     ));
   }
 
@@ -1118,10 +1120,10 @@ function renderizarEstadoArranqueSistema(datosIncompletos, productosCriticos) {
 
   dom.dashboardEstadoArranqueLista.innerHTML =
     revisiones.slice(0, 5).map(function (revision) {
-      return `
+      return html`
         <div class="dashboard-readiness-row ${revision.nivel}">
-          <span>${escaparTextoHtml(revision.texto)}</span>
-          <strong>${escaparTextoHtml(revision.detalle)}</strong>
+          <span>${revision.texto}</span>
+          <strong>${revision.detalle}</strong>
         </div>
       `;
     }).join("");
@@ -1289,9 +1291,6 @@ function actualizarResumenPedidos() {
   const pedidosPendientes =
     obtenerPedidosPorEstados(["PENDIENTE"]);
 
-  const pedidosEnEntrega =
-    obtenerPedidosPorEstados(["ATENDIDO", "ENTREGADO"]);
-
   const pedidosCuentaCorriente =
     obtenerPedidosPorEstadosDeCobro(["CUENTA_CORRIENTE"]);
 
@@ -1302,11 +1301,6 @@ function actualizarResumenPedidos() {
     formatearDinero(sumarTotalPedidosPorEstados(["PENDIENTE"]));
   dom.pedidoResumenPendientesCantidad.textContent =
     obtenerTextoCantidadPedidos(pedidosPendientes.length);
-
-  dom.pedidoResumenEntrega.textContent =
-    formatearDinero(sumarTotalPedidosPorEstados(["ATENDIDO", "ENTREGADO"]));
-  dom.pedidoResumenEntregaCantidad.textContent =
-    obtenerTextoCantidadPedidos(pedidosEnEntrega.length);
 
   dom.pedidoResumenCuenta.textContent =
     formatearDinero(sumarSaldoPedidosPorEstadosDeCobro(["CUENTA_CORRIENTE"]));
@@ -1703,9 +1697,9 @@ function renderizarOpcionesZonasVendedor() {
     dom.vendedorZonaInput.value;
 
   dom.vendedorZonaInput.innerHTML =
-    `<option value="">Sin zona fija</option>` +
+    html`<option value="">Sin zona fija</option>` +
     zonas.filter(zonaActiva).map(function (zona) {
-      return `<option value="${zona.nombre}">${zona.nombre}</option>`;
+      return html`<option value="${zona.nombre}">${zona.nombre}</option>`;
     }).join("");
 
   dom.vendedorZonaInput.value =
@@ -1944,9 +1938,15 @@ async function guardarVendedorDesdeFormulario(event) {
       alert("El vendedor se actualizo localmente, pero no se pudo guardar en Supabase.");
     }
 
+    if (typeof cerrarEditorCompacto === "function") {
+      cerrarEditorCompacto(true);
+    }
     limpiarFormularioVendedor();
     renderizarVendedores();
     renderizarOpcionesVendedoresCliente();
+    if (typeof mostrarAvisoPractico === "function") {
+      mostrarAvisoPractico("Vendedor actualizado correctamente.");
+    }
 
     registrarAuditoria(
       "Vendedores",
@@ -2028,6 +2028,13 @@ function editarVendedor(codigo) {
   dom.vendedorTipoInput.value = vendedor.tipo || "Calle";
   dom.vendedorSubmitButton.textContent = "Guardar vendedor";
   dom.cancelarEdicionVendedorButton.classList.remove("hidden");
+  if (typeof abrirEditorCompacto === "function") {
+    abrirEditorCompacto(dom.vendedorForm, {
+      titulo: "Editar vendedor",
+      subtitulo: vendedor.codigo + " · " + vendedor.nombre,
+      alCerrar: limpiarFormularioVendedor
+    });
+  }
   dom.vendedorNombreInput.focus();
 }
 
@@ -2219,7 +2226,7 @@ function renderizarVendedores() {
   dom.vendedoresPedidosResumen.textContent = pedidosMes;
 
   if (vendedores.length === 0) {
-    dom.vendedoresTable.innerHTML = `
+    dom.vendedoresTable.innerHTML = html`
       <tr>
         <td colspan="9" class="empty-table">No hay vendedores para mostrar.</td>
       </tr>
@@ -2232,7 +2239,7 @@ function renderizarVendedores() {
         const estadoClase =
           usuario.activo ? "stock-ok" : "stock-inactive";
 
-        return `
+        return html`
           <tr>
             <td>${usuario.codigo}</td>
             <td><strong>${usuario.nombre}</strong></td>
@@ -2249,7 +2256,7 @@ function renderizarVendedores() {
               <button class="btn btn-secondary" onclick="alternarEstadoVendedor(${usuario.codigo})">
                 ${usuario.activo ? "Desactivar" : "Activar"}
               </button>
-              <button class="btn btn-danger" onclick="eliminarVendedor(${usuario.codigo})">
+              <button class="btn btn-danger btn-eliminar" onclick="eliminarVendedor(${usuario.codigo})">
                 Borrar
               </button>
             </td>
@@ -2277,7 +2284,7 @@ function renderizarVendedores() {
             }).join(" | ")
             : "Sin zonas asignadas";
 
-        return `
+        return html`
           <div class="report-row">
             <span>${usuario.nombre}</span>
             <strong>${detalle}</strong>
@@ -2296,7 +2303,7 @@ function renderizarVendedores() {
             return suma + (Number(pedido.total) || 0);
           }, 0);
 
-        return `
+        return html`
           <div class="report-row">
             <span>${usuario.nombre}</span>
             <strong>${pedidosDelMes.length} pedidos | ${formatearDinero(total)}</strong>
@@ -3119,6 +3126,9 @@ function abrirNuevoPedidoDesdeMenu() {
   pedidoEditando = null;
   limpiarFormularioPedido();
   renderizarPedidoActual();
+  if (typeof mostrarPasoFormularioPedido === "function") {
+    mostrarPasoFormularioPedido("cliente", true);
+  }
   renderizarCatalogoProductosPedido();
 
   mostrarPagina("ventas");
@@ -4307,6 +4317,12 @@ function configurarEventos() {
     abrirNuevoPedidoDesdeMenu
   );
 
+  document.querySelectorAll("[data-pedido-menu-paso]").forEach(function (botonPasoPedido) {
+    botonPasoPedido.addEventListener("click", function () {
+      mostrarPasoFormularioPedido(botonPasoPedido.dataset.pedidoMenuPaso, true);
+    });
+  });
+
   dom.productStatusFilterButtons.forEach(function (boton) {
     boton.addEventListener("click", function () {
       cambiarFiltroEstadoProductos(boton.dataset.productStatusFilter);
@@ -4399,6 +4415,18 @@ function configurarEventos() {
       cambiarFiltroEstadoClientes(boton.dataset.clientStatusFilter);
     });
   });
+
+  dom.clientDebtFilterButtons.forEach(function (boton) {
+    boton.addEventListener("click", function () {
+      cambiarFiltroDeudaClientes(boton.dataset.clientDebtFilter);
+    });
+  });
+
+  if (dom.clientesOrdenInput) {
+    dom.clientesOrdenInput.addEventListener("change", function () {
+      cambiarOrdenClientes(dom.clientesOrdenInput.value);
+    });
+  }
 
   dom.clientMenuButtons.forEach(function (boton) {
     boton.addEventListener("click", function () {

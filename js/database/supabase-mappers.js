@@ -1,4 +1,22 @@
-﻿function normalizarNombreRolSupabase(nombreRol) {
+﻿// Cuantos movimientos se guardan dentro de la fila del producto. El historial
+// completo esta en las tablas movimientos_stock y producto_historial_precios
+// (ver supabase/sql/historial-fuera-del-producto.sql); el detalle del producto
+// lo lee de ahi con obtenerMovimientosStockProductoSupabase.
+const MAXIMO_HISTORIAL_EN_PRODUCTO = 100;
+
+function ultimosDelHistorialProducto(historial) {
+  if (!Array.isArray(historial)) {
+    return [];
+  }
+
+  if (historial.length <= MAXIMO_HISTORIAL_EN_PRODUCTO) {
+    return historial;
+  }
+
+  return historial.slice(-MAXIMO_HISTORIAL_EN_PRODUCTO);
+}
+
+function normalizarNombreRolSupabase(nombreRol) {
   return String(nombreRol || "")
     .trim()
     .replace(/[^a-z0-9]+/gi, "_")
@@ -101,16 +119,18 @@ function mapearProductoParaSupabase(producto) {
     iva: Number(producto.iva) || 0,
     bonificacion_venta: 0,
     precios_lista: preciosLista,
-    historial_precios: Array.isArray(producto.historialPrecios)
-      ? producto.historialPrecios
-      : [],
-    movimientos_stock: Array.isArray(producto.movimientosStock)
-      ? producto.movimientosStock
-      : [],
+    // El historial completo vive en las tablas movimientos_stock y
+    // producto_historial_precios. Lo que queda en la fila del producto son los
+    // ultimos movimientos, para que los informes del panel sigan funcionando
+    // sin que la fila crezca sin limite: cada UPDATE de un producto reescribe
+    // estos arrays enteros, y obtenerProductosSupabase() se los baja todos en
+    // cada inicio de sesion.
+    historial_precios: ultimosDelHistorialProducto(producto.historialPrecios),
+    movimientos_stock: ultimosDelHistorialProducto(producto.movimientosStock),
     activo: producto.activo !== false,
     baja_automatica_stock: producto.bajaAutomaticaStock === true,
     imagen_url: producto.imagenUrl || "",
-    mostrar_catalogo: producto.mostrarCatalogo === true
+    mostrar_catalogo: producto.mostrarCatalogo !== false
   };
 }
 
@@ -170,30 +190,57 @@ function mapearClienteParaSupabase(cliente) {
   };
 }
 
+// Una fecha que no se puede interpretar tiene que caer en la fecha de hoy, no
+// tirar una excepcion: new Date("cualquier cosa").toISOString() lanza
+// RangeError, y como esto se usa al guardar pedidos y movimientos de cuenta,
+// un solo registro viejo o importado con la fecha mal escrita hacia fallar toda
+// la operacion de guardado.
+function fechaValidaParaSupabase(fecha) {
+  return fecha instanceof Date && !Number.isNaN(fecha.getTime());
+}
+
 function convertirFechaPedidoParaSupabase(fechaPedido) {
   if (!fechaPedido) {
     return new Date().toISOString();
   }
 
-  if (fechaPedido.includes("/")) {
-    const partes = fechaPedido.split("/");
+  const textoFecha =
+    String(fechaPedido).trim();
+
+  if (textoFecha === "") {
+    return new Date().toISOString();
+  }
+
+  if (textoFecha.includes("/")) {
+    const partes = textoFecha.split("/");
     const dia = Number(partes[0]) || 1;
     const mes = (Number(partes[1]) || 1) - 1;
     const anio = Number(partes[2]) || new Date().getFullYear();
+    const fechaArmada = new Date(anio, mes, dia);
 
-    return new Date(anio, mes, dia).toISOString();
+    return fechaValidaParaSupabase(fechaArmada)
+      ? fechaArmada.toISOString()
+      : new Date().toISOString();
   }
 
-  return new Date(fechaPedido).toISOString();
+  const fechaDirecta = new Date(textoFecha);
+
+  if (!fechaValidaParaSupabase(fechaDirecta)) {
+    console.warn("Fecha ilegible, se guarda con la fecha de hoy:", fechaPedido);
+    return new Date().toISOString();
+  }
+
+  return fechaDirecta.toISOString();
 }
 
 function mapearPedidoParaSupabase(pedido) {
   return {
+    origen: pedido.origen || (Array.isArray(pedido.observaciones) && pedido.observaciones.includes("Pedido desde catalogo publico") ? "catalogo" : "administracion"),
     numero: Number(pedido.numero || pedido.id) || 0,
     cliente_id: pedido.cliente && pedido.cliente.idSupabase
       ? pedido.cliente.idSupabase
       : null,
-    vendedor_id: null,
+    vendedor_id: pedido.vendedorIdSupabase || null,
     vendedor: pedido.vendedor || "Sin vendedor",
     zona: pedido.zona || (pedido.cliente ? pedido.cliente.zona : "") || "Sin zona",
     estado: pedido.estado || "PENDIENTE",
@@ -283,6 +330,8 @@ function mapearPedidoDesdeSupabase(pedido) {
     idSupabase: pedido.id,
     numero: Number(pedido.numero) || 0,
     id: Number(pedido.numero) || Date.now(),
+    origen: pedido.origen || "administracion",
+    vendedorIdSupabase: pedido.vendedor_id || null,
     cliente: clientePedido,
     vendedor: pedido.vendedor || "Sin vendedor",
     zona: clientePedido && clientePedido.zona
@@ -502,7 +551,8 @@ function mapearConfiguracionDesdeSupabase(configuracion) {
     impresionPie: configuracion.impresion_pie || "Gracias por su compra.",
     impresionMostrarQr: configuracion.impresion_mostrar_qr !== false,
     impresionQrTexto: configuracion.impresion_qr_texto || "",
-    stockMinimo: Number(configuracion.stock_minimo) || 10,
+    stockMinimo: configuracion.stock_minimo != null && Number.isFinite(Number(configuracion.stock_minimo))
+      ? Math.max(0, Number(configuracion.stock_minimo)) : 10,
     permitirStockNegativo: configuracion.permitir_stock_negativo === true
   };
 }

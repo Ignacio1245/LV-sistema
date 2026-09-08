@@ -1538,11 +1538,93 @@ button.vendedores-producto,
   background: #fff4f2 !important;
 }
 
+body.vendedores-confirmacion-abierta {
+  overflow: hidden;
+}
+
+.vendedores-confirmacion-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(10, 24, 38, 0.66);
+  backdrop-filter: blur(2px);
+}
+
+.vendedores-confirmacion {
+  display: grid;
+  width: min(430px, 100%);
+  gap: 10px;
+  padding: 20px;
+  border: 1px solid #bccbd8;
+  border-radius: 15px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(7, 20, 34, 0.34);
+  animation: vendedores-confirmacion-entrada 150ms ease-out;
+}
+
+.vendedores-confirmacion h2,
+.vendedores-confirmacion p {
+  margin: 0;
+}
+
+.vendedores-confirmacion > p:not(.vendedores-etiqueta) {
+  color: #52677b;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.vendedores-confirmacion-acciones {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 9px;
+  margin-top: 8px;
+}
+
+.vendedores-confirmacion-acciones button {
+  min-height: 48px;
+}
+
+.vendedores-confirmar-peligro {
+  border-color: #b42318 !important;
+  background: #b42318 !important;
+}
+
+button[aria-busy="true"] {
+  cursor: wait;
+  opacity: 0.78;
+}
+
+@keyframes vendedores-confirmacion-entrada {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .vendedores-acciones-final {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.25fr);
 }
 
 @media (max-width: 640px) {
+  .vendedores-confirmacion-fondo {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .vendedores-confirmacion {
+    width: 100%;
+    padding: 18px;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+    border-radius: 16px 16px 12px 12px;
+  }
+
   .vendedores-flujo-activo .vendedores-encabezado {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -1608,4 +1690,45 @@ button.vendedores-producto,
   .vendedores-acciones-final {
     grid-template-columns: 1fr;
   }
+}
+
+/* --- Boton de ver/ocultar clave en el login del vendedor ------------------- */
+.vendedores-login .campo-con-boton { position: relative; display: block; }
+.vendedores-login .campo-con-boton input { width: 100%; padding-right: 82px; }
+.vendedores-login .campo-con-boton .ver-clave {
+  position: absolute; top: 50%; right: 10px; transform: translateY(-50%);
+  min-height: 40px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 10px;
+  background: #f1f5f9; color: #0f172a; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+
+/* --- Saldo del cliente en la pantalla del vendedor ------------------------
+   El vendedor toma el pedido parado frente al cliente, muchas veces a cuenta
+   corriente. Antes el saldo no aparecia en ningun lado del celular. */
+.vendedores-saldo {
+  display: inline-block;
+  align-self: flex-start;
+  margin: 6px 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.vendedores-saldo.vendedores-saldo-debe { background: #fee4e2; color: #912018; }
+.vendedores-saldo.vendedores-saldo-favor { background: #d1fadf; color: #05603a; }
+.vendedores-saldo.vendedores-saldo-cero { background: #eaecf0; color: #344054; }
+
+/* --- Aviso de sin conexion (celular del vendedor) ------------------------- */
+.aviso-sin-conexion {
+  position: sticky;
+  top: 0;
+  z-index: 9999;
+  padding: 12px 14px;
+  background: #7a2e0e;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
 }

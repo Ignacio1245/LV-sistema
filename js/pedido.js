@@ -13,6 +13,81 @@ let restaurandoPedidoActualLocal = false;
 let pedidoActualLocalInicializado = false;
 const pedidosOperacionEnCurso = new Set();
 const CLAVE_PEDIDO_ACTUAL_LOCAL = "lv_admin_pedido_actual_local";
+let pasoFormularioPedidoActual = "cliente";
+
+function actualizarMenuPasosPedido() {
+    const clientePedido = pedidoActual.cliente || clienteSeleccionado || null;
+    const cantidadProductos = Array.isArray(pedidoActual.items) ? pedidoActual.items.length : 0;
+    const estadoCliente = document.getElementById("pedidoMenuClienteEstado");
+    const estadoProductos = document.getElementById("pedidoMenuProductosEstado");
+    const estadoResumen = document.getElementById("pedidoMenuResumenEstado");
+
+    if (estadoCliente) {
+        estadoCliente.textContent = clientePedido
+            ? (clientePedido.nombre || "Elegido")
+            : "Elegir";
+    }
+    if (estadoProductos) {
+        estadoProductos.textContent = cantidadProductos +
+            (cantidadProductos === 1 ? " producto" : " productos");
+    }
+    if (estadoResumen) {
+        estadoResumen.textContent = formatearDinero(calcularTotalPedido());
+    }
+
+    document.querySelectorAll("[data-pedido-menu-paso]").forEach(function (boton) {
+        const paso = boton.dataset.pedidoMenuPaso;
+        const completo = paso === "cliente"
+            ? Boolean(clientePedido)
+            : paso === "productos"
+                ? cantidadProductos > 0
+                : paso === "resumen"
+                    ? Boolean(clientePedido) && cantidadProductos > 0
+                    : false;
+        boton.classList.toggle("activo", paso === pasoFormularioPedidoActual);
+        boton.classList.toggle("completo", completo);
+        if (paso === pasoFormularioPedidoActual) boton.setAttribute("aria-current", "step");
+        else boton.removeAttribute("aria-current");
+    });
+}
+
+function mostrarPasoFormularioPedido(paso, enfocar) {
+    const pasosValidos = ["cliente", "productos", "resumen", "cierre"];
+    if (!pasosValidos.includes(paso)) return false;
+
+    const clientePedido = pedidoActual.cliente || clienteSeleccionado || null;
+    if (paso !== "cliente" && !clientePedido) {
+        paso = "cliente";
+        if (dom.clienteResultado) {
+            dom.clienteResultado.textContent = "Primero elegi un cliente de la lista.";
+        }
+    } else if (paso === "cierre" && pedidoActual.items.length === 0) {
+        paso = "productos";
+        if (dom.productoResultado) {
+            dom.productoResultado.textContent = "Agrega al menos un producto antes de finalizar.";
+        }
+    }
+
+    pasoFormularioPedidoActual = paso;
+    const contenedor = document.querySelector(".pedido-sale-layout");
+    if (contenedor) contenedor.dataset.pasoActivo = paso;
+    document.querySelectorAll("[data-pedido-paso-panel]").forEach(function (panel) {
+        panel.hidden = panel.dataset.pedidoPasoPanel !== paso;
+    });
+    actualizarMenuPasosPedido();
+
+    if (enfocar) {
+        const foco = paso === "cliente"
+            ? dom.clienteSearchInput
+            : paso === "productos"
+                ? dom.productoSearchInput
+                : paso === "cierre"
+                    ? dom.formaPagoInput
+                    : null;
+        if (foco && typeof foco.focus === "function") foco.focus();
+    }
+    return true;
+}
 
 function localStoragePedidoDisponible() {
     try {
@@ -265,6 +340,9 @@ function restaurarPedidoActualLocalSiCorresponde() {
         mostrarPagina("ventas");
         dom.ventasPage.classList.add("hidden");
         dom.pedidoFormPanel.classList.remove("hidden");
+        mostrarPasoFormularioPedido(
+            pedidoActual.items.length > 0 ? "resumen" : (clienteRestaurado ? "productos" : "cliente")
+        );
 
         if (resultadoItems.omitidos.length > 0) {
             alert(
@@ -325,6 +403,13 @@ function advertirSalidaConPedidoSinGuardar(event) {
     event.returnValue = "";
 }
 
+// Numero que se muestra en pantalla mientras se arma el pedido. Es solo
+// orientativo: el numero definitivo lo asigna Postgres al guardar
+// (crear_pedido_numerado), porque calcularlo aca hacia que dos vendedores
+// guardando a la vez llegaran al mismo numero y al segundo se le cayera el
+// pedido con un error de clave duplicada. Si el sugerido no coincide con el
+// definitivo no pasa nada: guardarPedidoOperacionSupabase pisa pedido.numero
+// con el que devolvio la base.
 function obtenerSiguienteNumeroPedido() {
 
     if (pedidos.length === 0) {
@@ -535,6 +620,107 @@ function avisarPedidoSinConfirmacionOnline(accion) {
     );
 }
 
+// --- Operaciones resueltas en el servidor -----------------------------------
+// El sistema se usa desde varias computadoras y celulares a la vez. Cuando el
+// navegador calcula un saldo o un stock y despues manda un UPDATE de la fila
+// entera, dos personas operando al mismo tiempo se pisan y la plata o el stock
+// quedan mal. Estas dos funciones delegan el calculo a Postgres, que bloquea la
+// fila mientras opera (ver supabase/sql/operaciones-atomicas.sql).
+
+function pedidoPuedeOperarEnServidor(pedido) {
+    return Boolean(
+        pedido &&
+        pedido.idSupabase &&
+        typeof puedeGuardarOperacionEnSupabase === "function" &&
+        puedeGuardarOperacionEnSupabase()
+    );
+}
+
+function mensajeErrorOperacionPedido(error, accion) {
+    const mensaje =
+        String(error && error.message ? error.message : "").trim();
+
+    if (mensaje) {
+        return mensaje;
+    }
+
+    return "No se pudo " + accion + " el pedido. Actualiza datos y volve a intentar.";
+}
+
+async function descontarStockPedidoEnServidor(pedido) {
+    const sinServidor = {
+        ok: true,
+        enServidor: false,
+        stockPorCodigo: {}
+    };
+
+    if (!pedidoPuedeOperarEnServidor(pedido) ||
+        typeof atenderPedidoAtomicoSupabase !== "function") {
+        return sinServidor;
+    }
+
+    try {
+        const stockDevuelto =
+            await atenderPedidoAtomicoSupabase(pedido.idSupabase);
+        const stockPorCodigo = {};
+
+        stockDevuelto.forEach(function (fila) {
+            stockPorCodigo[fila.codigo] = fila.stock;
+        });
+
+        return { ok: true, enServidor: true, stockPorCodigo: stockPorCodigo };
+    } catch (error) {
+        if (typeof esErrorFuncionSupabaseFaltante === "function" &&
+            esErrorFuncionSupabaseFaltante(error)) {
+            console.warn(
+                "Falta desplegar atender_pedido_atomico en Supabase. " +
+                "Se descuenta el stock con el metodo anterior.",
+                error
+            );
+            return sinServidor;
+        }
+
+        console.error("No se pudo atender el pedido en Supabase:", error);
+        return {
+            ok: false,
+            enServidor: true,
+            stockPorCodigo: {},
+            mensaje: mensajeErrorOperacionPedido(error, "atender")
+        };
+    }
+}
+
+async function entregarPedidoEnServidor(pedido, importePagado) {
+    if (!pedidoPuedeOperarEnServidor(pedido) ||
+        typeof entregarPedidoAtomicoSupabase !== "function") {
+        return { ok: true, enServidor: false };
+    }
+
+    try {
+        const resultado =
+            await entregarPedidoAtomicoSupabase(pedido.idSupabase, importePagado);
+
+        return { ok: true, enServidor: true, resultado: resultado };
+    } catch (error) {
+        if (typeof esErrorFuncionSupabaseFaltante === "function" &&
+            esErrorFuncionSupabaseFaltante(error)) {
+            console.warn(
+                "Falta desplegar entregar_pedido_atomico en Supabase. " +
+                "Se registra la entrega con el metodo anterior.",
+                error
+            );
+            return { ok: true, enServidor: false };
+        }
+
+        console.error("No se pudo entregar el pedido en Supabase:", error);
+        return {
+            ok: false,
+            enServidor: true,
+            mensaje: mensajeErrorOperacionPedido(error, "entregar")
+        };
+    }
+}
+
 async function confirmarGuardadoPedidoOnline(pedido, omitirGuardadoSupabase, accion) {
     if (omitirGuardadoSupabase) {
         return true;
@@ -663,9 +849,26 @@ function actualizarClientePedidoSeleccionado() {
     dom.selectedClientName.textContent =
         cliente.codigo + " - " + cliente.nombre;
 
-    dom.selectedClientDetails.textContent =
-        cliente.direccion + " | Zona: " + (cliente.zona || "Sin zona") +
-        " | Saldo: " + formatearDinero(cliente.saldo || 0);
+    // El saldo estaba, pero perdido en la misma linea que la direccion y la
+    // zona. Cargando un pedido a cuenta corriente conviene verlo de un vistazo,
+    // asi que va como pastilla con color: rojo si debe, verde si tiene a favor.
+    const saldoDelCliente =
+        Number(cliente.saldo) || 0;
+    const claseSaldoPedido =
+        saldoDelCliente > 0
+            ? "saldo-pedido-debe"
+            : saldoDelCliente < 0 ? "saldo-pedido-favor" : "saldo-pedido-cero";
+    const textoSaldoPedido =
+        saldoDelCliente === 0
+            ? "Al dia"
+            : saldoDelCliente > 0
+                ? "Debe " + formatearDinero(saldoDelCliente)
+                : "A favor " + formatearDinero(Math.abs(saldoDelCliente));
+
+    dom.selectedClientDetails.innerHTML = html`
+        <span class="saldo-pedido ${claseSaldoPedido}">${textoSaldoPedido}</span>
+        <span class="datos-cliente-pedido">${cliente.direccion} | Zona: ${cliente.zona || "Sin zona"}</span>
+    `;
 
     if (dom.pedidoListaPreview) {
         dom.pedidoListaPreview.textContent =
@@ -862,7 +1065,7 @@ function calcularSubtotalItemPedido(producto, cantidad, descuentoPorcentaje) {
     const importeDescuento =
         subtotalSinDescuento * descuentoNormalizado / 100;
 
-    return subtotalSinDescuento - importeDescuento;
+    return redondearDinero(subtotalSinDescuento - importeDescuento);
 }
 
 function actualizarSubtotalItemPedido(item) {
@@ -876,8 +1079,10 @@ function actualizarSubtotalItemPedido(item) {
             : obtenerPrecioProductoPorLista(item.producto, item.listaPrecios);
 
     item.subtotal =
-        (item.precioUnitario * item.cantidad) -
-        ((item.precioUnitario * item.cantidad) * item.descuentoPorcentaje / 100);
+        redondearDinero(
+            (item.precioUnitario * item.cantidad) -
+            ((item.precioUnitario * item.cantidad) * item.descuentoPorcentaje / 100)
+        );
 }
 
 function obtenerCantidadSugeridaCargaRapida(producto) {
@@ -909,8 +1114,10 @@ function actualizarResumenCargaRapidaPedido() {
     const bonificacion =
         normalizarDescuentoPedido(dom.pedidoRapidoBonificacionInput.value);
     const subtotal =
-        (precioUnitario * cantidadParaCalculo) -
-        ((precioUnitario * cantidadParaCalculo) * bonificacion / 100);
+        redondearDinero(
+            (precioUnitario * cantidadParaCalculo) -
+            ((precioUnitario * cantidadParaCalculo) * bonificacion / 100)
+        );
 
     dom.pedidoRapidoPrecioPreview.textContent =
         "Precio: " + formatearDinero(precioUnitario) +
@@ -1082,7 +1289,7 @@ function renderizarCatalogoProductosPedido() {
     dom.pedidoProductCatalog.innerHTML = "";
 
     if (productosFiltrados.length === 0) {
-        dom.pedidoProductCatalog.innerHTML = `
+        dom.pedidoProductCatalog.innerHTML = html`
       <div class="empty-catalog">
         No hay productos que coincidan con la busqueda.
       </div>
@@ -1104,7 +1311,7 @@ function renderizarCatalogoProductosPedido() {
             card.classList.add("without-stock");
         }
 
-        card.innerHTML = `
+        card.innerHTML = html`
       <div>
         <span class="product-code">#${producto.codigo}</span>
         <h4>${producto.nombre}</h4>
@@ -1215,7 +1422,7 @@ function agregarItemPedido(producto, cantidad, descuentoPorcentaje) {
 
 function calcularTotalPedido() {
 
-    return pedidoActual.items.reduce(
+    return redondearDinero(pedidoActual.items.reduce(
 
         function (total, item) {
 
@@ -1225,7 +1432,7 @@ function calcularTotalPedido() {
 
         0
 
-    );
+    ));
 
 }
 
@@ -1389,6 +1596,7 @@ function renderizarPedidoActual() {
 
     pedidoActual.formaPago = obtenerFormaPagoActual();
     actualizarEncabezadoFormularioPedido();
+    actualizarMenuPasosPedido();
 
     if (dom.pedidoNumeroPreview) {
         dom.pedidoNumeroPreview.textContent =
@@ -1406,7 +1614,7 @@ function renderizarPedidoActual() {
 
     if (pedidoActual.items.length === 0) {
 
-        dom.pedidoItemsTable.innerHTML = `
+        dom.pedidoItemsTable.innerHTML = html`
       <tr>
         <td colspan="7" class="empty-table">
           Todavia no agregaste productos al pedido.
@@ -1432,9 +1640,9 @@ function renderizarPedidoActual() {
         const row =
             document.createElement("tr");
 
-        row.innerHTML = `
-      <td>${escaparTextoPedido(item.producto.codigo)}</td>
-      <td>${escaparTextoPedido(item.producto.nombre)}</td>
+        row.innerHTML = html`
+      <td>${item.producto.codigo}</td>
+      <td>${item.producto.nombre}</td>
       <td>
         <div class="quantity-control">
           <button class="btn btn-secondary" onclick="restarUnidadPedidoActual(${item.producto.codigo})">-</button>
@@ -1454,7 +1662,7 @@ function renderizarPedidoActual() {
       </td>
       <td>
         ${formatearDinero(obtenerPrecioUnitarioItemPedido(item))}
-        <small>${escaparTextoPedido(item.listaPrecios || "Lista 1")}</small>
+        <small>${item.listaPrecios || "Lista 1"}</small>
       </td>
       <td>${formatearDinero(item.subtotal)}</td>
       <td>
@@ -1487,6 +1695,7 @@ function renderizarPedidoActual() {
     }
 
     guardarPedidoActualLocal();
+    actualizarMenuPasosPedido();
 
 }
 
@@ -1836,7 +2045,8 @@ function obtenerPedidosFiltrados() {
                 filtroFecha === "" ||
                 fechaPedidoFiltro === filtroFecha;
 
-            return coincideBusqueda && coincideEstado && coincideFecha;
+            const coincideOrigen = typeof filtroOrigenPedidos === "undefined" || filtroOrigenPedidos !== "CATALOGO" || esPedidoCatalogo(pedido);
+            return coincideOrigen && coincideBusqueda && coincideEstado && coincideFecha;
         }).sort(function (primero, segundo) {
             return (segundo.numero || segundo.id) - (primero.numero || primero.id);
         });
@@ -1849,6 +2059,7 @@ function renderizarPedidos() {
     dom.pedidosTable.innerHTML = "";
 
     actualizarMenuPedidos();
+    if (typeof actualizarBandejaCatalogo === "function") actualizarBandejaCatalogo();
 
     const pedidosFiltrados =
         obtenerPedidosFiltrados();
@@ -1867,7 +2078,7 @@ function renderizarPedidos() {
 
     if (pedidosFiltrados.length === 0) {
 
-        dom.pedidosTable.innerHTML = `
+        dom.pedidosTable.innerHTML = html`
       <tr>
         <td colspan="7" class="empty-table">
           No hay pedidos para mostrar.
@@ -1889,26 +2100,34 @@ function renderizarPedidos() {
             pedido.cliente && pedido.cliente.codigo !== undefined
                 ? pedido.cliente.codigo + " - " + pedido.cliente.nombre
                 : "Sin cliente";
+        const delCatalogo = typeof esPedidoCatalogo === "function" && esPedidoCatalogo(pedido);
+        const enBandejaCatalogo = delCatalogo && filtroOrigenPedidos === "CATALOGO";
+        const entregaCatalogo = delCatalogo ? obtenerDatosEntregaCatalogo(pedido) : null;
+        const etiquetaEstado = enBandejaCatalogo
+            ? ({ PENDIENTE: "POR PREPARAR", ATENDIDO: "LISTO PARA ENTREGAR" }[pedido.estado] || pedido.estado)
+            : pedido.estado;
 
-        row.innerHTML = `
+        row.innerHTML = html`
 
       <td>
         #${pedido.numero || pedido.id}
       </td>
 
       <td>
-        ${escaparTextoPedido(clientePedidoTexto)}
+        ${clientePedidoTexto}
+        ${delCatalogo ? '<small class="catalogo-pedido-origen">Catalogo</small>' : ''}
+        ${enBandejaCatalogo ? html`<small class="catalogo-pedido-contacto">Entrega: ${entregaCatalogo.direccion}<br>Telefono: ${entregaCatalogo.telefono || "Sin telefono"}${entregaCatalogo.comentario ? html`<br>Nota: ${entregaCatalogo.comentario}` : ""}</small>` : ""}
       </td>
 
       <td>
         ${obtenerTextoFormaPago(pedido.formaPago || "CUENTA_CORRIENTE")}
         ${typeof pedido.importePagado === "number"
-                ? `<small class="payment-detail">
+                ? html`<small class="payment-detail">
             Pago: ${formatearDinero(pedido.importePagado)}
             ${pedido.saldoPendiente > 0
                     ? " | Saldo: " + formatearDinero(pedido.saldoPendiente)
                     : ""}
-            | ${pedido.estadoCobro === "CUENTA_CORRIENTE" ? "Cuenta corriente" : "Cobrado"}
+            | ${obtenerEtiquetaCobroPedido(pedido)}
           </small>`
                 : ""
             }
@@ -1920,10 +2139,10 @@ function renderizarPedidos() {
 
       <td>
         <span class="status ${pedido.estado.toLowerCase()}">
-          ${escaparTextoPedido(pedido.estado)}
+          ${etiquetaEstado}
         </span>
         ${pedido.estadoCobro
-                ? `<small class="payment-detail">
+                ? html`<small class="payment-detail">
             ${pedido.estadoCobro === "CUENTA_CORRIENTE" ? "Cuenta corriente" : "Cobrado"}
           </small>`
                 : ""
@@ -1937,12 +2156,12 @@ function renderizarPedidos() {
       <td>
 
         ${pedido.estado === "BORRADOR"
-                ? `
+                ? html`
             <button class="btn btn-secondary" onclick="editarPedido(${pedido.id})">
               Editar
             </button>
 
-            <button class="btn btn-danger" onclick="eliminarPedido(${pedido.id})">
+            <button class="btn btn-danger btn-eliminar" onclick="eliminarPedido(${pedido.id})">
               Eliminar
             </button>
           `
@@ -1950,9 +2169,9 @@ function renderizarPedidos() {
             }
 
         ${pedido.estado === "PENDIENTE"
-                ? `
+                ? html`
             <button class="btn btn-atender" onclick="atenderPedido(${pedido.id})">
-              Atender
+              ${enBandejaCatalogo ? "Marcar preparado" : "Atender"}
             </button>
 
             <button class="btn btn-danger" onclick="cancelarPedido(${pedido.id})">
@@ -1966,7 +2185,7 @@ function renderizarPedidos() {
             }
 
         ${pedido.estado === "ATENDIDO"
-                ? `
+                ? html`
             <button class="btn btn-entregar" onclick="entregarPedido(${pedido.id})">
               Entregar
             </button>
@@ -1978,7 +2197,7 @@ function renderizarPedidos() {
             }
 
         ${pedido.estado === "ENTREGADO" && typeof pedido.importePagado !== "number"
-                ? `
+                ? html`
             <button class="btn btn-cobrado" onclick="cobrarPedido(${pedido.id})">
               Marcar cobrado
             </button>
@@ -1991,11 +2210,11 @@ function renderizarPedidos() {
             }
 
         <button class="btn btn-secondary" onclick="verDetallePedido(${pedido.id})">
-          Ver
+          ${enBandejaCatalogo ? "Ver pedido" : "Ver"}
         </button>
         ${pedido.estado === "CANCELADO"
-                ? `
-      <button class="btn btn-danger" onclick="eliminarPedido(${pedido.id})">
+                ? html`
+      <button class="btn btn-danger btn-eliminar" onclick="eliminarPedido(${pedido.id})">
         Eliminar
       </button>
     `
@@ -2185,6 +2404,7 @@ function duplicarPedidoGuardado(id) {
     mostrarPagina("ventas");
     dom.ventasPage.classList.add("hidden");
     dom.pedidoFormPanel.classList.remove("hidden");
+    mostrarPasoFormularioPedido("resumen");
 
     renderizarProductosHabitualesCliente();
     renderizarCatalogoProductosPedido();
@@ -2383,6 +2603,22 @@ async function atenderPedido(id) {
 
     }
 
+    // El descuento de stock lo hace Postgres con las filas de producto
+    // bloqueadas. Si dos personas atienden pedidos del mismo producto al mismo
+    // tiempo, se encolan en vez de pisarse, y el stock nunca queda negativo.
+    // El chequeo de arriba sigue existiendo para dar un mensaje claro antes de
+    // llegar al servidor, pero la garantia real esta aca.
+    const descuentoOnline =
+        await descontarStockPedidoEnServidor(pedido);
+
+    if (!descuentoOnline.ok) {
+        alert(descuentoOnline.mensaje);
+        await refrescarDatosOnlineAntesDeOperacionPedido(pedido.id);
+        renderizarPedidos();
+        renderizarProductos();
+        return;
+    }
+
     pedido.items.forEach(function (item) {
 
         const producto =
@@ -2392,10 +2628,18 @@ async function atenderPedido(id) {
 
             });
 
+        if (!producto) {
+            return;
+        }
+
         const stockAnterior =
             obtenerStockTotalProducto(producto);
+        // Cuando el servidor descuenta, el stock que vale es el que devolvio el
+        // servidor, no el que este navegador tenia en memoria.
         const stockFinal =
-            Math.max(0, stockAnterior - item.cantidad);
+            Object.prototype.hasOwnProperty.call(descuentoOnline.stockPorCodigo, producto.codigo)
+                ? descuentoOnline.stockPorCodigo[producto.codigo]
+                : Math.max(0, stockAnterior - item.cantidad);
 
         registrarMovimientoStockProducto(producto, {
             tipo: "Salida por pedido",
@@ -2417,16 +2661,20 @@ async function atenderPedido(id) {
 
     guardarPedidos();
     guardarProductos();
-    const productosGuardadosOnline =
-        await guardarProductosPedidoOperacionSupabase(pedido);
-    const pedidoGuardadoOnline =
-        await guardarPedidoOperacionSupabase(pedido);
 
-    if (
-        pedidoDebeConfirmarGuardadoOnline() &&
-        (!productosGuardadosOnline || !pedidoGuardadoOnline)
-    ) {
-        avisarPedidoSinConfirmacionOnline("El pedido atendido");
+    if (!descuentoOnline.enServidor) {
+        // Sin sesion online (o sin el SQL desplegado): se guarda como antes.
+        const productosGuardadosOnline =
+            await guardarProductosPedidoOperacionSupabase(pedido);
+        const pedidoGuardadoOnline =
+            await guardarPedidoOperacionSupabase(pedido);
+
+        if (
+            pedidoDebeConfirmarGuardadoOnline() &&
+            (!productosGuardadosOnline || !pedidoGuardadoOnline)
+        ) {
+            avisarPedidoSinConfirmacionOnline("El pedido atendido");
+        }
     }
 
     registrarAuditoria(
@@ -2566,11 +2814,11 @@ function entregarPedido(id) {
 
     dom.entregaPedidoResumen.innerHTML =
         "<strong>Pedido #" + (pedido.numero || pedido.id) + "</strong>" +
-        "<span>Cliente: " + pedido.cliente.nombre + "</span>" +
+        "<span>Cliente: " + escaparTextoPedido(pedido.cliente.nombre) + "</span>" +
         "<span>Total: " + formatearDinero(pedido.total) + "</span>";
 
     dom.entregaPagoInput.value =
-        Number(pedido.total) || 0;
+        typeof esPedidoCatalogo === "function" && esPedidoCatalogo(pedido) ? 0 : Number(pedido.total) || 0;
 
     actualizarVistaEntregaPedido();
 
@@ -2730,6 +2978,23 @@ async function confirmarEntregaPedido(event) {
             return;
         }
 
+        // Toda la entrega (cobro, saldo de cuenta corriente y estado del
+        // pedido) se resuelve en una sola transaccion de Postgres, con la fila
+        // del cliente bloqueada. Es lo que evita que dos vendedores entregando
+        // pedidos del mismo cliente al mismo tiempo se pisen el saldo.
+        const entregaOnline =
+            await entregarPedidoEnServidor(pedido, importePagado);
+
+        if (!entregaOnline.ok) {
+            alert(entregaOnline.mensaje);
+            await refrescarDatosOnlineAntesDeOperacionPedido(pedido.id);
+            cerrarEntregaPedidoModal();
+            renderizarPedidos();
+            renderizarClientes();
+            renderizarClientesConDeuda();
+            return;
+        }
+
         pedido.fechaEntrega =
             new Date().toLocaleDateString("es-AR");
         pedido.importePagado =
@@ -2749,10 +3014,10 @@ async function confirmarEntregaPedido(event) {
         }
 
         let movimientosCuentaGuardadosOnline = true;
+        const saldoAntesDeLaEntrega =
+            Number(cliente.saldo) || 0;
 
         if (importePagado > 0) {
-            const saldoAnteriorPagoEntrega =
-                Number(cliente.saldo) || 0;
             const movimientoPagoEntrega = crearMovimientoCuentaCliente({
                 fecha: pedido.fechaEntrega,
                 tipo: "Pago al entregar pedido #" + (pedido.numero || pedido.id),
@@ -2760,24 +3025,25 @@ async function confirmarEntregaPedido(event) {
                 referencia: "Pedido #" + (pedido.numero || pedido.id),
                 importe: -importePagado,
                 medioPago: "PAGO_ENTREGA",
-                saldoAnterior: saldoAnteriorPagoEntrega,
-                saldoPosterior: saldoAnteriorPagoEntrega
+                saldoAnterior: saldoAntesDeLaEntrega,
+                saldoPosterior: saldoAntesDeLaEntrega
             });
 
             cliente.historial.push(movimientoPagoEntrega);
-            const movimientoPagoGuardadoOnline =
-                await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoPagoEntrega);
 
-            if (pedidoDebeConfirmarGuardadoOnline() && !movimientoPagoGuardadoOnline) {
-                movimientosCuentaGuardadosOnline = false;
+            if (!entregaOnline.enServidor) {
+                const movimientoPagoGuardadoOnline =
+                    await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoPagoEntrega);
+
+                if (pedidoDebeConfirmarGuardadoOnline() && !movimientoPagoGuardadoOnline) {
+                    movimientosCuentaGuardadosOnline = false;
+                }
             }
         }
 
         if (saldoPendiente > 0) {
-            const saldoAnteriorCuentaPedido =
-                Number(cliente.saldo) || 0;
             const saldoPosteriorCuentaPedido =
-                saldoAnteriorCuentaPedido + saldoPendiente;
+                redondearDinero(saldoAntesDeLaEntrega + saldoPendiente);
             cliente.saldo =
                 saldoPosteriorCuentaPedido;
             const movimientoCuenta = crearMovimientoCuentaCliente({
@@ -2787,25 +3053,48 @@ async function confirmarEntregaPedido(event) {
                 referencia: "Pedido #" + (pedido.numero || pedido.id),
                 importe: saldoPendiente,
                 medioPago: "CUENTA_CORRIENTE",
-                saldoAnterior: saldoAnteriorCuentaPedido,
+                saldoAnterior: saldoAntesDeLaEntrega,
                 saldoPosterior: saldoPosteriorCuentaPedido
             });
 
             cliente.historial.push(movimientoCuenta);
-            const movimientoCuentaGuardadoOnline =
-                await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
 
-            if (pedidoDebeConfirmarGuardadoOnline() && !movimientoCuentaGuardadoOnline) {
-                movimientosCuentaGuardadosOnline = false;
+            if (!entregaOnline.enServidor) {
+                const movimientoCuentaGuardadoOnline =
+                    await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
+
+                if (pedidoDebeConfirmarGuardadoOnline() && !movimientoCuentaGuardadoOnline) {
+                    movimientosCuentaGuardadosOnline = false;
+                }
+            }
+        }
+
+        // El saldo que vale es el que devolvio el servidor, no el que este
+        // navegador venia arrastrando: entre medio pudo haber cobrado otro.
+        if (entregaOnline.enServidor && entregaOnline.resultado) {
+            cliente.saldo = entregaOnline.resultado.saldoCliente;
+            pedido.estadoCobro = entregaOnline.resultado.estadoCobro;
+            pedido.saldoPendiente = entregaOnline.resultado.saldoGenerado;
+
+            const movimientoFinal =
+                cliente.historial[cliente.historial.length - 1];
+
+            if (movimientoFinal) {
+                movimientoFinal.saldoPosterior = cliente.saldo;
             }
         }
 
         guardarClientes();
         guardarPedidos();
+
         const clienteGuardadoOnline =
-            await guardarClienteOperacionSupabase(cliente);
+            entregaOnline.enServidor
+                ? true
+                : await guardarClienteOperacionSupabase(cliente);
         const pedidoGuardadoOnline =
-            await guardarPedidoOperacionSupabase(pedido);
+            entregaOnline.enServidor
+                ? true
+                : await guardarPedidoOperacionSupabase(pedido);
 
         if (
             pedidoDebeConfirmarGuardadoOnline() &&
@@ -3032,7 +3321,7 @@ async function pasarACuentaCorriente(id) {
         const saldoAnteriorCuentaPedido =
             Number(cliente.saldo) || 0;
         const saldoPosteriorCuentaPedido =
-            saldoAnteriorCuentaPedido + importePendiente;
+            redondearDinero(saldoAnteriorCuentaPedido + importePendiente);
         cliente.saldo =
             saldoPosteriorCuentaPedido;
 
@@ -3168,12 +3457,12 @@ function verDetallePedido(id) {
                     ? item.descuentoPorcentaje + "%"
                     : "-";
 
-            return `
+            return html`
       <tr>
-        <td>${escaparTextoPedido(item.producto.codigo)}</td>
-        <td>${escaparTextoPedido(item.producto.nombre)}</td>
+        <td>${item.producto.codigo}</td>
+        <td>${item.producto.nombre}</td>
         <td>${formatearCantidadPedido(item.producto, item.cantidad)}</td>
-        <td>${escaparTextoPedido(descuentoTexto)}</td>
+        <td>${descuentoTexto}</td>
         <td>${formatearDinero(obtenerPrecioUnitarioItemPedido(item))}</td>
         <td>${formatearDinero(item.subtotal)}</td>
       </tr>
@@ -3192,12 +3481,12 @@ function verDetallePedido(id) {
                 const productoNotaTexto =
                     item.producto ? item.producto.codigo + " - " + item.producto.nombre : "Producto";
 
-                return `
+                return html`
                   <tr>
-                    <td>${escaparTextoPedido(nota.fecha || "-")}</td>
-                    <td>${escaparTextoPedido(nota.motivo || "Nota de credito")}</td>
-                    <td>${escaparTextoPedido(productoNotaTexto)}</td>
-                    <td>${escaparTextoPedido(item.cantidad)}</td>
+                    <td>${(nota.fecha || "-")}</td>
+                    <td>${nota.motivo || "Nota de credito"}</td>
+                    <td>${productoNotaTexto}</td>
+                    <td>${item.cantidad}</td>
                     <td>${formatearDinero(item.subtotal || 0)}</td>
                   </tr>
                 `;
@@ -3218,18 +3507,16 @@ function verDetallePedido(id) {
         obtenerHistorialAuditoriaPedido(pedido);
     const filasHistorialPedido =
         historialPedido.map(function (registroAuditoria) {
-            return `
+            return html`
               <tr>
-                <td>${escaparTextoPedido(registroAuditoria.fecha || "-")}</td>
-                <td>${escaparTextoPedido(registroAuditoria.hora || "-")}</td>
-                <td>${escaparTextoPedido(registroAuditoria.usuario || "Sistema")}</td>
-                <td>${escaparTextoPedido(registroAuditoria.accion || "-")}</td>
-                <td>${escaparTextoPedido(registroAuditoria.detalle || "-")}</td>
+                <td>${(registroAuditoria.fecha || "-")}</td>
+                <td>${registroAuditoria.hora || "-"}</td>
+                <td>${registroAuditoria.usuario || "Sistema"}</td>
+                <td>${registroAuditoria.accion || "-"}</td>
+                <td>${registroAuditoria.detalle || "-"}</td>
               </tr>
             `;
         }).join("");
-    const observacionesSeguras =
-        escaparTextoPedido(observaciones);
     const estadoPedidoDetalle =
         pedido.estado || "PENDIENTE";
     const estadoClasePedidoDetalle =
@@ -3238,12 +3525,12 @@ function verDetallePedido(id) {
     dom.detallePedidoTitulo.textContent =
         "Pedido #" + (pedido.numero || pedido.id);
 
-    dom.detallePedidoContenido.innerHTML = `
+    dom.detallePedidoContenido.innerHTML = html`
     <div class="pedido-detail-header">
       <div>
-        <span class="status ${estadoClasePedidoDetalle}">${escaparTextoPedido(estadoPedidoDetalle)}</span>
-        <h3>${escaparTextoPedido(clienteDetalle.codigo)} - ${escaparTextoPedido(clienteDetalle.nombre)}</h3>
-        <p>${escaparTextoPedido(clienteDetalle.direccion || "-")}</p>
+        <span class="status ${estadoClasePedidoDetalle}">${estadoPedidoDetalle}</span>
+        <h3>${clienteDetalle.codigo} - ${clienteDetalle.nombre}</h3>
+        <p>${clienteDetalle.direccion || "-"}</p>
       </div>
       <div class="pedido-detail-total">
         <span>Total</span>
@@ -3254,14 +3541,14 @@ function verDetallePedido(id) {
     <div class="pedido-detail-grid">
       <div>
         <span>Fecha</span>
-        <strong>${escaparTextoPedido(pedido.fecha)}</strong>
+        <strong>${pedido.fecha}</strong>
       </div>
       <div>
         <span>Forma de pago</span>
         <strong>${obtenerTextoFormaPago(pedido.formaPago || "CUENTA_CORRIENTE")}</strong>
       </div>
       ${typeof pedido.importePagado === "number"
-            ? `
+            ? html`
         <div>
           <span>Pago al entregar</span>
           <strong>${formatearDinero(pedido.importePagado)}</strong>
@@ -3296,18 +3583,18 @@ function verDetallePedido(id) {
           </tr>
         </thead>
         <tbody>
-          ${filasProductos || `<tr><td colspan="6" class="empty-table">Sin productos cargados</td></tr>`}
+          ${filasProductos ? crudo(filasProductos) : html`<tr><td colspan="6" class="empty-table">Sin productos cargados</td></tr>`}
         </tbody>
       </table>
     </div>
 
     <div class="pedido-detail-notes">
       <span>Observaciones</span>
-      <p>${observacionesSeguras}</p>
+      <p>${observaciones}</p>
     </div>
 
     ${notasCredito.length > 0
-            ? `
+            ? html`
       <div class="table-wrapper pedido-detail-table">
         <h4>Notas de credito aplicadas</h4>
         <table>
@@ -3321,7 +3608,7 @@ function verDetallePedido(id) {
             </tr>
           </thead>
           <tbody>
-            ${filasNotasCredito || `<tr><td colspan="5" class="empty-table">Sin productos acreditados</td></tr>`}
+            ${filasNotasCredito ? crudo(filasNotasCredito) : html`<tr><td colspan="5" class="empty-table">Sin productos acreditados</td></tr>`}
           </tbody>
         </table>
       </div>
@@ -3342,20 +3629,20 @@ function verDetallePedido(id) {
           </tr>
         </thead>
         <tbody>
-          ${filasHistorialPedido || `<tr><td colspan="5" class="empty-table">Sin movimientos registrados para este pedido.</td></tr>`}
+          ${filasHistorialPedido ? crudo(filasHistorialPedido) : html`<tr><td colspan="5" class="empty-table">Sin movimientos registrados para este pedido.</td></tr>`}
         </tbody>
       </table>
     </div>
 
     <div class="pedido-detail-actions">
       ${pedido.estado === "BORRADOR" || pedido.estado === "PENDIENTE"
-            ? `<button class="primary-button" type="button" onclick="editarPedidoDesdeDetalle(${pedido.id})">
+            ? html`<button class="primary-button" type="button" onclick="editarPedidoDesdeDetalle(${pedido.id})">
                 Editar pedido
               </button>`
             : ""
         }
       ${pedido.estado === "ATENDIDO"
-            ? `<button class="primary-button" type="button" onclick="reabrirPedidoAtendidoDesdeDetalle(${pedido.id})">
+            ? html`<button class="primary-button" type="button" onclick="reabrirPedidoAtendidoDesdeDetalle(${pedido.id})">
                 Reabrir para editar
               </button>`
             : ""
@@ -3521,6 +3808,7 @@ function editarPedido(id) {
     mostrarPagina("ventas");
     dom.ventasPage.classList.add("hidden");
     dom.pedidoFormPanel.classList.remove("hidden");
+    mostrarPasoFormularioPedido("resumen");
 
     renderizarPedidoActual();
 

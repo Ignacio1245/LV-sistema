@@ -32,8 +32,8 @@ function renderizarObservacionesPedidoActual() {
     pedidoActual.observaciones.forEach(function (observacion, indice) {
         const fila = document.createElement("div");
         fila.className = "observation-row";
-        fila.innerHTML = `
-      <span>${escaparTextoObservacionPedido(observacion)}</span>
+        fila.innerHTML = html`
+      <span>${observacion}</span>
       <button type="button" onclick="quitarObservacionPedidoActual(${indice})">x</button>
     `;
 

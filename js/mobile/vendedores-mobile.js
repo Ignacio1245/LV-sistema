@@ -19,6 +19,7 @@ let itemsPedidoVendedor = [];
 let usuarioSistemaVendedorActual = null;
 let moduloVendedorActual = "";
 let pasoPedidoVendedorActual = "cliente";
+let referenciaCatalogoVendedorActual = null;
 let vendedorMovilAutorizado = true;
 let motivoBloqueoVendedorMovil = "";
 let pedidoVendedorEnCurso = false;
@@ -34,6 +35,8 @@ let vendedorRecargandoPorCambioSupabase = false;
 let vendedorDatosPendientesDeActualizar = false;
 let ultimaTablaActualizacionVendedorSupabase = "";
 let temporizadorEstadoProductoVendedor = null;
+let resolverConfirmacionVendedor = null;
+let focoAnteriorConfirmacionVendedor = null;
 const INTERVALO_ACTUALIZACION_VENDEDOR_AL_VOLVER = 15000;
 const TABLAS_ACTUALIZACION_VENDEDOR_SUPABASE = [
   "clientes",
@@ -123,8 +126,59 @@ const vendedorDom = {
   cobranzaEstado: document.getElementById("vendedorCobranzaEstado"),
   botonEnviarCatalogoPanel: document.getElementById("vendedorBotonEnviarCatalogoPanel"),
   botonCopiarCatalogo: document.getElementById("vendedorBotonCopiarCatalogo"),
-  catalogoEstado: document.getElementById("vendedorCatalogoEstado")
+  catalogoEstado: document.getElementById("vendedorCatalogoEstado"),
+  confirmacion: document.getElementById("vendedorConfirmacion"),
+  confirmacionTitulo: document.getElementById("vendedorConfirmacionTitulo"),
+  confirmacionMensaje: document.getElementById("vendedorConfirmacionMensaje"),
+  confirmacionCancelar: document.getElementById("vendedorConfirmacionCancelar"),
+  confirmacionAceptar: document.getElementById("vendedorConfirmacionAceptar")
 };
+
+function cerrarConfirmacionVendedor(resultado) {
+  if (!vendedorDom.confirmacion || vendedorDom.confirmacion.classList.contains("vendedores-oculto")) {
+    return;
+  }
+
+  vendedorDom.confirmacion.classList.add("vendedores-oculto");
+  vendedorDom.confirmacion.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("vendedores-confirmacion-abierta");
+
+  const resolver = resolverConfirmacionVendedor;
+  resolverConfirmacionVendedor = null;
+  if (resolver) {
+    resolver(Boolean(resultado));
+  }
+
+  if (focoAnteriorConfirmacionVendedor && typeof focoAnteriorConfirmacionVendedor.focus === "function") {
+    focoAnteriorConfirmacionVendedor.focus();
+  }
+  focoAnteriorConfirmacionVendedor = null;
+}
+
+function solicitarConfirmacionVendedor(opciones) {
+  const configuracion = opciones || {};
+
+  if (!vendedorDom.confirmacion) {
+    return Promise.resolve(window.confirm(configuracion.mensaje || "¿Continuar?"));
+  }
+
+  vendedorDom.confirmacionTitulo.textContent = configuracion.titulo || "Confirmar accion";
+  vendedorDom.confirmacionMensaje.textContent = configuracion.mensaje || "Revisa la informacion antes de continuar.";
+  vendedorDom.confirmacionAceptar.textContent = configuracion.textoAceptar || "Continuar";
+  vendedorDom.confirmacionAceptar.classList.toggle("vendedores-confirmar-peligro", configuracion.peligro === true);
+  vendedorDom.confirmacion.classList.remove("vendedores-oculto");
+  vendedorDom.confirmacion.setAttribute("aria-hidden", "false");
+  document.body.classList.add("vendedores-confirmacion-abierta");
+  focoAnteriorConfirmacionVendedor = document.activeElement;
+
+  window.setTimeout(function () {
+    vendedorDom.confirmacionCancelar.focus();
+  }, 0);
+
+  return new Promise(function (resolver) {
+    resolverConfirmacionVendedor = resolver;
+  });
+}
 
 function vendedorUsaSupabaseConAuth() {
   return typeof supabaseAuthDisponible === "function" && supabaseAuthDisponible();
@@ -1012,12 +1066,16 @@ function clienteAsignadoAlVendedorActual(cliente) {
   const vendedorAsignado =
     normalizarTextoVendedor(cliente.vendedorAsignado || "");
 
-  return vendedorAsignado !== "" &&
-    obtenerAliasAsignacionVendedorActual().includes(vendedorAsignado);
+  if (vendedorAsignado === "") {
+    return true;
+  }
+
+  return obtenerAliasAsignacionVendedorActual().includes(vendedorAsignado);
 }
 
 async function cargarUsuarioSistemaVendedorActual() {
   usuarioSistemaVendedorActual = null;
+  referenciaCatalogoVendedorActual = null;
   vendedorMovilAutorizado = true;
   motivoBloqueoVendedorMovil = "";
 
@@ -1255,7 +1313,7 @@ function renderizarClientesRecientesVendedor() {
     botonCliente.textContent =
       cliente.codigo + " - " + cliente.nombre;
     botonCliente.addEventListener("click", function () {
-      seleccionarClienteVendedor(cliente);
+      intentarSeleccionarClienteVendedor(cliente);
     });
     vendedorDom.clientesRecientes.appendChild(botonCliente);
   });
@@ -2082,7 +2140,7 @@ function renderizarResultadosClientesVendedor() {
       "<span>" + escaparTextoVendedor(cliente.direccion || "Sin direccion") + "</span>" +
       "<small>" + escaparTextoVendedor(cliente.zona || "Sin zona") + " | " + escaparTextoVendedor(cliente.listaPrecios || "Lista 1") + "</small>";
     botonCliente.addEventListener("click", function () {
-      seleccionarClienteVendedor(cliente);
+      intentarSeleccionarClienteVendedor(cliente);
     });
     vendedorDom.resultadosClientes.appendChild(botonCliente);
   });
@@ -2103,10 +2161,27 @@ function seleccionarClienteVendedor(cliente) {
   vendedorDom.resultadosClientes.innerHTML = "";
   renderizarClientesRecientesVendedor();
   vendedorDom.clienteSeleccionado.classList.add("vendedores-seleccion-activa");
-  vendedorDom.clienteSeleccionado.innerHTML =
-    "<strong>" + escaparTextoVendedor(cliente.codigo) + " - " + escaparTextoVendedor(cliente.nombre) + "</strong>" +
-    "<span>" + escaparTextoVendedor(cliente.direccion || "Sin direccion") + "</span>" +
-      "<small>" + escaparTextoVendedor(cliente.zona || "Sin zona") + " | " + escaparTextoVendedor(cliente.listaPrecios || "Lista 1") + "</small>";
+  // El vendedor esta parado frente al cliente por tomarle un pedido a cuenta
+  // corriente: el saldo es lo primero que tiene que ver, y hasta ahora no
+  // aparecia en ningun lado de la pantalla del celular.
+  const saldoDelCliente =
+    Number(cliente.saldo) || 0;
+  const claseSaldo =
+    saldoDelCliente > 0
+      ? "vendedores-saldo-debe"
+      : saldoDelCliente < 0 ? "vendedores-saldo-favor" : "vendedores-saldo-cero";
+  const textoSaldo =
+    saldoDelCliente === 0
+      ? "Al dia"
+      : saldoDelCliente > 0
+        ? "Debe " + formatearDineroVendedor(saldoDelCliente)
+        : "A favor " + formatearDineroVendedor(Math.abs(saldoDelCliente));
+
+  vendedorDom.clienteSeleccionado.innerHTML = html`
+    <strong>${cliente.codigo} - ${cliente.nombre}</strong>
+    <span class="vendedores-saldo ${claseSaldo}">${textoSaldo}</span>
+    <span>${cliente.direccion || "Sin direccion"}</span>
+    <small>${cliente.zona || "Sin zona"} | ${cliente.listaPrecios || "Lista 1"}</small>`;
   actualizarFlujoVendedor();
   renderizarResultadosProductosVendedor();
   actualizarVistaCobranzaVendedor();
@@ -2125,6 +2200,35 @@ function seleccionarClienteVendedor(cliente) {
   }
 }
 
+async function intentarSeleccionarClienteVendedor(cliente) {
+  const cambiaCliente =
+    moduloVendedorActual === "venta" &&
+    clienteSeleccionadoVendedor &&
+    Number(clienteSeleccionadoVendedor.codigo) !== Number(cliente.codigo) &&
+    itemsPedidoVendedor.length > 0;
+
+  if (cambiaCliente) {
+    const continuar = await solicitarConfirmacionVendedor({
+      titulo: "Cambiar de cliente",
+      mensaje: "El pedido tiene " + obtenerTextoProductosVendedor(itemsPedidoVendedor.length) + ". Para evitar mezclar pedidos, se vaciaran esos productos.",
+      textoAceptar: "Cambiar y vaciar",
+      peligro: true
+    });
+
+    if (!continuar) {
+      return;
+    }
+
+    itemsPedidoVendedor = [];
+    firmaUltimoPedidoMovilGuardado = "";
+    vendedorDom.observacion.value = "";
+    limpiarBorradorPedidoVendedor();
+    renderizarItemsPedidoVendedor();
+  }
+
+  seleccionarClienteVendedor(cliente);
+}
+
 function seleccionarPrimerClienteVendedor(evento) {
   if (evento.key !== "Enter") {
     return;
@@ -2135,7 +2239,7 @@ function seleccionarPrimerClienteVendedor(evento) {
   }
 
   evento.preventDefault();
-  seleccionarClienteVendedor(ultimosResultadosClientesVendedor[0]);
+  intentarSeleccionarClienteVendedor(ultimosResultadosClientesVendedor[0]);
 }
 
 function agregarPrimerProductoVendedor(evento) {
@@ -2483,13 +2587,13 @@ function calcularSubtotalItemVendedor(itemPedido) {
   const descuento =
     normalizarDescuentoVendedor(itemPedido.descuentoPorcentaje || 0);
 
-  return subtotalSinDescuento - (subtotalSinDescuento * descuento / 100);
+  return redondearDinero(subtotalSinDescuento - (subtotalSinDescuento * descuento / 100));
 }
 
 function calcularTotalPedidoVendedor() {
-  return itemsPedidoVendedor.reduce(function (total, itemPedido) {
+  return redondearDinero(itemsPedidoVendedor.reduce(function (total, itemPedido) {
     return total + calcularSubtotalItemVendedor(itemPedido);
-  }, 0);
+  }, 0));
 }
 
 function calcularCantidadTotalPedidoVendedor() {
@@ -2927,12 +3031,11 @@ async function guardarCobranzaVendedor() {
   cobranzaVendedorEnCurso = true;
 
   try {
-    const confirmar =
-      confirm(
-        "Enviar cobranza de " + formatearDineroVendedor(importe) +
-        " para " + cliente.nombre + "?\n" +
-        "Quedara pendiente de aprobacion en admin."
-      );
+    const confirmar = await solicitarConfirmacionVendedor({
+      titulo: "Confirmar cobranza",
+      mensaje: "Enviar " + formatearDineroVendedor(importe) + " de " + cliente.nombre + ". Quedara pendiente de aprobacion en Administracion.",
+      textoAceptar: "Enviar cobranza"
+    });
 
     if (!confirmar) {
       return;
@@ -2940,6 +3043,8 @@ async function guardarCobranzaVendedor() {
 
     vendedorDom.botonGuardarCobranza.disabled =
       true;
+    vendedorDom.botonGuardarCobranza.textContent = "Enviando...";
+    vendedorDom.botonGuardarCobranza.setAttribute("aria-busy", "true");
     vendedorDom.cobranzaEstado.textContent =
       "Enviando cobranza a admin...";
 
@@ -2969,6 +3074,8 @@ async function guardarCobranzaVendedor() {
     cobranzaVendedorEnCurso = false;
     vendedorDom.botonGuardarCobranza.disabled =
       false;
+    vendedorDom.botonGuardarCobranza.textContent = "Guardar cobranza";
+    vendedorDom.botonGuardarCobranza.removeAttribute("aria-busy");
   }
 }
 
@@ -3025,7 +3132,7 @@ function obtenerTelefonoWhatsappClienteVendedor(cliente) {
   return "";
 }
 
-function obtenerUrlCatalogoVendedor() {
+function construirUrlCatalogoVendedor(tokenVendedor) {
   const esServidorLocal =
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "localhost";
@@ -3037,17 +3144,31 @@ function obtenerUrlCatalogoVendedor() {
       : "/catalogo";
   const urlCatalogo =
     new URL(rutaCatalogo, window.location.href);
-  const telefonoDistribuidora =
-    limpiarTelefonoVendedor(vendedorDom.telefonoDestino.value);
-
-  if (telefonoDistribuidora) {
-    urlCatalogo.searchParams.set("wsp", telefonoDistribuidora);
-  }
+  urlCatalogo.searchParams.set("ref", tokenVendedor);
 
   return urlCatalogo.toString();
 }
 
-function construirMensajeCatalogoVendedor() {
+async function obtenerUrlCatalogoVendedor() {
+  const vendedorComercial = usuarioSistemaVendedorActual &&
+    usuarioSistemaVendedorActual.vendedorComercial;
+  if (!vendedorComercial || !Number(vendedorComercial.codigo)) {
+    throw new Error("Tu usuario no esta vinculado a una ficha de vendedor activa.");
+  }
+  if (typeof crearEnlaceCatalogoVendedorSupabase !== "function") {
+    throw new Error("No se pudo preparar el enlace del catalogo.");
+  }
+  if (!referenciaCatalogoVendedorActual) {
+    referenciaCatalogoVendedorActual =
+      await crearEnlaceCatalogoVendedorSupabase(vendedorComercial.codigo);
+  }
+  if (!referenciaCatalogoVendedorActual || !referenciaCatalogoVendedorActual.token) {
+    throw new Error("No se pudo generar el enlace del vendedor.");
+  }
+  return construirUrlCatalogoVendedor(referenciaCatalogoVendedorActual.token);
+}
+
+function construirMensajeCatalogoVendedor(urlCatalogo) {
   const cliente =
     clienteSeleccionadoVendedor;
   const nombreCliente =
@@ -3058,7 +3179,7 @@ function construirMensajeCatalogoVendedor() {
   return [
     saludo,
     "te paso el catalogo para hacer pedidos:",
-    obtenerUrlCatalogoVendedor()
+    urlCatalogo
   ].join("\n");
 }
 
@@ -3078,10 +3199,15 @@ async function copiarCatalogoVendedor(mensajeCatalogo) {
 }
 
 async function copiarLinkCatalogoVendedor() {
-  const linkCatalogo =
-    obtenerUrlCatalogoVendedor();
-
-  guardarTelefonoDestinoVendedor();
+  let linkCatalogo;
+  try {
+    linkCatalogo = await obtenerUrlCatalogoVendedor();
+  } catch (error) {
+    const mensaje = error && error.message ? error.message : "No se pudo generar el enlace.";
+    if (vendedorDom.catalogoEstado) vendedorDom.catalogoEstado.textContent = mensaje;
+    vendedorDom.estadoEnvio.textContent = mensaje;
+    return;
+  }
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     await navigator.clipboard.writeText(linkCatalogo);
@@ -3104,12 +3230,18 @@ async function enviarCatalogoVendedor() {
     return;
   }
 
-  const mensajeCatalogo =
-    construirMensajeCatalogoVendedor();
+  let mensajeCatalogo;
+  try {
+    const linkCatalogo = await obtenerUrlCatalogoVendedor();
+    mensajeCatalogo = construirMensajeCatalogoVendedor(linkCatalogo);
+  } catch (error) {
+    const mensaje = error && error.message ? error.message : "No se pudo generar el enlace.";
+    if (vendedorDom.catalogoEstado) vendedorDom.catalogoEstado.textContent = mensaje;
+    vendedorDom.estadoEnvio.textContent = mensaje;
+    return;
+  }
   const telefonoCliente =
     obtenerTelefonoWhatsappClienteVendedor(clienteSeleccionadoVendedor);
-
-  guardarTelefonoDestinoVendedor();
 
   if (telefonoCliente) {
     const enlaceWhatsapp =
@@ -3460,6 +3592,10 @@ async function enviarPedidoWhatsappVendedor() {
     true;
   vendedorDom.botonBarraWhatsapp.disabled =
     true;
+  vendedorDom.botonWhatsapp.textContent = "Guardando...";
+  vendedorDom.botonWhatsapp.setAttribute("aria-busy", "true");
+  vendedorDom.botonBarraWhatsapp.textContent = "Guardando...";
+  vendedorDom.botonBarraWhatsapp.setAttribute("aria-busy", "true");
 
   try {
     const datosVerificados =
@@ -3534,7 +3670,33 @@ async function enviarPedidoWhatsappVendedor() {
     }
   } finally {
     pedidoVendedorEnCurso = false;
+    vendedorDom.botonWhatsapp.textContent = "Guardar y enviar";
+    vendedorDom.botonWhatsapp.removeAttribute("aria-busy");
+    vendedorDom.botonBarraWhatsapp.removeAttribute("aria-busy");
     actualizarResumenVisualPedidoVendedor();
+  }
+}
+
+async function solicitarVaciarPedidoVendedor() {
+  const hayContenido =
+    itemsPedidoVendedor.length > 0 ||
+    Boolean(clienteSeleccionadoVendedor) ||
+    vendedorDom.observacion.value.trim() !== "";
+
+  if (!hayContenido) {
+    limpiarPedidoVendedor();
+    return;
+  }
+
+  const confirmar = await solicitarConfirmacionVendedor({
+    titulo: "Vaciar pedido",
+    mensaje: "Se borraran el cliente, los productos y la observacion de este pedido.",
+    textoAceptar: "Si, vaciar pedido",
+    peligro: true
+  });
+
+  if (confirmar) {
+    limpiarPedidoVendedor();
   }
 }
 
@@ -3636,7 +3798,7 @@ vendedorDom.busquedaProducto.addEventListener("keydown", agregarPrimerProductoVe
 vendedorDom.formaPago.addEventListener("change", guardarBorradorPedidoVendedor);
 vendedorDom.observacion.addEventListener("input", guardarBorradorPedidoVendedor);
 vendedorDom.telefonoDestino.addEventListener("input", guardarTelefonoDestinoVendedor);
-vendedorDom.botonLimpiar.addEventListener("click", limpiarPedidoVendedor);
+vendedorDom.botonLimpiar.addEventListener("click", solicitarVaciarPedidoVendedor);
 vendedorDom.botonCopiar.addEventListener("click", copiarPedidoVendedor);
 vendedorDom.botonWhatsapp.addEventListener("click", enviarPedidoWhatsappVendedor);
 vendedorDom.botonBarraWhatsapp.addEventListener("click", function () {
@@ -3647,6 +3809,28 @@ vendedorDom.botonEnviarCatalogoPanel.addEventListener("click", enviarCatalogoVen
 vendedorDom.botonCopiarCatalogo.addEventListener("click", copiarLinkCatalogoVendedor);
 vendedorDom.botonCobrarSaldo.addEventListener("click", completarCobranzaConSaldoVendedor);
 vendedorDom.botonGuardarCobranza.addEventListener("click", guardarCobranzaVendedor);
+if (vendedorDom.confirmacionCancelar) {
+  vendedorDom.confirmacionCancelar.addEventListener("click", function () {
+    cerrarConfirmacionVendedor(false);
+  });
+}
+if (vendedorDom.confirmacionAceptar) {
+  vendedorDom.confirmacionAceptar.addEventListener("click", function () {
+    cerrarConfirmacionVendedor(true);
+  });
+}
+if (vendedorDom.confirmacion) {
+  vendedorDom.confirmacion.addEventListener("click", function (evento) {
+    if (evento.target === vendedorDom.confirmacion) {
+      cerrarConfirmacionVendedor(false);
+    }
+  });
+}
+document.addEventListener("keydown", function (evento) {
+  if (evento.key === "Escape" && vendedorDom.confirmacion && !vendedorDom.confirmacion.classList.contains("vendedores-oculto")) {
+    cerrarConfirmacionVendedor(false);
+  }
+});
 window.addEventListener("beforeunload", advertirSalidaVendedorConTrabajo);
 document.addEventListener("visibilitychange", actualizarDatosVendedorAlVolver);
 window.addEventListener("focus", actualizarDatosVendedorAlVolver);

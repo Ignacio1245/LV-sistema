@@ -165,7 +165,7 @@ create table if not exists productos (
   movimientos_stock jsonb not null default '[]'::jsonb,
   activo boolean not null default true,
   baja_automatica_stock boolean not null default false,
-  mostrar_catalogo boolean not null default false,
+  mostrar_catalogo boolean not null default true,
   imagen_url text not null default '',
   creado_en timestamptz not null default now()
 );
@@ -180,6 +180,7 @@ create table if not exists producto_precios (
 );
 
 create table if not exists pedidos (
+  origen text not null default 'administracion',
   id uuid primary key default gen_random_uuid(),
   numero integer not null unique,
   cliente_id uuid references clientes(id),

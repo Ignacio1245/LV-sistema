@@ -125,7 +125,7 @@ function obtenerSubtotalItemInforme(item) {
   const cantidad =
     Number(item.cantidad) || 0;
 
-  return precio * cantidad;
+  return redondearDinero(precio * cantidad);
 }
 
 function calcularMargenPedidosInforme(pedidosFacturables) {
@@ -295,9 +295,9 @@ function renderizarEncabezadoEjecutivoInforme(mesFiltro, pedidosDelMes) {
 
   dom.informeFiltrosAplicados.innerHTML =
     filtrosAplicados.length === 0
-      ? `<span>Sin filtros especiales</span>`
+      ? html`<span>Sin filtros especiales</span>`
       : filtrosAplicados.map(function (filtro) {
-        return `<span>${filtro}</span>`;
+        return html`<span>${filtro}</span>`;
       }).join("");
 
   dom.informeClientesVendidos.textContent =
@@ -547,7 +547,7 @@ function obtenerProductosStockCritico() {
 function renderizarListaInforme(contenedor, items, renderItem, mensajeVacio) {
   if (items.length === 0) {
     contenedor.innerHTML =
-      `<div class="report-empty">${mensajeVacio}</div>`;
+      html`<div class="report-empty">${mensajeVacio}</div>`;
     return;
   }
 
@@ -620,7 +620,7 @@ function renderizarInformePorDias(pedidosFiltrados) {
   }
 
   if (dias.length === 0) {
-    dom.informeVentasPorDiaTable.innerHTML = `
+    dom.informeVentasPorDiaTable.innerHTML = html`
       <tr>
         <td colspan="3" class="empty-table">Sin ventas por dia para el filtro seleccionado.</td>
       </tr>
@@ -628,7 +628,7 @@ function renderizarInformePorDias(pedidosFiltrados) {
   } else {
     dom.informeVentasPorDiaTable.innerHTML =
       dias.map(function (dia) {
-        return `
+        return html`
           <tr>
             <td>${formatearDiaInforme(dia.dia)}</td>
             <td>${dia.cantidad}</td>
@@ -645,7 +645,7 @@ function renderizarInformePorDias(pedidosFiltrados) {
     });
 
   if (pedidosOrdenados.length === 0) {
-    dom.informeDetallePedidosDiaTable.innerHTML = `
+    dom.informeDetallePedidosDiaTable.innerHTML = html`
       <tr>
         <td colspan="6" class="empty-table">Sin pedidos para el filtro seleccionado.</td>
       </tr>
@@ -655,7 +655,7 @@ function renderizarInformePorDias(pedidosFiltrados) {
 
   dom.informeDetallePedidosDiaTable.innerHTML =
     pedidosOrdenados.map(function (pedido) {
-      return `
+      return html`
         <tr>
           <td>#${pedido.numero || pedido.id || "-"}</td>
           <td>${pedido.fecha || "-"}</td>
@@ -718,7 +718,7 @@ function renderizarInformesMensualesGuardados() {
   }
 
   if (informesMensuales.length === 0) {
-    dom.informesMensualesTable.innerHTML = `
+    dom.informesMensualesTable.innerHTML = html`
       <tr>
         <td colspan="6" class="empty-table">
           Todavia no hay informes mensuales guardados.
@@ -730,7 +730,7 @@ function renderizarInformesMensualesGuardados() {
 
   dom.informesMensualesTable.innerHTML =
     informesMensuales.map(function (informe) {
-      return `
+      return html`
         <tr>
           <td>${obtenerTextoMesInforme(informe.mes)}</td>
           <td>${informe.pedidos}</td>
@@ -823,7 +823,7 @@ function renderizarComparativoAnualInforme(mesFiltro) {
       totalImporteActual += actual.total;
       totalImporteAnterior += anterior.total;
 
-      return `
+      return html`
         <tr>
           <td>${nombreMes}</td>
           <td>${actual.cantidad}</td>
@@ -842,7 +842,7 @@ function renderizarComparativoAnualInforme(mesFiltro) {
         ? 100
         : 0;
 
-  filas.push(`
+  filas.push(html`
     <tr>
       <td><strong>Total</strong></td>
       <td><strong>${totalCantidadActual}</strong></td>
@@ -887,27 +887,27 @@ function renderizarOpcionesInformes() {
     }).sort();
 
   dom.informesVendedorFiltro.innerHTML =
-    `<option value="TODOS">Todos los vendedores</option>` +
+    html`<option value="TODOS">Todos los vendedores</option>` +
     vendedores.map(function (vendedor) {
-      return `<option value="${vendedor}">${vendedor}</option>`;
+      return html`<option value="${vendedor}">${vendedor}</option>`;
     }).join("");
 
   dom.informesZonaFiltro.innerHTML =
-    `<option value="TODAS">Todas las zonas</option>` +
+    html`<option value="TODAS">Todas las zonas</option>` +
     zonasDisponibles.map(function (zona) {
-      return `<option value="${zona}">${zona}</option>`;
+      return html`<option value="${zona}">${zona}</option>`;
     }).join("");
 
   dom.informesClienteFiltro.innerHTML =
-    `<option value="TODOS">Todos los clientes</option>` +
+    html`<option value="TODOS">Todos los clientes</option>` +
     clientesDisponibles.map(function (cliente) {
-      return `<option value="${cliente}">${cliente}</option>`;
+      return html`<option value="${cliente}">${cliente}</option>`;
     }).join("");
 
   dom.informesRubroFiltro.innerHTML =
-    `<option value="TODOS">Todos los rubros</option>` +
+    html`<option value="TODOS">Todos los rubros</option>` +
     rubrosDisponibles.map(function (rubro) {
-      return `<option value="${rubro}">${rubro}</option>`;
+      return html`<option value="${rubro}">${rubro}</option>`;
     }).join("");
 
   dom.informesVendedorFiltro.value = vendedores.includes(vendedorActual) ? vendedorActual : "TODOS";
@@ -1050,7 +1050,7 @@ function renderizarInformes() {
     dom.informeVentasEstado,
     agruparPedidosPorEstado(pedidosDelMes),
     function (estado) {
-      return `
+      return html`
         <div class="report-row">
           <span>${estado.nombre}</span>
           <strong>${estado.cantidad} pedidos | ${formatearDinero(estado.total)}</strong>
@@ -1064,7 +1064,7 @@ function renderizarInformes() {
     dom.informeProductosVendidos,
     obtenerProductosMasVendidos(pedidosDelMes),
     function (producto) {
-      return `
+      return html`
         <div class="report-row">
           <span>${producto.codigo} - ${producto.nombre}</span>
           <strong>${producto.unidades} unidades | ${formatearDinero(producto.total)}</strong>
@@ -1078,7 +1078,7 @@ function renderizarInformes() {
     dom.informeVentasVendedor,
     agruparVentasPorValor(pedidosDelMes, obtenerVendedorPedido),
     function (vendedor) {
-      return `
+      return html`
         <div class="report-row">
           <span>${vendedor.nombre}</span>
           <strong>${vendedor.pedidos} pedidos | ${vendedor.unidades} un. | ${formatearDinero(vendedor.total)}</strong>
@@ -1092,7 +1092,7 @@ function renderizarInformes() {
     dom.informeVentasZona,
     agruparVentasPorValor(pedidosDelMes, obtenerZonaPedido),
     function (zona) {
-      return `
+      return html`
         <div class="report-row">
           <span>${zona.nombre}</span>
           <strong>${zona.pedidos} pedidos | ${zona.unidades} un. | ${formatearDinero(zona.total)}</strong>
@@ -1106,7 +1106,7 @@ function renderizarInformes() {
     dom.informeVentasProveedor,
     obtenerVentasPorProveedor(pedidosDelMes),
     function (proveedor) {
-      return `
+      return html`
         <div class="report-row">
           <span>${proveedor.nombre} <small>${proveedor.productos} productos</small></span>
           <strong>${proveedor.unidades} un. | ${formatearDinero(proveedor.total)}</strong>
@@ -1120,7 +1120,7 @@ function renderizarInformes() {
     dom.informeVentasCliente,
     agruparVentasPorValor(pedidosDelMes, obtenerClienteTextoPedido),
     function (cliente) {
-      return `
+      return html`
         <div class="report-row">
           <span>${cliente.nombre}</span>
           <strong>${cliente.pedidos} pedidos | ${cliente.unidades} un. | ${formatearDinero(cliente.total)}</strong>
@@ -1134,7 +1134,7 @@ function renderizarInformes() {
     dom.informeClientesDeuda,
     obtenerClientesConMasDeuda(),
     function (cliente) {
-      return `
+      return html`
         <div class="report-row">
           <span>${cliente.codigo} - ${cliente.nombre}</span>
           <strong>${formatearDinero(cliente.saldo)}</strong>
@@ -1148,7 +1148,7 @@ function renderizarInformes() {
     dom.informeStockCritico,
     obtenerProductosStockCritico(),
     function (producto) {
-      return `
+      return html`
         <div class="report-row">
           <span>${producto.codigo} - ${producto.nombre}</span>
           <strong>Stock ${formatearStockProducto(producto)}</strong>
@@ -1162,7 +1162,7 @@ function renderizarInformes() {
     obtenerDetalleVendedorZonaCliente(pedidosDelMes);
 
   if (detalleVendedorZonaCliente.length === 0) {
-    dom.informeDetalleVendedorZonaCliente.innerHTML = `
+    dom.informeDetalleVendedorZonaCliente.innerHTML = html`
       <tr>
         <td colspan="9" class="empty-table">
           Sin ventas detalladas en este mes.
@@ -1174,7 +1174,7 @@ function renderizarInformes() {
 
   dom.informeDetalleVendedorZonaCliente.innerHTML =
     detalleVendedorZonaCliente.map(function (detalle) {
-      return `
+      return html`
         <tr>
           <td>${detalle.vendedor}</td>
           <td>${detalle.zona}</td>

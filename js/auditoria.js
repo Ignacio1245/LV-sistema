@@ -108,19 +108,19 @@ function renderizarOpcionesAuditoria() {
     }))].sort();
 
   dom.auditoriaUsuarioFiltro.innerHTML =
-    `<option value="TODOS">Todos los usuarios</option>` +
+    html`<option value="TODOS">Todos los usuarios</option>` +
     usuarios.map(function (usuario) {
       return `<option value="${escaparTextoAuditoria(usuario)}">${escaparTextoAuditoria(usuario)}</option>`;
     }).join("");
 
   dom.auditoriaModuloFiltro.innerHTML =
-    `<option value="TODOS">Todos los modulos</option>` +
+    html`<option value="TODOS">Todos los modulos</option>` +
     modulos.map(function (modulo) {
       return `<option value="${escaparTextoAuditoria(modulo)}">${escaparTextoAuditoria(modulo)}</option>`;
     }).join("");
 
   dom.auditoriaAccionFiltro.innerHTML =
-    `<option value="TODAS">Todas las acciones</option>` +
+    html`<option value="TODAS">Todas las acciones</option>` +
     acciones.map(function (accion) {
       return `<option value="${escaparTextoAuditoria(accion)}">${escaparTextoAuditoria(accion)}</option>`;
     }).join("");
@@ -208,7 +208,7 @@ function renderizarAuditoria() {
     usuarioActual ? usuarioActual.nombre : "-";
 
   if (registrosFiltrados.length === 0) {
-    dom.auditoriaTable.innerHTML = `
+    dom.auditoriaTable.innerHTML = html`
       <tr>
         <td colspan="6" class="empty-table">
           No hay acciones para mostrar.
@@ -220,14 +220,14 @@ function renderizarAuditoria() {
 
   dom.auditoriaTable.innerHTML =
     registrosFiltrados.map(function (registro) {
-      return `
+      return html`
       <tr>
-        <td>${escaparTextoAuditoria(registro.fecha)}</td>
-        <td>${escaparTextoAuditoria(registro.hora)}</td>
-        <td>${escaparTextoAuditoria(registro.usuario)}</td>
-        <td>${escaparTextoAuditoria(registro.modulo)}</td>
-        <td>${escaparTextoAuditoria(registro.accion)}</td>
-        <td>${escaparTextoAuditoria(registro.detalle)}</td>
+        <td>${registro.fecha}</td>
+        <td>${registro.hora}</td>
+        <td>${registro.usuario}</td>
+        <td>${registro.modulo}</td>
+        <td>${registro.accion}</td>
+        <td>${registro.detalle}</td>
       </tr>
     `;
     }).join("");

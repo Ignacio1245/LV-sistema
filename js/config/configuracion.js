@@ -52,9 +52,16 @@ function renderizarConfiguracion() {
 function guardarFormularioConfiguracion(event) {
   event.preventDefault();
 
+  const whatsappComercial = dom.whatsappInput.value.replace(/[^\d]/g, "");
+  if (whatsappComercial && !/^[1-9][0-9]{7,14}$/.test(whatsappComercial)) {
+    alert("Revisa el WhatsApp comercial. Usa codigo de pais y area, solo numeros.");
+    dom.whatsappInput.focus();
+    return;
+  }
+
   CONFIG.empresa = dom.empresaInput.value.trim();
   CONFIG.cuit = dom.cuitInput.value.trim();
-  CONFIG.whatsapp = dom.whatsappInput.value.trim();
+  CONFIG.whatsapp = whatsappComercial;
   CONFIG.alias = dom.aliasInput.value.trim();
   CONFIG.stockMinimo = Number(dom.stockMinimoInput.value);
 

@@ -7,6 +7,332 @@
   --line-soft: #d6deea;
 }
 
+/* Interfaz practica: editores compactos y acciones guiadas */
+body.editor-compacto-abierto {
+  overflow: hidden;
+}
+
+.editor-compacto-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 94;
+  display: block;
+  background: rgba(9, 19, 31, 0.62);
+  backdrop-filter: blur(2px);
+}
+
+.editor-compacto-activo {
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  z-index: 95 !important;
+  display: grid !important;
+  width: min(920px, calc(100vw - 40px)) !important;
+  max-height: min(88vh, 900px);
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: auto;
+  border: 1px solid #b8c9d8 !important;
+  border-radius: 14px !important;
+  background: #f7fafc !important;
+  box-shadow: 0 28px 80px rgba(7, 18, 30, 0.38) !important;
+  transform: translate(-50%, -50%);
+  animation: editor-practico-entrada 150ms ease-out;
+  overscroll-behavior: contain;
+}
+
+#clientForm.editor-compacto-activo {
+  width: min(860px, calc(100vw - 40px)) !important;
+}
+
+#productForm.editor-compacto-activo {
+  width: min(980px, calc(100vw - 40px)) !important;
+}
+
+#usuarioForm.editor-compacto-activo {
+  width: min(650px, calc(100vw - 40px)) !important;
+}
+
+#rolForm.editor-compacto-activo {
+  width: min(760px, calc(100vw - 40px)) !important;
+}
+
+#vendedorForm.editor-compacto-activo,
+#proveedorForm.editor-compacto-activo {
+  width: min(720px, calc(100vw - 40px)) !important;
+}
+
+#rubroForm.editor-compacto-activo,
+#zonaForm.editor-compacto-activo {
+  width: min(600px, calc(100vw - 40px)) !important;
+}
+
+@keyframes editor-practico-entrada {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 12px)) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.editor-compacto-cabecera {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  color: #ffffff;
+  background: #102033;
+  border-bottom: 1px solid #29445e;
+}
+
+.editor-compacto-cabecera > div {
+  display: grid;
+  gap: 2px;
+}
+
+.editor-compacto-cabecera .eyebrow,
+.editor-compacto-cabecera h3,
+.editor-compacto-cabecera span {
+  margin: 0;
+  color: #ffffff;
+}
+
+.editor-compacto-cabecera .eyebrow {
+  color: #7dd3fc;
+}
+
+.editor-compacto-cabecera h3 {
+  font-size: 21px;
+}
+
+.editor-compacto-cabecera span {
+  color: #c4d2df;
+  font-size: 13px;
+}
+
+.editor-compacto-cabecera button {
+  flex: 0 0 auto;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid #4b6580;
+  border-radius: 9px;
+  color: #ffffff;
+  background: #21364b;
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.editor-compacto-activo > .product-form-sections,
+.editor-compacto-activo > .form-grid,
+.editor-compacto-activo > .settings-section-header,
+.editor-compacto-activo > .permission-grid,
+.editor-compacto-activo > .rol-acciones-rapidas {
+  margin-right: 18px;
+  margin-left: 18px;
+}
+
+.editor-compacto-activo > .product-form-sections,
+.editor-compacto-activo > .settings-section-header {
+  margin-top: 16px;
+}
+
+.editor-compacto-activo > .sale-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  margin-top: 12px;
+  padding: 13px 18px;
+  border-top: 1px solid #c9d5df;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 -8px 20px rgba(15, 31, 48, 0.08);
+}
+
+.editor-compacto-activo > .sale-footer .primary-button {
+  min-width: 180px;
+}
+
+.usuario-rol-campo small,
+#usuarioPasswordLabel small {
+  color: #60758a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rol-acciones-rapidas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid #d4dee7;
+  border-radius: 9px;
+  background: #f7fafc;
+}
+
+.rol-acciones-rapidas span {
+  margin-right: auto;
+  color: #40576e;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+#rolForm .permission-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+#rolForm .permission-grid label {
+  min-height: 42px;
+  padding: 8px 9px;
+  border: 1px solid #d4dee7;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+#rolForm .permission-grid label:has(input:checked) {
+  border-color: #68b78a;
+  color: #145d34;
+  background: #effaf3;
+}
+
+.modal-content-compacta {
+  width: min(520px, calc(100vw - 36px));
+  max-height: min(88vh, 680px);
+  overflow: auto;
+  border-radius: 14px;
+}
+
+.modal-content-compacta .modal-header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.modal-content-compacta .modal-header .eyebrow,
+.modal-content-compacta .modal-header h3 {
+  margin: 0;
+}
+
+.usuario-clave-form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.usuario-clave-destino,
+.estado-accion-practica {
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid #d2dce6;
+  border-radius: 9px;
+  color: #40576e;
+  background: #f5f8fb;
+}
+
+.usuario-clave-destino strong {
+  display: block;
+  margin-top: 3px;
+  color: #102033;
+}
+
+.campo-clave-practico {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.campo-clave-practico button {
+  min-width: 90px;
+}
+
+.acciones-modal-practico {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 9px;
+}
+
+.aviso-practico-global {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 130;
+  max-width: min(380px, calc(100vw - 36px));
+  padding: 13px 16px;
+  border: 1px solid #2aa261;
+  border-radius: 10px;
+  color: #ffffff;
+  background: #176d3a;
+  box-shadow: 0 15px 35px rgba(7, 25, 17, 0.28);
+  font-weight: 900;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.aviso-practico-global.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 760px) {
+  .editor-compacto-activo {
+    top: 8px !important;
+    left: 8px !important;
+    width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px);
+    transform: none;
+    animation: none;
+  }
+
+  #clientForm.editor-compacto-activo,
+  #productForm.editor-compacto-activo,
+  #usuarioForm.editor-compacto-activo,
+  #rolForm.editor-compacto-activo {
+    width: calc(100vw - 16px) !important;
+  }
+
+  .editor-compacto-cabecera {
+    padding: 12px;
+  }
+
+  .editor-compacto-cabecera span {
+    display: none;
+  }
+
+  #rolForm .permission-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rol-acciones-rapidas,
+  .acciones-modal-practico {
+    grid-template-columns: 1fr;
+  }
+
+  .rol-acciones-rapidas {
+    display: grid;
+  }
+
+  .aviso-practico-global {
+    right: 12px;
+    bottom: calc(82px + env(safe-area-inset-bottom));
+    left: 12px;
+    max-width: none;
+    text-align: center;
+  }
+}
+
 body {
   background: #eef2f6;
   color: #102033;
@@ -2175,4 +2501,52 @@ table tbody tr:hover {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* Prioridad final de los editores sobre los estilos historicos */
+.editor-compacto-cabecera {
+  display: none;
+}
+
+.editor-compacto-activo > .editor-compacto-cabecera {
+  display: flex;
+}
+
+.editor-compacto-activo > .sale-footer {
+  justify-content: flex-end;
+}
+
+#rolForm.editor-compacto-activo > .settings-section-header {
+  display: none;
+}
+
+#rolForm .permission-grid label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 42px;
+}
+
+#rolForm .permission-grid input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px !important;
+  min-width: 18px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  margin: 0;
+  padding: 0;
+  accent-color: #0786ba;
+}
+
+.modal-content-compacta .modal-header button {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+}
+
+.editor-compacto-activo > .sale-footer button {
+  min-height: 44px;
 }

@@ -90,7 +90,7 @@ function renderizarOpcionesRubrosActivos() {
 
   dom.rubrosActivosLista.innerHTML =
     rubros.filter(rubroActivo).map(function (rubro) {
-      return `<option value="${rubro.nombre}"></option>`;
+      return html`<option value="${rubro.nombre}"></option>`;
     }).join("");
 }
 
@@ -128,7 +128,7 @@ function renderizarRubros() {
   renderizarOpcionesRubrosActivos();
 
   if (rubrosFiltrados.length === 0) {
-    dom.rubrosTable.innerHTML = `
+    dom.rubrosTable.innerHTML = html`
       <tr>
         <td colspan="6" class="empty-table">
           No hay rubros para mostrar.
@@ -140,11 +140,11 @@ function renderizarRubros() {
 
   dom.rubrosTable.innerHTML =
     rubrosFiltrados.map(function (rubro) {
-      return `
+      return html`
         <tr>
-          <td>${escaparTextoHtml(rubro.codigo)}</td>
-          <td>${escaparTextoHtml(rubro.nombre)}</td>
-          <td>${escaparTextoHtml(rubro.descripcion || "-")}</td>
+          <td>${rubro.codigo}</td>
+          <td>${rubro.nombre}</td>
+          <td>${rubro.descripcion || "-"}</td>
           <td>${contarProductosPorRubro(rubro.nombre)}</td>
           <td>
             <span class="stock-pill stock-ok">Activo</span>
@@ -153,7 +153,7 @@ function renderizarRubros() {
             <button class="btn btn-secondary" onclick="editarRubro(${rubro.codigo})">
               Editar
             </button>
-            <button class="btn btn-danger" onclick="eliminarRubro(${rubro.codigo})">
+            <button class="btn btn-danger btn-eliminar" onclick="eliminarRubro(${rubro.codigo})">
               Eliminar
             </button>
           </td>
@@ -309,10 +309,16 @@ async function actualizarRubroEditado(nombre, descripcion) {
     return;
   }
 
+  if (typeof cerrarEditorCompacto === "function") {
+    cerrarEditorCompacto(true);
+  }
   cancelarEdicionRubro();
   renderizarRubros();
   renderizarProductos();
   renderizarOpcionesRubrosActivos();
+  if (typeof mostrarAvisoPractico === "function") {
+    mostrarAvisoPractico("Rubro actualizado correctamente.");
+  }
 
   registrarAuditoria(
     "Rubros",
@@ -341,6 +347,13 @@ function editarRubro(codigo) {
   dom.rubroDescripcionInput.value = rubro.descripcion || "";
   dom.rubroSubmitButton.textContent = "Guardar cambios";
   dom.cancelarEdicionRubroButton.classList.remove("hidden");
+  if (typeof abrirEditorCompacto === "function") {
+    abrirEditorCompacto(dom.rubroForm, {
+      titulo: "Editar rubro",
+      subtitulo: rubro.codigo + " · " + rubro.nombre,
+      alCerrar: cancelarEdicionRubro
+    });
+  }
   dom.rubroNombreInput.focus();
 }
 

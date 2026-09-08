@@ -1,5 +1,24 @@
 const TAMANO_PAGINA_SUPABASE = 1000;
 
+// Postgres devuelve 42883 (o "does not exist" en el mensaje) cuando se llama a
+// una funcion que todavia no se desplego. Sirve para poder subir el frontend
+// antes que el SQL sin que el sistema quede sin funcionar.
+function esErrorFuncionSupabaseFaltante(error) {
+  if (!error) {
+    return false;
+  }
+
+  const codigo =
+    String(error.code || "");
+  const mensaje =
+    String(error.message || "").toLowerCase();
+
+  return codigo === "42883" ||
+    codigo === "PGRST202" ||
+    mensaje.includes("could not find the function") ||
+    (mensaje.includes("function") && mensaje.includes("does not exist"));
+}
+
 async function consultarTablaSupabase(nombreTabla, ordenCampo, opciones) {
   const opcionesConsulta = opciones || {};
   const seleccion = opcionesConsulta.seleccion || "*";
@@ -62,6 +81,7 @@ async function obtenerProductosSupabase() {
 }
 
 async function obtenerProductosCatalogoPublicoSupabase() {
+  // Esta consulta solo devuelve productos publicables, no datos de clientes.
   const { data, error } =
     await supabaseClient.rpc("obtener_catalogo_publico");
 
@@ -71,12 +91,21 @@ async function obtenerProductosCatalogoPublicoSupabase() {
 
   return (data || [])
     .map(mapearProductoDesdeSupabase)
+    .map(function (producto) {
+      // El RPC publico ya descuenta reservas. No reconstruir bultos desde el stock fisico anterior.
+      if (producto && producto.tipoStock === "bultos") {
+        const unidades = Math.max(1, Number(producto.unidadesPorBulto) || 1);
+        producto.stockBultos = Math.floor(producto.stock / unidades);
+        producto.stockUnidades = producto.stock % unidades;
+      }
+      return producto;
+    })
     .filter(Boolean);
 }
 
 async function crearPedidoCatalogoPublicoSupabase(pedidoCatalogo) {
   const { data, error } =
-    await supabaseClient.rpc("crear_pedido_catalogo_publico", {
+    await supabaseClient.rpc("crear_pedido_catalogo_vendedor", {
       pedido: pedidoCatalogo
     });
 
@@ -87,6 +116,33 @@ async function crearPedidoCatalogoPublicoSupabase(pedidoCatalogo) {
   return Array.isArray(data) && data.length > 0
     ? data[0]
     : null;
+}
+
+async function crearEnlaceCatalogoVendedorSupabase(codigoVendedor) {
+  const { data, error } = await supabaseClient.rpc("crear_enlace_catalogo_vendedor", { vendedor_codigo: Number(codigoVendedor) });
+  if (error) throw error;
+  const fila = Array.isArray(data) && data.length ? data[0] : null;
+  return fila ? {
+    token: fila.token,
+    vendedorNombre: fila.vendedor_nombre,
+    whatsapp: fila.whatsapp
+  } : null;
+}
+
+async function obtenerEnlaceCatalogoVendedorSupabase(token) {
+  const { data, error } = await supabaseClient.rpc("obtener_enlace_catalogo_vendedor", { enlace_token: token });
+  if (error) throw error;
+  const fila = Array.isArray(data) && data.length ? data[0] : null;
+  return fila ? {
+    vendedorNombre: fila.vendedor_nombre,
+    whatsapp: fila.whatsapp
+  } : null;
+}
+
+async function obtenerConfiguracionCatalogoPublicoSupabase() {
+  const { data, error } = await supabaseClient.rpc("obtener_configuracion_catalogo_publico");
+  if (error) throw error;
+  return Array.isArray(data) && data.length ? data[0] : { whatsapp: "" };
 }
 
 async function obtenerClientesSupabase() {
@@ -262,19 +318,191 @@ async function borrarItemsPedidoPorIdsSupabase(idsItemsPedido) {
   }
 }
 
+// --- Operaciones atomicas (ver supabase/sql/operaciones-atomicas.sql) --------
+// Estas llamadas resuelven todo el cambio dentro de una transaccion de
+// Postgres, con la fila bloqueada. Son las que permiten que varias personas
+// operen a la vez desde computadoras y celulares sin pisarse.
+
+async function reemplazarItemsPedidoSupabase(pedidoIdSupabase, items) {
+  const { data, error } =
+    await supabaseClient.rpc("reemplazar_items_pedido", {
+      pedido_id_param: pedidoIdSupabase,
+      items: items
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return Number(data) || 0;
+}
+
+async function atenderPedidoAtomicoSupabase(pedidoIdSupabase) {
+  const { data, error } =
+    await supabaseClient.rpc("atender_pedido_atomico", {
+      pedido_id_param: pedidoIdSupabase
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  // [{ producto_codigo, stock_nuevo }] con el stock real que quedo.
+  return (data || []).map(function (fila) {
+    return {
+      codigo: Number(fila.producto_codigo) || 0,
+      stock: Number(fila.stock_nuevo) || 0
+    };
+  });
+}
+
+async function entregarPedidoAtomicoSupabase(pedidoIdSupabase, importePagado) {
+  const { data, error } =
+    await supabaseClient.rpc("entregar_pedido_atomico", {
+      pedido_id_param: pedidoIdSupabase,
+      importe_pagado: Number(importePagado) || 0
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const fila =
+    Array.isArray(data) && data.length > 0 ? data[0] : null;
+
+  if (!fila) {
+    throw new Error("Supabase no devolvio el resultado de la entrega.");
+  }
+
+  return {
+    saldoCliente: Number(fila.saldo_cliente) || 0,
+    saldoGenerado: Number(fila.saldo_generado) || 0,
+    estadoCobro: fila.estado_cobro || "COBRADO",
+    fechaEntrega: fila.fecha_entrega || null
+  };
+}
+
+async function registrarMovimientoCuentaAtomicoSupabase(datos) {
+  const { data, error } =
+    await supabaseClient.rpc("registrar_movimiento_cuenta_atomico", {
+      cliente_id_param: datos.clienteIdSupabase,
+      delta_saldo: Number(datos.deltaSaldo) || 0,
+      medio_pago_param: datos.medioPago || "",
+      observacion_param: datos.observacion || "Movimiento de cuenta",
+      codigo_pago_param: Number(datos.codigoPago) || null,
+      pedido_id_param: datos.pedidoIdSupabase || null
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const fila =
+    Array.isArray(data) && data.length > 0 ? data[0] : null;
+
+  return {
+    saldoCliente: fila ? Number(fila.saldo_cliente) || 0 : 0,
+    yaEstaba: Boolean(fila && fila.ya_estaba)
+  };
+}
+
+// Historial completo de un producto, leido de la tabla movimientos_stock en
+// lugar del array que viaja dentro de la fila del producto.
+async function obtenerMovimientosStockProductoSupabase(productoIdSupabase, limite) {
+  const { data, error } =
+    await supabaseClient.rpc("obtener_movimientos_stock_producto", {
+      producto_id_param: productoIdSupabase,
+      limite: Number(limite) || 500
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).map(function (fila) {
+    const fecha =
+      fila.fecha ? new Date(fila.fecha) : null;
+
+    return {
+      fechaIso: fila.fecha || "",
+      fecha: fecha ? fecha.toLocaleDateString("es-AR") : "-",
+      hora: fecha
+        ? fecha.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
+        : "",
+      tipo: fila.tipo || "Movimiento",
+      motivo: fila.referencia || "",
+      referencia: fila.referencia || "",
+      cantidad: Number(fila.cantidad) || 0,
+      stockFinal: Number(fila.stock_final) || 0
+    };
+  });
+}
+
+async function registrarMovimientoStockAtomicoSupabase(productoIdSupabase, deltaCantidad, tipo, referencia) {
+  const { data, error } =
+    await supabaseClient.rpc("registrar_movimiento_stock_atomico", {
+      producto_id_param: productoIdSupabase,
+      delta_cantidad: Number(deltaCantidad) || 0,
+      tipo_param: tipo || "Ajuste",
+      referencia_param: referencia || ""
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  return Number(data) || 0;
+}
+
+// ---------------------------------------------------------------------------
+
 async function guardarItemsPedidoSupabase(pedido, pedidoIdSupabase) {
+  const itemsSupabase =
+    Array.isArray(pedido.items)
+      ? pedido.items.map(function (item) {
+        return mapearPedidoItemParaSupabase(item, pedidoIdSupabase);
+      })
+      : [];
+
+  // Un solo RPC que borra e inserta en la misma transaccion. Antes se
+  // insertaban los nuevos y despues se borraban los viejos con dos llamadas
+  // sueltas: si la segunda fallaba, el pedido quedaba con los items
+  // duplicados y el total dejaba de coincidir con el detalle.
+  try {
+    await reemplazarItemsPedidoSupabase(pedidoIdSupabase, itemsSupabase);
+
+    const { data: itemsGuardados, error: errorLectura } =
+      await supabaseClient
+        .from("pedido_items")
+        .select()
+        .eq("pedido_id", pedidoIdSupabase);
+
+    if (errorLectura) {
+      throw errorLectura;
+    }
+
+    return itemsGuardados || [];
+  } catch (errorRpc) {
+    // Si todavia no se corrio operaciones-atomicas.sql, se usa el camino
+    // viejo para no dejar el sistema sin poder guardar pedidos.
+    if (!esErrorFuncionSupabaseFaltante(errorRpc)) {
+      throw errorRpc;
+    }
+
+    console.warn(
+      "Falta desplegar reemplazar_items_pedido en Supabase. " +
+      "Se guardan los items con el metodo anterior.",
+      errorRpc
+    );
+  }
+
   const idsItemsViejos =
     await obtenerIdsItemsPedidoSupabase(pedidoIdSupabase);
 
-  if (!Array.isArray(pedido.items) || pedido.items.length === 0) {
+  if (itemsSupabase.length === 0) {
     await borrarItemsPedidoPorIdsSupabase(idsItemsViejos);
     return [];
   }
-
-  const itemsSupabase =
-    pedido.items.map(function (item) {
-      return mapearPedidoItemParaSupabase(item, pedidoIdSupabase);
-    });
 
   const { data, error } =
     await supabaseClient
@@ -291,20 +519,93 @@ async function guardarItemsPedidoSupabase(pedido, pedidoIdSupabase) {
   return data || [];
 }
 
+// Alta de pedido con el numero asignado por Postgres.
+//
+// El numero lo calculaba el navegador con max(pedidos en memoria) + 1, asi que
+// dos vendedores guardando a la vez llegaban al mismo numero y el segundo
+// chocaba contra el unique de pedidos.numero: se le caia el pedido con un error
+// de base de datos. Ahora el numero se toma adentro de la transaccion, con lock
+// y reintento (ver supabase/sql/numeracion-pedidos.sql).
+async function insertarPedidoNumeradoSupabase(pedidoSupabase) {
+  const { data, error } =
+    await supabaseClient.rpc("crear_pedido_numerado", {
+      pedido: pedidoSupabase
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  const fila =
+    Array.isArray(data) && data.length > 0 ? data[0] : null;
+
+  if (!fila) {
+    throw new Error("Supabase no devolvio el numero del pedido.");
+  }
+
+  const { data: pedidoGuardado, error: errorLectura } =
+    await supabaseClient
+      .from("pedidos")
+      .select()
+      .eq("id", fila.id)
+      .single();
+
+  if (errorLectura) {
+    throw errorLectura;
+  }
+
+  return pedidoGuardado;
+}
+
 async function guardarPedidoSupabase(pedido) {
   const pedidoSupabase =
     mapearPedidoParaSupabase(pedido);
 
-  const consulta =
-    pedido.idSupabase
-      ? supabaseClient.from("pedidos").update(pedidoSupabase).eq("id", pedido.idSupabase)
-      : supabaseClient.from("pedidos").insert(pedidoSupabase);
+  let data = null;
 
-  const { data, error } =
-    await consulta.select().single();
+  if (pedido.idSupabase) {
+    const { data: pedidoActualizado, error } =
+      await supabaseClient
+        .from("pedidos")
+        .update(pedidoSupabase)
+        .eq("id", pedido.idSupabase)
+        .select()
+        .single();
 
-  if (error) {
-    throw error;
+    if (error) {
+      throw error;
+    }
+
+    data = pedidoActualizado;
+  } else {
+    try {
+      data = await insertarPedidoNumeradoSupabase(pedidoSupabase);
+    } catch (errorRpc) {
+      // Si todavia no se desplego numeracion-pedidos.sql, se usa el alta
+      // anterior para no dejar el sistema sin poder guardar pedidos.
+      if (!esErrorFuncionSupabaseFaltante(errorRpc)) {
+        throw errorRpc;
+      }
+
+      console.warn(
+        "Falta desplegar crear_pedido_numerado en Supabase. " +
+        "Se guarda el pedido con el numero calculado en el navegador.",
+        errorRpc
+      );
+
+      const { data: pedidoInsertado, error } =
+        await supabaseClient
+          .from("pedidos")
+          .insert(pedidoSupabase)
+          .select()
+          .single();
+
+      if (error) {
+        throw error;
+      }
+
+      data = pedidoInsertado;
+    }
   }
 
   await guardarItemsPedidoSupabase(pedido, data.id);
@@ -615,6 +916,8 @@ async function obtenerConfiguracionEmpresaSupabase() {
     await supabaseClient
       .from("configuracion_empresa")
       .select("*")
+      .order("actualizado_en", { ascending: false })
+      .order("id", { ascending: true })
       .limit(1)
       .maybeSingle();
 
@@ -628,6 +931,7 @@ async function obtenerConfiguracionEmpresaSupabase() {
 async function guardarConfiguracionEmpresaSupabase(configuracion) {
   const configuracionSupabase =
     mapearConfiguracionParaSupabase(configuracion);
+  configuracionSupabase.actualizado_en = new Date().toISOString();
 
   const consulta =
     configuracion.idSupabase

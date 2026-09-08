@@ -1,4 +1,9 @@
 let filtroEstadoClientes = "activos";
+// Filtro y orden por deuda del listado de clientes. Con la columna de saldo a
+// la vista, poder dejar solo los que deben y ordenarlos de mayor a menor es lo
+// que convierte el listado en una hoja de ruta para salir a cobrar.
+let filtroDeudaClientes = "todos";
+let ordenClientes = "codigo";
 let clienteEditando = null;
 let cobranzasPendientesVendedor = [];
 let cobranzasVendedorEnProceso = {};
@@ -63,6 +68,24 @@ function cambiarFiltroEstadoClientes(filtroNuevo) {
   renderizarClientes();
 }
 
+function cambiarFiltroDeudaClientes(filtroNuevo) {
+  filtroDeudaClientes = filtroNuevo;
+
+  document.querySelectorAll("[data-client-debt-filter]").forEach(function (boton) {
+    boton.classList.toggle(
+      "active",
+      boton.dataset.clientDebtFilter === filtroNuevo
+    );
+  });
+
+  renderizarClientes();
+}
+
+function cambiarOrdenClientes(ordenNuevo) {
+  ordenClientes = ordenNuevo || "codigo";
+  renderizarClientes();
+}
+
 function obtenerDatosComercialesClienteDesdeFormulario() {
   return {
     razonSocial: dom.clientRazonSocialInput.value.trim(),
@@ -84,6 +107,57 @@ function obtenerDatosComercialesClienteDesdeFormulario() {
 function clienteDebeConfirmarGuardadoOnline() {
   return typeof puedeGuardarOperacionEnSupabase === "function" &&
     puedeGuardarOperacionEnSupabase();
+}
+
+// Movimiento de cuenta corriente resuelto por Postgres, con la fila del cliente
+// bloqueada (ver supabase/sql/operaciones-atomicas.sql). Devuelve
+// { ok, enServidor, saldoCliente, yaEstaba } o { ok:false, mensaje }.
+async function registrarPagoClienteEnServidor(cliente, movimientoCuenta) {
+  const sinServidor = { ok: true, enServidor: false };
+
+  if (!cliente ||
+    !cliente.idSupabase ||
+    !clienteDebeConfirmarGuardadoOnline() ||
+    typeof registrarMovimientoCuentaAtomicoSupabase !== "function") {
+    return sinServidor;
+  }
+
+  try {
+    const resultado =
+      await registrarMovimientoCuentaAtomicoSupabase({
+        clienteIdSupabase: cliente.idSupabase,
+        deltaSaldo: Number(movimientoCuenta.importe) || 0,
+        medioPago: movimientoCuenta.medioPago || "",
+        observacion: movimientoCuenta.tipo || "Movimiento de cuenta",
+        codigoPago: movimientoCuenta.codigoPago || null
+      });
+
+    return {
+      ok: true,
+      enServidor: true,
+      saldoCliente: resultado.saldoCliente,
+      yaEstaba: resultado.yaEstaba
+    };
+  } catch (error) {
+    if (typeof esErrorFuncionSupabaseFaltante === "function" &&
+      esErrorFuncionSupabaseFaltante(error)) {
+      console.warn(
+        "Falta desplegar registrar_movimiento_cuenta_atomico en Supabase. " +
+        "Se registra el movimiento con el metodo anterior.",
+        error
+      );
+      return sinServidor;
+    }
+
+    console.error("No se pudo registrar el movimiento de cuenta en Supabase:", error);
+
+    return {
+      ok: false,
+      enServidor: true,
+      mensaje: String(error && error.message ? error.message : "") ||
+        "No se pudo registrar el pago. Actualiza datos y volve a intentar."
+    };
+  }
 }
 
 function avisarClienteSinConfirmacionOnline(accion) {
@@ -244,6 +318,13 @@ async function agregarCliente(event) {
       codigoAnterior + " > " + codigo + " - " + nombre
     );
 
+    if (typeof cerrarEditorCompacto === "function") {
+      cerrarEditorCompacto(true);
+    }
+    if (typeof mostrarAvisoPractico === "function") {
+      mostrarAvisoPractico("Cliente actualizado correctamente.");
+    }
+
     return;
   }
 
@@ -325,7 +406,14 @@ function crearMapaColumnasClientesImportacion(encabezados) {
     telefono: buscarColumnas(["telefono", "telefonos", "tel", "telfono", "celular", "movil"]),
     direccion: buscarColumnas(["direccion", "direccin", "domicilio", "domiciliocliente", "direccioncliente", "direccincliente"]),
     zona: buscarColumnas(["zona"]),
-    saldo: buscarColumnas(["saldo", "deuda", "cuentacorriente", "ctacte", "balance", "saldocuenta", "importe"]),
+    saldo: buscarColumnas(["saldolv", "saldo", "deuda", "cuentacorriente", "ctacte", "balance", "saldocuenta", "importe"]),
+    // Los listados externos usan el signo al reves que el sistema (ahi negativo
+    // = deuda, aca positivo = deuda), asi que al importar se invierte. Pero el
+    // CSV que exporta el propio sistema ya viene en el formato de LV: si se
+    // invirtiera, exportar clientes y volver a importar el mismo archivo daria
+    // vuelta todos los saldos, y el que debia 15.000 pasaria a tener 15.000 a
+    // favor. La columna "Saldo LV" es la marca que distingue un caso del otro.
+    saldoYaEnFormatoLv: nombres.indexOf("saldolv") >= 0,
     listaPrecios: buscarColumnas(["lista", "listaprecios", "listadeprecios"]),
     vendedorAsignado: buscarColumnas(["vendedor", "vendedorasignado"]),
     observaciones: buscarColumnas(["observaciones", "observacion", "notas"]),
@@ -486,10 +574,10 @@ function renderizarPrevisualizacionImportacionClientes(analisis) {
     }).join("");
   const duplicados =
     analisis.codigosDuplicados.length > 0
-      ? `<div class="import-preview-warning">Codigos duplicados en el CSV: ${escaparTextoHtml(analisis.codigosDuplicados.slice(0, 12).join(", "))}. La importacion queda bloqueada hasta corregirlos.</div>`
+      ? html`<div class="import-preview-warning">Codigos duplicados en el CSV: ${analisis.codigosDuplicados.slice(0, 12).join(", ")}. La importacion queda bloqueada hasta corregirlos.</div>`
       : "";
 
-  dom.clientesImportacionPreview.innerHTML = `
+  dom.clientesImportacionPreview.innerHTML = html`
     <h4>Previsualizacion de clientes</h4>
     <div class="import-preview-grid">
       <span>Total filas<strong>${analisis.totalFilas}</strong></span>
@@ -504,7 +592,7 @@ function renderizarPrevisualizacionImportacionClientes(analisis) {
       <strong>${columnas || "Sin columnas"}</strong>
     </div>
     ${duplicados}
-    ${errores ? `<ul class="import-preview-list">${errores}</ul>` : ""}
+    ${errores ? html`<ul class="import-preview-list">${errores}</ul>` : ""}
     <ul class="import-preview-list">${ejemplos}</ul>
   `;
   dom.clientesImportacionPreview.classList.remove("hidden");
@@ -563,13 +651,15 @@ function crearMovimientoCuentaCliente(datosMovimiento) {
   const usuarioMovimiento =
     obtenerUsuarioActualMovimientoCuenta();
   const saldoAnterior =
-    Number.isFinite(Number(datos.saldoAnterior)) ? Number(datos.saldoAnterior) : 0;
+    redondearDinero(Number.isFinite(Number(datos.saldoAnterior)) ? Number(datos.saldoAnterior) : 0);
   const importe =
-    Number(datos.importe) || 0;
+    redondearDinero(datos.importe);
   const saldoPosterior =
-    Number.isFinite(Number(datos.saldoPosterior))
-      ? Number(datos.saldoPosterior)
-      : saldoAnterior + importe;
+    redondearDinero(
+      Number.isFinite(Number(datos.saldoPosterior))
+        ? Number(datos.saldoPosterior)
+        : saldoAnterior + importe
+    );
   const referencia =
     datos.referencia || datos.motivo || datos.tipo || "Movimiento de cuenta";
 
@@ -594,12 +684,19 @@ function crearMovimientoCuentaCliente(datosMovimiento) {
   };
 }
 
-function convertirSaldoImportadoAFormatoSistema(valorImportado) {
+function convertirSaldoImportadoAFormatoSistema(valorImportado, yaEnFormatoLv) {
   const saldoOrigen =
     obtenerNumeroImportacion(valorImportado, 0);
 
   if (saldoOrigen === 0) {
     return 0;
+  }
+
+  // El CSV que genera el propio sistema trae la columna "Saldo LV", que ya usa
+  // el signo de LV. Ahi no hay que invertir nada: si se invirtiera, exportar y
+  // volver a importar daria vuelta todas las cuentas corrientes.
+  if (yaEnFormatoLv) {
+    return saldoOrigen;
   }
 
   // En los listados externos: negativo = deuda, positivo = a favor.
@@ -677,7 +774,10 @@ function importarClientesDesdeTextoPlano(texto) {
         : "";
     const saldoInicial =
       saldoImportadoInformado
-        ? convertirSaldoImportadoAFormatoSistema(saldoImportadoTexto)
+        ? convertirSaldoImportadoAFormatoSistema(
+          saldoImportadoTexto,
+          Boolean(mapaColumnas && mapaColumnas.saldoYaEnFormatoLv)
+        )
         : 0;
     const datosComerciales = {
       razonSocial: obtenerValorClienteImportacion(columnas, mapaColumnas, "razonSocial", -1),
@@ -950,6 +1050,10 @@ function seleccionarCliente(cliente) {
   actualizarClientePedidoSeleccionado();
   renderizarCatalogoProductosPedido();
 
+  if (typeof mostrarPasoFormularioPedido === "function") {
+    mostrarPasoFormularioPedido("productos", true);
+  }
+
   if (dom.productoSearchInput) {
     dom.productoSearchInput.focus();
   }
@@ -980,10 +1084,38 @@ function obtenerClientesFiltrados() {
       normalizarTexto(cliente.direccion || "").includes(textoBusqueda) ||
       normalizarTexto(cliente.zona || "").includes(textoBusqueda);
 
-    return coincideEstado && coincideBusqueda;
-  }).sort(function (primero, segundo) {
-      return primero.codigo - segundo.codigo;
-    });
+    const saldoCliente =
+      Number(cliente.saldo) || 0;
+    const coincideDeuda =
+      filtroDeudaClientes === "todos" ||
+      (filtroDeudaClientes === "deben" && saldoCliente > 0) ||
+      (filtroDeudaClientes === "alDia" && saldoCliente <= 0);
+
+    return coincideEstado && coincideBusqueda && coincideDeuda;
+  }).sort(ordenarClientesListado);
+}
+
+function ordenarClientesListado(primero, segundo) {
+  const saldoPrimero = Number(primero.saldo) || 0;
+  const saldoSegundo = Number(segundo.saldo) || 0;
+
+  if (ordenClientes === "deudaMayor") {
+    return saldoSegundo - saldoPrimero || primero.codigo - segundo.codigo;
+  }
+
+  if (ordenClientes === "deudaMenor") {
+    return saldoPrimero - saldoSegundo || primero.codigo - segundo.codigo;
+  }
+
+  if (ordenClientes === "nombre") {
+    return String(primero.nombre || "").localeCompare(
+      String(segundo.nombre || ""),
+      "es",
+      { sensitivity: "base" }
+    );
+  }
+
+  return primero.codigo - segundo.codigo;
 }
 
 function renderizarClientes() {
@@ -1007,7 +1139,7 @@ function renderizarClientes() {
       dom.clientesResultadoContador.textContent = "Clientes | 0 en total";
     }
 
-    dom.clientsTable.innerHTML = `
+    dom.clientsTable.innerHTML = html`
       <tr>
         <td colspan="7" class="empty-table">
           No hay clientes para mostrar.
@@ -1030,16 +1162,30 @@ function renderizarClientes() {
     const estadoTexto = clienteActivo(cliente) ? "Activo" : "Inactivo";
     const estadoClase = clienteActivo(cliente) ? "stock-ok" : "stock-inactive";
     const accionEstado = clienteActivo(cliente) ? "Desactivar" : "Activar";
+    // El saldo es el dato que mas se consulta de un cliente en una
+    // distribuidora, y hasta ahora habia que entrar a Cuenta corriente para
+    // verlo. Aca va en el listado, con color: rojo debe, verde a favor.
+    const saldoCliente = Number(cliente.saldo) || 0;
+    const saldoClase = saldoCliente > 0
+      ? "saldo-lista-debe"
+      : saldoCliente < 0 ? "saldo-lista-favor" : "saldo-lista-cero";
+    const saldoTexto = saldoCliente === 0
+      ? "Al dia"
+      : formatearDinero(Math.abs(saldoCliente));
 
-    row.innerHTML = `
-      <td>${escaparTextoHtml(cliente.codigo)}</td>
+    row.innerHTML = html`
+      <td>${cliente.codigo}</td>
       <td>
-        <strong>${escaparTextoHtml(cliente.nombre)}</strong>
-        <small>${escaparTextoHtml(cliente.razonSocial || cliente.nombreFantasia || "-")}</small>
+        <strong>${cliente.nombre}</strong>
+        <small>${cliente.razonSocial || cliente.nombreFantasia || ""}</small>
       </td>
-      <td>${escaparTextoHtml(cliente.telefono)}<br><small>${escaparTextoHtml(cliente.telefonoMovil || cliente.email || "-")}</small></td>
-      <td>${escaparTextoHtml(cliente.direccion)}<br><small>${escaparTextoHtml(cliente.localidad || "-")}</small></td>
-      <td>${escaparTextoHtml(cliente.zona || "Sin zona")}</td>
+      <td>${cliente.telefono}<br><small>${cliente.telefonoMovil || cliente.email || ""}</small></td>
+      <td>${cliente.direccion}<br><small>${cliente.localidad || ""}</small></td>
+      <td>${cliente.zona || "Sin zona"}</td>
+      <td class="celda-saldo ${saldoClase}">
+        ${saldoTexto}
+        ${saldoCliente < 0 ? html`<small>a favor</small>` : ""}
+      </td>
       <td>
         <span class="stock-pill ${estadoClase}">${estadoTexto}</span>
       </td>
@@ -1050,7 +1196,7 @@ function renderizarClientes() {
         <button class="btn btn-secondary" onclick="cambiarEstadoCliente(${cliente.codigo})">
           ${accionEstado}
         </button>
-        <button class="btn btn-danger" onclick="eliminarCliente(${cliente.codigo})">
+        <button class="btn btn-danger btn-eliminar" onclick="eliminarCliente(${cliente.codigo})">
           Eliminar
         </button>
       </td>
@@ -1106,7 +1252,7 @@ function exportarClientesCsv() {
       "Zona",
       "Lista",
       "Vendedor",
-      "Saldo",
+      "Saldo LV",
       "Estado",
       "Horario atencion",
       "Observaciones"
@@ -1212,7 +1358,6 @@ function editarCliente(codigo) {
   }
 
   clienteEditando = codigo;
-  mostrarSeccionCliente("alta");
 
   dom.clientCodeInput.value = cliente.codigo;
   dom.clientNameInput.value = cliente.nombre || "";
@@ -1234,7 +1379,26 @@ function editarCliente(codigo) {
   dom.clientObservacionesInput.value = cliente.observaciones || "";
 
   dom.clientSubmitButton.textContent = "Guardar cambios";
+  if (typeof abrirEditorCompacto === "function") {
+    abrirEditorCompacto(dom.clientForm, {
+      titulo: "Editar cliente",
+      subtitulo: cliente.codigo + " · " + cliente.nombre,
+      alCerrar: cancelarEdicionCliente
+    });
+  } else {
+    mostrarSeccionCliente("alta");
+  }
   dom.clientNameInput.focus();
+}
+
+function cancelarEdicionCliente() {
+  clienteEditando = null;
+  dom.clientForm.reset();
+  dom.clientSubmitButton.textContent = "Agregar cliente";
+  completarSiguienteCodigoCliente();
+  if (typeof cerrarEditorCompacto === "function") {
+    cerrarEditorCompacto(true);
+  }
 }
 
 async function eliminarCliente(codigo) {
@@ -1416,7 +1580,7 @@ function renderizarClientesConDeuda() {
 
   if (clientesDeudores.length === 0) {
     dom.clientesConDeuda.innerHTML =
-      `<div class="empty-table">Sin saldos registrados</div>`;
+      html`<div class="empty-table">Sin saldos registrados</div>`;
     return;
   }
 
@@ -1440,7 +1604,7 @@ function renderizarClientesConDeuda() {
 
     fila.className = "debt-row " + clasePrioridad;
 
-    fila.innerHTML = `
+    fila.innerHTML = html`
       <div class="debt-client">
         <span>${cliente.codigo} - ${cliente.nombre}</span>
         <small>${cliente.telefono} | ${cliente.direccion}</small>
@@ -1451,7 +1615,7 @@ function renderizarClientesConDeuda() {
           Historial
         </button>
         ${saldoCliente > 0
-          ? `<button class="btn btn-cobrado" onclick="abrirRegistroPagoCliente(${cliente.codigo})">
+          ? html`<button class="btn btn-cobrado" onclick="abrirRegistroPagoCliente(${cliente.codigo})">
           Registrar pago
         </button>`
           : ""
@@ -1505,7 +1669,7 @@ function renderizarCobranzasPendientesVendedor() {
 
   if (cobranzasPendientesVendedor.length === 0) {
     dom.cobranzasPendientesVendedorLista.innerHTML =
-      `<div class="empty-table">Sin cobranzas pendientes de vendedores.</div>`;
+      html`<div class="empty-table">Sin cobranzas pendientes de vendedores.</div>`;
     return;
   }
 
@@ -1530,11 +1694,11 @@ function renderizarCobranzasPendientesVendedor() {
       document.createElement("div");
 
     fila.className = "debt-row debt-medium";
-    fila.innerHTML = `
+    fila.innerHTML = html`
       <div class="debt-client">
-        <span>${escaparTextoHtml(clienteTexto)}</span>
-        <small>${escaparTextoHtml(pago.fecha || "-")} | ${escaparTextoHtml(vendedor)} | ${escaparTextoHtml(medio + comprobanteTexto)}</small>
-        ${observacion ? `<small>${escaparTextoHtml(observacion)}</small>` : ""}
+        <span>${clienteTexto}</span>
+        <small>${pago.fecha || "-"} | ${vendedor} | ${medio + comprobanteTexto}</small>
+        ${observacion ? html`<small>${observacion}</small>` : ""}
       </div>
       <div class="debt-actions">
         <strong>${formatearDinero(Number(pago.importe) || 0)}</strong>
@@ -1967,13 +2131,13 @@ function prepararCuentaClienteEstado() {
     }).slice(0, 80);
 
   dom.cuentaClienteSelect.innerHTML =
-    `<option value="">Seleccionar cliente</option>` +
+    html`<option value="">Seleccionar cliente</option>` +
     clientesFiltrados.map(function (cliente) {
       const valor =
         String(cliente.codigo);
       const seleccionado =
         valor === clienteSeleccionado ? " selected" : "";
-      return `<option value="${valor}"${seleccionado}>(${escaparTextoHtml(cliente.codigo)}) ${escaparTextoHtml(cliente.nombre)}</option>`;
+      return html`<option value="${valor}"${seleccionado}>(${cliente.codigo}) ${cliente.nombre}</option>`;
     }).join("");
 
   if (clienteSeleccionado && !clientesFiltrados.some(function (cliente) {
@@ -2039,7 +2203,7 @@ function actualizarCuentaClienteEstado() {
   if (!cliente) {
     dom.cuentaClienteEstadoResumen.textContent =
       "Selecciona un cliente para ver el estado de cuenta.";
-    dom.cuentaClienteEstadoTable.innerHTML = `
+    dom.cuentaClienteEstadoTable.innerHTML = html`
       <tr>
         <td colspan="5" class="empty-table">Sin cliente seleccionado.</td>
       </tr>
@@ -2063,9 +2227,9 @@ function actualizarCuentaClienteEstado() {
     " al " + (dom.cuentaClienteHastaInput.value || "-");
 
   if (movimientos.length === 0) {
-    dom.cuentaClienteEstadoTable.innerHTML = `
+    dom.cuentaClienteEstadoTable.innerHTML = html`
       <tr>
-        <td>${escaparTextoHtml(dom.cuentaClienteDesdeInput.value || "-")}</td>
+        <td>${dom.cuentaClienteDesdeInput.value || "-"}</td>
         <td>Sin movimientos para el periodo seleccionado.</td>
         <td>${formatearDinero(Math.max(0, -saldoAcumulado))}</td>
         <td>${formatearDinero(Math.max(0, saldoAcumulado))}</td>
@@ -2085,10 +2249,10 @@ function actualizarCuentaClienteEstado() {
           ? Number(movimiento.saldoPosterior) || 0
           : saldoAcumulado + importe;
 
-      return `
+      return html`
         <tr>
-          <td>${escaparTextoHtml(movimiento.fecha || "-")}</td>
-          <td>${escaparTextoHtml(movimiento.tipo || "Movimiento")}</td>
+          <td>${movimiento.fecha || "-"}</td>
+          <td>${movimiento.tipo || "Movimiento"}</td>
           <td>${importe < 0 ? formatearDinero(Math.abs(importe)) : formatearDinero(0)}</td>
           <td>${importe > 0 ? formatearDinero(importe) : formatearDinero(0)}</td>
           <td>${formatearDinero(saldoAcumulado)}</td>
@@ -2116,12 +2280,12 @@ function imprimirCuentaClienteEstado() {
     return;
   }
 
-  ventana.document.write(`
+  ventana.document.write(html`
     <!DOCTYPE html>
     <html lang="es">
     <head>
       <meta charset="UTF-8">
-      <title>Cuenta cliente ${escaparTextoHtml(cliente.codigo)}</title>
+      <title>Cuenta cliente ${cliente.codigo}</title>
       <style>
         body { font-family: Arial, sans-serif; color: #172033; }
         h1 { font-size: 22px; }
@@ -2131,8 +2295,8 @@ function imprimirCuentaClienteEstado() {
       </style>
     </head>
     <body>
-      <h1>Cuenta cliente ${escaparTextoHtml(cliente.codigo)} - ${escaparTextoHtml(cliente.nombre)}</h1>
-      <p>${escaparTextoHtml(dom.cuentaClienteEstadoResumen.textContent)}</p>
+      <h1>Cuenta cliente ${cliente.codigo} - ${cliente.nombre}</h1>
+      <p>${dom.cuentaClienteEstadoResumen.textContent}</p>
       <table>
         <thead>
           <tr>
@@ -2245,7 +2409,7 @@ function calcularNotaCreditoProductos(pedido) {
         cantidadPedido: cantidadPedido,
         cantidadCredito: cantidadCredito,
         precioUnitario: precioUnitario,
-        subtotal: cantidadCredito * precioUnitario
+        subtotal: redondearDinero(cantidadCredito * precioUnitario)
       };
     }).filter(function (itemCredito) {
       return itemCredito.cantidadCredito > 0;
@@ -2402,7 +2566,7 @@ function actualizarVistaPagoCliente() {
         ? "Saldo a favor"
         : "Sin deuda pendiente";
 
-  dom.pagoClienteResultado.innerHTML = `
+  dom.pagoClienteResultado.innerHTML = html`
     <strong>${cliente.codigo} - ${cliente.nombre}</strong>
     <span>${cliente.telefono || "-"} | ${cliente.direccion || "-"}</span>
     <b>${estadoSaldo}: ${formatearDinero(cliente.saldo || 0)}</b>
@@ -2475,7 +2639,7 @@ function renderizarProductosNotaCredito() {
     obtenerPedidoParaNotaCredito();
 
   if (!pedido || !Array.isArray(pedido.items) || pedido.items.length === 0) {
-    dom.notaCreditoProductosTable.innerHTML = `
+    dom.notaCreditoProductosTable.innerHTML = html`
       <tr>
         <td colspan="5" class="empty-table">ElegÃ­ cliente y pedido para ver productos.</td>
       </tr>
@@ -2493,15 +2657,15 @@ function renderizarProductosNotaCredito() {
       const cantidadCredito =
         obtenerCantidadNotaCreditoItem(indice);
       const subtotal =
-        Math.min(cantidad, Math.max(0, cantidadCredito)) * precioUnitario;
+        redondearDinero(Math.min(cantidad, Math.max(0, cantidadCredito)) * precioUnitario);
       const textoProducto =
         item.producto
           ? item.producto.codigo + " - " + item.producto.nombre
           : "Producto sin detalle";
 
-      return `
+      return html`
         <tr>
-          <td>${escaparTextoHtml(textoProducto)}</td>
+          <td>${textoProducto}</td>
           <td>${cantidad}</td>
           <td>${formatearDinero(precioUnitario)}</td>
           <td>
@@ -2535,7 +2699,7 @@ function actualizarVistaNotaCreditoCliente() {
   renderizarProductosNotaCredito();
 
   if (!pedido) {
-    dom.notaCreditoResultado.innerHTML = `
+    dom.notaCreditoResultado.innerHTML = html`
       <strong>${cliente.codigo} - ${cliente.nombre}</strong>
       <span>Ingrese el numero de pedido para seleccionar productos.</span>
       <b>Saldo actual: ${formatearDinero(Number(cliente.saldo) || 0)}</b>
@@ -2561,7 +2725,7 @@ function actualizarVistaNotaCreditoCliente() {
   dom.notaCreditoImporteInput.value =
     importe > 0 ? importe.toFixed(2) : "";
 
-  dom.notaCreditoResultado.innerHTML = `
+  dom.notaCreditoResultado.innerHTML = html`
     <strong>${cliente.codigo} - ${cliente.nombre}</strong>
     <span>Pedido #${pedido.numero || pedido.id} | ${cliente.telefono || "-"} | ${cliente.direccion || "-"}</span>
     <b>Saldo actual: ${formatearDinero(saldoActual)}</b>
@@ -2640,7 +2804,7 @@ async function registrarNotaCreditoDesdeFormulario(event) {
     itemPedido.cantidad =
       Math.max(0, (Number(itemPedido.cantidad) || 0) - itemCredito.cantidadCredito);
     itemPedido.subtotal =
-      Math.max(0, (Number(itemPedido.subtotal) || 0) - itemCredito.subtotal);
+      redondearDinero(Math.max(0, (Number(itemPedido.subtotal) || 0) - itemCredito.subtotal));
   });
 
   pedido.items =
@@ -2784,10 +2948,10 @@ function imprimirComprobantePagoCliente(codigoCliente, codigoPago) {
   const subtituloEmpresa =
     CONFIG.impresionSubtitulo || "Distribuidora";
 
-  ventana.document.write(`
+  ventana.document.write(html`
     <html>
       <head>
-        <title>Comprobante de cuenta ${escaparTextoHtml(pago.codigoPago)}</title>
+        <title>Comprobante de cuenta ${pago.codigoPago}</title>
         <style>
           body { font-family: Arial, sans-serif; color: #111827; margin: 24px; }
           .ticket { border: 1px solid #cbd5e1; padding: 18px; max-width: 360px; }
@@ -2801,19 +2965,19 @@ function imprimirComprobantePagoCliente(codigoCliente, codigoPago) {
       </head>
       <body>
         <div class="ticket">
-          <h1>${escaparTextoHtml(nombreEmpresa)}</h1>
-          <p class="muted">${escaparTextoHtml(subtituloEmpresa)}</p>
+          <h1>${nombreEmpresa}</h1>
+          <p class="muted">${subtituloEmpresa}</p>
           <h2>Comprobante de cuenta corriente</h2>
-          <p><strong>Nro:</strong> ${escaparTextoHtml(pago.codigoPago)}</p>
-          <p><strong>Fecha:</strong> ${escaparTextoHtml(pago.fecha)}</p>
-          <p><strong>Cliente:</strong> ${escaparTextoHtml(cliente.codigo)} - ${escaparTextoHtml(cliente.nombre)}</p>
-          <p><strong>Direccion:</strong> ${escaparTextoHtml(cliente.direccion || "-")}</p>
-          <p><strong>Detalle:</strong> ${escaparTextoHtml(pago.tipo || "Pago recibido")}</p>
+          <p><strong>Nro:</strong> ${pago.codigoPago}</p>
+          <p><strong>Fecha:</strong> ${pago.fecha}</p>
+          <p><strong>Cliente:</strong> ${cliente.codigo} - ${cliente.nombre}</p>
+          <p><strong>Direccion:</strong> ${cliente.direccion || "-"}</p>
+          <p><strong>Detalle:</strong> ${pago.tipo || "Pago recibido"}</p>
           ${typeof pago.saldoAnterior === "number"
-            ? `<p><strong>Saldo anterior:</strong> ${formatearDinero(pago.saldoAnterior)}</p>`
+            ? html`<p><strong>Saldo anterior:</strong> ${formatearDinero(pago.saldoAnterior)}</p>`
             : ""}
           ${typeof pago.saldoPosterior === "number"
-            ? `<p><strong>Saldo posterior:</strong> ${formatearDinero(pago.saldoPosterior)}</p>`
+            ? html`<p><strong>Saldo posterior:</strong> ${formatearDinero(pago.saldoPosterior)}</p>`
             : ""}
           <p class="total">Importe: ${formatearDinero(Math.abs(Number(pago.importe) || 0))}</p>
           <div class="firma">Firma / aclaracion</div>
@@ -2854,13 +3018,13 @@ function verHistorialCliente(codigo) {
   clienteEncontrado.historial.forEach(function (movimiento) {
     const accionPago =
       movimiento.codigoPago
-        ? `<button class="btn btn-secondary" onclick="imprimirComprobantePagoCliente(${clienteEncontrado.codigo}, ${movimiento.codigoPago})">Imprimir</button>`
+        ? html`<button class="btn btn-secondary" onclick="imprimirComprobantePagoCliente(${clienteEncontrado.codigo}, ${movimiento.codigoPago})">Imprimir</button>`
         : "-";
 
-    filasDeMovimientos += `
+    filasDeMovimientos += html`
       <tr>
-        <td>${escaparTextoHtml(movimiento.fecha)}</td>
-        <td>${escaparTextoHtml(movimiento.tipo)}</td>
+        <td>${movimiento.fecha}</td>
+        <td>${movimiento.tipo}</td>
         <td>${formatearDinero(movimiento.importe)}</td>
         <td>${accionPago}</td>
       </tr>
@@ -2868,12 +3032,12 @@ function verHistorialCliente(codigo) {
   });
 
   pedidosDelCliente.forEach(function (pedido) {
-    filasDePedidos += `
+    filasDePedidos += html`
       <tr>
-        <td>#${escaparTextoHtml(pedido.numero || pedido.id)}</td>
-        <td>${escaparTextoHtml(pedido.fecha)}</td>
+        <td>#${pedido.numero || pedido.id}</td>
+        <td>${pedido.fecha}</td>
         <td>${formatearDinero(pedido.total)}</td>
-        <td>${escaparTextoHtml(pedido.estado)}</td>
+        <td>${pedido.estado}</td>
         <td>
           <button class="btn btn-secondary" onclick="verDetallePedido(${pedido.id})">
             Ver
@@ -2901,11 +3065,11 @@ function verHistorialCliente(codigo) {
         ? "saldo-favor"
         : "saldo-ok";
 
-  dom.estadoCuentaContenido.innerHTML = `
+  dom.estadoCuentaContenido.innerHTML = html`
     <div class="estado-cliente">
       <div>
-        <h3>${escaparTextoHtml(clienteEncontrado.nombre)}</h3>
-        <p>${escaparTextoHtml(clienteEncontrado.direccion)}</p>
+        <h3>${clienteEncontrado.nombre}</h3>
+        <p>${clienteEncontrado.direccion}</p>
       </div>
 
       <div class="estado-saldo ${claseEstadoSaldo}">
@@ -2927,12 +3091,7 @@ function verHistorialCliente(codigo) {
       </thead>
 
       <tbody>
-        ${
-          filasDeMovimientos ||
-          `<tr>
-            <td colspan="4">Sin movimientos</td>
-          </tr>`
-        }
+        ${filasDeMovimientos ? crudo(filasDeMovimientos) : html`<tr> <td colspan="4">Sin movimientos</td> </tr>`}
       </tbody>
     </table>
 
@@ -2950,12 +3109,7 @@ function verHistorialCliente(codigo) {
       </thead>
 
       <tbody>
-        ${
-          filasDePedidos ||
-          `<tr>
-            <td colspan="5">Sin pedidos</td>
-          </tr>`
-        }
+        ${filasDePedidos ? crudo(filasDePedidos) : html`<tr> <td colspan="5">Sin pedidos</td> </tr>`}
       </tbody>
     </table>
   `;
@@ -3025,7 +3179,7 @@ async function registrarPago(codigo, importeDirecto) {
       cliente.saldo;
 
     const saldoDespuesDelPago =
-      cliente.saldo - importeAplicado;
+      redondearDinero(cliente.saldo - importeAplicado);
     const detalleSaldo =
       saldoDespuesDelPago > 0
         ? "Saldo pendiente: " + formatearDinero(saldoDespuesDelPago)
@@ -3065,23 +3219,54 @@ async function registrarPago(codigo, importeDirecto) {
     cliente.saldo =
       movimientoCuenta.saldoPosterior;
 
+    // El descuento del saldo lo hace Postgres con la fila del cliente
+    // bloqueada, asi dos cobranzas simultaneas (una en la oficina y otra en la
+    // calle desde el celular) se encolan en vez de pisarse. El codigo de pago
+    // ademas hace la operacion idempotente: si el celular reintenta por mala
+    // senal, el pago no se aplica dos veces.
+    const pagoOnline =
+      await registrarPagoClienteEnServidor(cliente, movimientoCuenta);
+
+    if (!pagoOnline.ok) {
+      cliente.saldo = saldoAntesDelPago;
+      alert(pagoOnline.mensaje);
+      return false;
+    }
+
+    if (pagoOnline.enServidor) {
+      if (pagoOnline.yaEstaba) {
+        cliente.saldo = pagoOnline.saldoCliente;
+        alert("Este pago ya estaba registrado. No se volvio a aplicar.");
+        renderizarClientes();
+        renderizarClientesConDeuda();
+        actualizarDashboard();
+        guardarClientes();
+        return false;
+      }
+
+      cliente.saldo = pagoOnline.saldoCliente;
+      movimientoCuenta.saldoPosterior = pagoOnline.saldoCliente;
+    }
+
     cliente.historial.push(movimientoCuenta);
     renderizarClientes();
     renderizarClientesConDeuda();
     actualizarDashboard();
     guardarClientes();
 
-    const clienteGuardadoOnline =
-      await guardarClienteOperacionSupabase(cliente);
-    const movimientoCuentaGuardadoOnline =
-      await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
+    if (!pagoOnline.enServidor) {
+      const clienteGuardadoOnline =
+        await guardarClienteOperacionSupabase(cliente);
+      const movimientoCuentaGuardadoOnline =
+        await guardarMovimientoCuentaOperacionSupabase(cliente, movimientoCuenta);
 
-    if (
-      clienteDebeConfirmarGuardadoOnline() &&
-      (!clienteGuardadoOnline || !movimientoCuentaGuardadoOnline)
-    ) {
-      avisarClienteSinConfirmacionOnline("El pago del cliente");
-      return false;
+      if (
+        clienteDebeConfirmarGuardadoOnline() &&
+        (!clienteGuardadoOnline || !movimientoCuentaGuardadoOnline)
+      ) {
+        avisarClienteSinConfirmacionOnline("El pago del cliente");
+        return false;
+      }
     }
 
     registrarAuditoria(
@@ -3095,7 +3280,7 @@ async function registrarPago(codigo, importeDirecto) {
     }
 
     if (dom.pagoClienteResultado) {
-      dom.pagoClienteResultado.innerHTML = `
+      dom.pagoClienteResultado.innerHTML = html`
         <strong>Pago registrado</strong>
         <span>${cliente.codigo} - ${cliente.nombre}</span>
         <b>Importe: ${formatearDinero(importeAplicado)}</b>

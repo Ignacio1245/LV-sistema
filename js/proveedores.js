@@ -106,7 +106,7 @@ function renderizarOpcionesProveedoresActivos() {
 
   dom.proveedoresActivosLista.innerHTML =
     proveedores.filter(proveedorActivo).map(function (proveedor) {
-      return `<option value="${proveedor.nombre}"></option>`;
+      return html`<option value="${proveedor.nombre}"></option>`;
     }).join("");
 }
 
@@ -165,7 +165,7 @@ function renderizarProveedores() {
   renderizarOpcionesProveedoresActivos();
 
   if (proveedoresFiltrados.length === 0) {
-    dom.proveedoresTable.innerHTML = `
+    dom.proveedoresTable.innerHTML = html`
       <tr>
         <td colspan="7" class="empty-table">
           No hay proveedores para mostrar.
@@ -181,12 +181,12 @@ function renderizarProveedores() {
       const estadoClase = proveedorActivo(proveedor) ? "stock-ok" : "stock-inactive";
       const accionEstado = proveedorActivo(proveedor) ? "Desactivar" : "Activar";
 
-      return `
+      return html`
         <tr>
-          <td>${escaparTextoHtml(proveedor.codigo)}</td>
-          <td>${escaparTextoHtml(proveedor.nombre)}</td>
-          <td>${escaparTextoHtml(proveedor.telefono || "-")}</td>
-          <td>${escaparTextoHtml(proveedor.contacto || "-")}</td>
+          <td>${proveedor.codigo}</td>
+          <td>${proveedor.nombre}</td>
+          <td>${proveedor.telefono || "-"}</td>
+          <td>${proveedor.contacto || "-"}</td>
           <td>${contarProductosPorProveedor(proveedor.nombre)}</td>
           <td>
             <span class="stock-pill ${estadoClase}">${estadoTexto}</span>
@@ -198,7 +198,7 @@ function renderizarProveedores() {
             <button class="btn btn-secondary" onclick="cambiarEstadoProveedor(${proveedor.codigo})">
               ${accionEstado}
             </button>
-            <button class="btn btn-danger" onclick="eliminarProveedor(${proveedor.codigo})">
+            <button class="btn btn-danger btn-eliminar" onclick="eliminarProveedor(${proveedor.codigo})">
               Eliminar
             </button>
           </td>
@@ -305,10 +305,10 @@ function actualizarVistaPagoProveedor() {
     return;
   }
 
-  dom.proveedorPagoPreview.innerHTML = `
-    <b>${escaparTextoHtml(proveedor.nombre)}</b><br>
+  dom.proveedorPagoPreview.innerHTML = html`
+    <b>${proveedor.nombre}</b><br>
     Importe a registrar: <b>${formatearDinero(importe)}</b><br>
-    Medio: ${escaparTextoHtml(medioPago)}
+    Medio: ${medioPago}
   `;
 }
 
@@ -367,9 +367,9 @@ async function registrarPagoProveedor(event) {
 
   dom.proveedorPagoForm.reset();
   actualizarVistaMedioPagoProveedor();
-  dom.proveedorPagoPreview.innerHTML = `
-    <strong>Pago registrado: ${escaparTextoHtml(pago.proveedor)}</strong>
-    <span>${escaparTextoHtml(pago.fecha)} | ${escaparTextoHtml(pago.medio)} | ${escaparTextoHtml(pago.comprobante)}</span>
+  dom.proveedorPagoPreview.innerHTML = html`
+    <strong>Pago registrado: ${pago.proveedor}</strong>
+    <span>${pago.fecha} | ${pago.medio} | ${pago.comprobante}</span>
     <b>${formatearDinero(pago.importe)}</b>
     <button class="secondary-button" type="button" onclick="imprimirComprobantePagoProveedor(${pago.codigo})">
       Imprimir comprobante
@@ -474,7 +474,7 @@ function renderizarPagosProveedores() {
   dom.proveedoresPagosProveedoresResumen.textContent = proveedoresPagados;
 
   if (pagos.length === 0) {
-    dom.proveedoresPagosTable.innerHTML = `
+    dom.proveedoresPagosTable.innerHTML = html`
       <tr>
         <td colspan="7" class="empty-table">No hay pagos de proveedores para mostrar.</td>
       </tr>
@@ -484,14 +484,14 @@ function renderizarPagosProveedores() {
 
   dom.proveedoresPagosTable.innerHTML =
     pagos.map(function (pago) {
-      return `
+      return html`
         <tr>
-          <td>${escaparTextoHtml(pago.fecha)}</td>
-          <td>${escaparTextoHtml(pago.proveedor)}</td>
-          <td>${escaparTextoHtml(pago.medio)}</td>
-          <td>${escaparTextoHtml(pago.comprobante || "-")}</td>
+          <td>${pago.fecha}</td>
+          <td>${pago.proveedor}</td>
+          <td>${pago.medio}</td>
+          <td>${pago.comprobante || "-"}</td>
           <td>${formatearDinero(pago.importe)}</td>
-          <td>${escaparTextoHtml(pago.observacion || "-")}</td>
+          <td>${pago.observacion || "-"}</td>
           <td>
             <button class="btn btn-secondary" onclick="imprimirComprobantePagoProveedor(${pago.codigo})">
               Imprimir
@@ -521,7 +521,7 @@ function imprimirComprobantePagoProveedor(codigoPago) {
     return;
   }
 
-  ventana.document.write(`
+  ventana.document.write(html`
     <html>
       <head>
         <title>Comprobante pago proveedor</title>
@@ -539,14 +539,14 @@ function imprimirComprobantePagoProveedor(codigoPago) {
       </head>
       <body>
         <div class="ticket">
-          <h1>${escaparTextoHtml(CONFIG.empresa || "LV Sistema")}</h1>
+          <h1>${CONFIG.empresa || "LV Sistema"}</h1>
           <h2>Comprobante de pago a proveedor</h2>
-          <div class="row"><span>Nro.</span><strong>${escaparTextoHtml(pago.codigo)}</strong></div>
-          <div class="row"><span>Fecha</span><strong>${escaparTextoHtml(pago.fecha)}</strong></div>
-          <div class="row"><span>Proveedor</span><strong>${escaparTextoHtml(pago.proveedor)}</strong></div>
-          <div class="row"><span>Medio</span><strong>${escaparTextoHtml(pago.medio)}</strong></div>
-          <div class="row"><span>Comprobante</span><strong>${escaparTextoHtml(pago.comprobante || "-")}</strong></div>
-          <div class="row"><span>Observacion</span><strong>${escaparTextoHtml(pago.observacion || "-")}</strong></div>
+          <div class="row"><span>Nro.</span><strong>${pago.codigo}</strong></div>
+          <div class="row"><span>Fecha</span><strong>${pago.fecha}</strong></div>
+          <div class="row"><span>Proveedor</span><strong>${pago.proveedor}</strong></div>
+          <div class="row"><span>Medio</span><strong>${pago.medio}</strong></div>
+          <div class="row"><span>Comprobante</span><strong>${pago.comprobante || "-"}</strong></div>
+          <div class="row"><span>Observacion</span><strong>${pago.observacion || "-"}</strong></div>
           <div class="row"><span>Total pagado</span><strong class="total">${formatearDinero(pago.importe)}</strong></div>
           <div class="firma">Firma y aclaracion proveedor</div>
         </div>
@@ -619,9 +619,15 @@ async function agregarProveedor(event) {
       return;
     }
 
+    if (typeof cerrarEditorCompacto === "function") {
+      cerrarEditorCompacto(true);
+    }
     limpiarFormularioProveedor();
     renderizarProveedores();
     renderizarProductos();
+    if (typeof mostrarAvisoPractico === "function") {
+      mostrarAvisoPractico("Proveedor actualizado correctamente.");
+    }
 
     registrarAuditoria(
       "Proveedores",
@@ -682,6 +688,13 @@ function editarProveedor(codigo) {
   dom.proveedorObservacionInput.value = proveedor.observacion || "";
   dom.proveedorSubmitButton.textContent = "Guardar proveedor";
   dom.cancelarEdicionProveedorButton.classList.remove("hidden");
+  if (typeof abrirEditorCompacto === "function") {
+    abrirEditorCompacto(dom.proveedorForm, {
+      titulo: "Editar proveedor",
+      subtitulo: proveedor.codigo + " · " + proveedor.nombre,
+      alCerrar: limpiarFormularioProveedor
+    });
+  }
   dom.proveedorNombreInput.focus();
 }
 

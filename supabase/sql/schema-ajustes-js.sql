@@ -48,16 +48,17 @@ alter table productos
   add column if not exists activo boolean not null default true,
   add column if not exists baja_automatica_stock boolean not null default false,
   add column if not exists imagen_url text not null default '',
-  add column if not exists mostrar_catalogo boolean not null default false;
+  add column if not exists mostrar_catalogo boolean not null default true;
 
 alter table productos
   alter column baja_automatica_stock set default false,
-  alter column mostrar_catalogo set default false;
+  alter column mostrar_catalogo set default true;
 
 alter table usuarios
   add column if not exists email text not null default '';
 
 alter table pedidos
+  add column if not exists origen text not null default 'administracion',
   add column if not exists vendedor text not null default 'Sin vendedor',
   add column if not exists zona text not null default 'Sin zona',
   add column if not exists estado_cobro text not null default '',

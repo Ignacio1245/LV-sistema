@@ -504,6 +504,8 @@ function validarPoliticasRlsProduccion(raizProyecto) {
     fs.readFileSync(rlsPath, "utf8");
   const reglasNecesarias = [
     ["clientes escritura ventas", /function public\.usuario_puede_escribir_cliente[\s\S]*usuario_tiene_permiso\('ventas'\)[\s\S]*texto_corresponde_usuario_vendedor/],
+    ["clientes sin vendedor compartidos", /function public\.usuario_puede_acceder_cliente[\s\S]*length\(trim\(coalesce\(vendedor_asignado, ''\)\)\) = 0[\s\S]*or public\.texto_corresponde_usuario_vendedor\(vendedor_asignado\)/],
+    ["clientes asignados protegidos al escribir", /function public\.usuario_puede_escribir_cliente[\s\S]*length\(trim\(coalesce\(vendedor_asignado, ''\)\)\) = 0[\s\S]*or public\.texto_corresponde_usuario_vendedor\(vendedor_asignado\)/],
     ["match vendedor no acepta vacios", /function public\.texto_corresponde_usuario_vendedor[\s\S]*length\(trim\(coalesce\(valor, ''\)\)\) > 0/],
     ["clientes lectura restringida vendedor", /clientes lectura permiso[\s\S]*usuario_puede_acceder_cliente\(vendedor_asignado\)/],
     ["vendedores lectura restringida vendedor", /vendedores lectura usuario activo[\s\S]*usuario_puede_acceder_vendedor\(nombre, email\)/],
@@ -1932,6 +1934,8 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     path.join(raizProyecto, "js", "database", "supabase-mappers.js");
   const sqlCatalogoPath =
     path.join(raizProyecto, "supabase", "sql", "catalogo-publico.sql");
+  const sqlCatalogoVendedorPath =
+    path.join(raizProyecto, "supabase", "sql", "catalogo-vendedor-enlace.sql");
   const vendedoresPath =
     path.join(raizProyecto, "js", "mobile", "vendedores-mobile.js");
   const catalogo =
@@ -1942,6 +1946,8 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     fs.readFileSync(mappersPath, "utf8");
   const sqlCatalogo =
     fs.readFileSync(sqlCatalogoPath, "utf8");
+  const sqlCatalogoVendedor =
+    fs.readFileSync(sqlCatalogoVendedorPath, "utf8");
   const vendedores =
     fs.readFileSync(vendedoresPath, "utf8");
   const errores = [];
@@ -1967,29 +1973,42 @@ function validarAccesosPublicosYMoviles(raizProyecto) {
     errores.push("catalogo-whatsapp.js debe usar la funcion publica segura de Supabase");
   }
 
-  if (!catalogo.includes("guardarPedidoCatalogoEnAdmin") ||
+  if (!catalogo.includes("procesarEnvioCatalogo") ||
       !catalogo.includes("crearPedidoCatalogoPublicoSupabase") ||
-      !repositorio.includes("crear_pedido_catalogo_publico") ||
+      !repositorio.includes("crear_pedido_catalogo_vendedor") ||
       !sqlCatalogo.includes("function public.crear_pedido_catalogo_publico") ||
-      !sqlCatalogo.includes("grant execute on function public.crear_pedido_catalogo_publico(jsonb) to anon") ||
+      !sqlCatalogoVendedor.includes("function public.crear_pedido_catalogo_vendedor") ||
+      !sqlCatalogoVendedor.includes("grant execute on function public.crear_pedido_catalogo_vendedor(jsonb) to anon") ||
       !sqlCatalogo.includes("insert into pedidos") ||
       !sqlCatalogo.includes("insert into pedido_items")) {
     errores.push("catalogo publico debe guardar pedidos pendientes en Supabase para que aparezcan en admin");
   }
 
-  if (!catalogo.includes("CLAVE_PEDIDOS_PENDIENTES_CATALOGO") ||
-      !catalogo.includes("function guardarPedidoPendienteCatalogoLocal") ||
-      !catalogo.includes("function sincronizarPedidosPendientesCatalogo") ||
-      !catalogo.includes("await sincronizarPedidosPendientesCatalogo();") ||
-      catalogo.includes("Queres abrir WhatsApp igual?")) {
-    errores.push("catalogo publico debe dejar pedido pendiente local si Supabase falla y sincronizarlo luego");
+  if (!catalogo.includes("referenciaVendedorCatalogoToken") ||
+      !catalogo.includes("obtenerEnlaceCatalogoVendedorSupabase") ||
+      !catalogo.includes("vendedor_token") ||
+      !vendedores.includes("crearEnlaceCatalogoVendedorSupabase") ||
+      !vendedores.includes('urlCatalogo.searchParams.set("ref"') ||
+      !sqlCatalogoVendedor.includes("catalogo_enlaces_vendedor") ||
+      !sqlCatalogoVendedor.includes("auth.jwt()") ||
+      !sqlCatalogoVendedor.includes("update pedidos set vendedor=enlace.nombre")) {
+    errores.push("catalogo compartido debe quedar asignado al vendedor autenticado y usar su WhatsApp");
   }
 
-  if (!catalogo.includes("let firmaUltimoPedidoCatalogoGuardado") ||
-      !catalogo.includes("firmaUltimoPedidoCatalogoGuardado = firma") ||
-      !catalogo.includes("firmaPedidoActual === firmaUltimoPedidoCatalogoGuardado") ||
-      !catalogo.includes("Este pedido ya estaba guardado. Abriendo WhatsApp")) {
-    errores.push("catalogo publico debe evitar doble envio exacto del mismo pedido");
+  if (!catalogo.includes("CLAVE_ENVIO_CATALOGO") ||
+      !catalogo.includes("function guardarEnvioCatalogo") ||
+      !catalogo.includes("function restaurarEnvioCatalogo") ||
+      !catalogo.includes("esRechazoDefinitivoCatalogo") ||
+      catalogo.includes("function guardarPedidoPendienteCatalogoLocal")) {
+    errores.push("catalogo debe conservar el ID de reintento sin reenviar pedidos legacy automaticamente");
+  }
+
+  if (!catalogo.includes("pedido.solicitud_id = crypto.randomUUID()") ||
+      !catalogo.includes("confirmarEnvioCatalogo") ||
+      !sqlCatalogo.includes("catalogo_solicitudes") ||
+      !sqlCatalogo.includes("pg_advisory_xact_lock") ||
+      !sqlCatalogo.includes("anterior.payload <> pedido")) {
+    errores.push("catalogo debe evitar duplicados en el servidor y detectar reintentos con contenido distinto");
   }
 
   if (!catalogo.includes("establecerCantidadCarrito") ||
@@ -2156,6 +2175,7 @@ validarImportarExportarRespaldo(raiz);
 validarSqlSupabaseIdempotente(raiz);
 validarProteccionContraPerdidaDatos(raiz);
 validarAccesosPublicosYMoviles(raiz);
+childProcess.execFileSync(process.execPath, [path.join(raiz, "tools/probar-catalogo-envios.cjs")], { stdio: "pipe" });
 
 console.log("Sistema verificado OK");
 console.log("HTML revisados: " + archivosHtml.length);

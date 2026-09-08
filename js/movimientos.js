@@ -90,18 +90,18 @@ function renderizarMovimientosGenerales() {
     movimientosAccionesResumen.innerHTML =
       acciones.length > 0
         ? acciones.map(function (accion) {
-          return `
+          return html`
             <div class="report-row">
               <span>${accion.accion}</span>
               <strong>${accion.movimientos} mov. | ${accion.unidades} unidades</strong>
             </div>
           `;
         }).join("")
-        : `<div class="empty-table">Sin acciones para mostrar.</div>`;
+        : html`<div class="empty-table">Sin acciones para mostrar.</div>`;
   }
 
   if (movimientos.length === 0) {
-    dom.movimientosGeneralesTable.innerHTML = `
+    dom.movimientosGeneralesTable.innerHTML = html`
       <tr>
         <td colspan="7" class="empty-table">
           No hay movimientos para mostrar.
@@ -119,7 +119,7 @@ function renderizarMovimientosGenerales() {
       const cantidadClase =
         movimiento.cantidad >= 0 ? "movement-positive" : "movement-negative";
 
-      return `
+      return html`
         <tr>
           <td>${movimiento.fecha}</td>
           <td>${movimiento.productoCodigo}</td>
@@ -175,7 +175,7 @@ function renderizarAlertasStock() {
   renderizarReposicionSugeridaStock(productosAlerta);
 
   if (productosAlerta.length === 0) {
-    dom.stockAlertasTable.innerHTML = `
+    dom.stockAlertasTable.innerHTML = html`
       <tr>
         <td colspan="6" class="empty-table">No hay alertas de stock.</td>
       </tr>
@@ -188,7 +188,7 @@ function renderizarAlertasStock() {
       const estado =
         obtenerEstadoStockProducto(producto);
 
-      return `
+      return html`
         <tr>
           <td>${producto.codigo}</td>
           <td><strong>${producto.nombre}</strong></td>
@@ -274,7 +274,7 @@ function renderizarReposicionSugeridaStock(productosAlerta) {
   dom.stockReposicionSugeridaResumen.innerHTML =
     proveedores.length > 0
       ? proveedores.map(function (proveedor) {
-        return `
+        return html`
           <div class="report-row">
             <span>
               ${proveedor.proveedor}
@@ -284,7 +284,7 @@ function renderizarReposicionSugeridaStock(productosAlerta) {
           </div>
         `;
       }).join("")
-      : `<div class="empty-table">No hay reposicion sugerida.</div>`;
+      : html`<div class="empty-table">No hay reposicion sugerida.</div>`;
 }
 
 function renderizarStockValorizado() {
@@ -338,12 +338,12 @@ function renderizarStockValorizado() {
   dom.stockValorizadoRubrosResumen.innerHTML =
     rubrosResumen.length > 0
       ? rubrosResumen.map(function (item) {
-        return `
+        return html`
           <div class="report-row">
             <span>${item.rubro} <small>${item.productos} productos | ${item.unidades} unidades</small></span>
             <strong>${formatearDinero(item.valorCompra)} compra</strong>
           </div>
         `;
       }).join("")
-      : `<div class="empty-table">No hay productos para valorizar.</div>`;
+      : html`<div class="empty-table">No hay productos para valorizar.</div>`;
 }

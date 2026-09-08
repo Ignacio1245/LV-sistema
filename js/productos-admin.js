@@ -13,7 +13,10 @@ function renderizarEncabezadoProductos() {
     const vista =
         obtenerVistaProductosActual();
     const columnasPorVista = {
-        descripcion: ["Codigo", "Descripcion", "Rubro", "Estado", "Acciones"],
+        // La vista por defecto no mostraba ni precio ni stock, que son
+        // justamente los dos datos que mas se miran de un producto: habia que
+        // cambiar el selector de vista para poder verlos.
+        descripcion: ["Codigo", "Descripcion", "Rubro", "Precio", "Stock", "Estado", "Acciones"],
         precio: ["Codigo", "Producto", "Lista 1", "Listas", "Compra", "Acciones"],
         stock: ["Codigo", "Producto", "Stock", "Minimo", "Estado", "Acciones"],
         stock_valorizado: ["Codigo", "Producto", "Stock", "Precio", "Valor stock", "Acciones"],
@@ -24,19 +27,17 @@ function renderizarEncabezadoProductos() {
     const columnas =
         columnasPorVista[vista] || columnasPorVista.descripcion;
 
-    dom.productosTableHead.innerHTML =
-        "<tr>" +
-        columnas.map(function (columna) {
-            return "<th>" + columna + "</th>";
-        }).join("") +
-        "</tr>";
+    dom.productosTableHead.innerHTML = html`
+        <tr>${columnas.map(function (columna) {
+            return html`<th>${columna}</th>`;
+        })}</tr>`;
 }
 
 function obtenerBotonesAccionProducto(producto, accionEstado) {
-    return `
+    return html`
         <button class="btn btn-secondary" onclick="editarProducto(${producto.codigo})">Editar</button>
         <button class="btn btn-secondary" onclick="cambiarEstadoProducto(${producto.codigo})">${accionEstado}</button>
-        <button class="btn btn-danger" onclick="eliminarProducto(${producto.codigo})">Eliminar</button>
+        <button class="btn btn-danger btn-eliminar" onclick="eliminarProducto(${producto.codigo})">Eliminar</button>
     `;
 }
 
@@ -209,9 +210,9 @@ function renderizarOpcionesListasPreciosClientes() {
         obtenerNombresListasPreciosActivas();
 
     dom.clientListaPreciosInput.innerHTML =
-        `<option value="">Seleccionar lista</option>` +
+        html`<option value="">Seleccionar lista</option>` +
         listasActivas.map(function (lista) {
-            return `<option value="${lista}">${lista}</option>`;
+            return html`<option value="${lista}">${lista}</option>`;
         }).join("");
 
     dom.clientListaPreciosInput.value =
@@ -256,14 +257,14 @@ function renderizarOpcionesGeneradorListasPrecios() {
         rubrosDisponibles.map(function (rubro) {
             const seleccionado =
                 rubrosSeleccionados.includes(rubro) ? " selected" : "";
-            return `<option value="${escaparTextoHtml(rubro)}"${seleccionado}>${escaparTextoHtml(rubro)}</option>`;
+            return html`<option value="${rubro}"${crudo(seleccionado)}>${rubro}</option>`;
         }).join("");
 
     dom.listaPreciosGeneradorMarcas.innerHTML =
         marcasDisponibles.map(function (marca) {
             const seleccionado =
                 marcasSeleccionadas.includes(marca) ? " selected" : "";
-            return `<option value="${escaparTextoHtml(marca)}"${seleccionado}>${escaparTextoHtml(marca)}</option>`;
+            return html`<option value="${marca}"${crudo(seleccionado)}>${marca}</option>`;
         }).join("");
 
     dom.listaPreciosGeneradorListas.innerHTML =
@@ -272,7 +273,7 @@ function renderizarOpcionesGeneradorListasPrecios() {
                 listasSeleccionadas.includes(lista) || (listasSeleccionadas.length === 0 && lista === listasDisponibles[0])
                     ? " selected"
                     : "";
-            return `<option value="${escaparTextoHtml(lista)}"${seleccionado}>${escaparTextoHtml(lista)}</option>`;
+            return html`<option value="${lista}"${crudo(seleccionado)}>${lista}</option>`;
         }).join("");
 }
 
@@ -284,7 +285,7 @@ function renderizarListasPrecios() {
     renderizarOpcionesGeneradorListasPrecios();
 
     if (listasPrecios.length === 0) {
-        dom.listasPreciosTable.innerHTML = `
+        dom.listasPreciosTable.innerHTML = html`
             <tr>
                 <td colspan="6" class="empty-table">Todavia no hay listas de precios creadas.</td>
             </tr>
@@ -303,7 +304,7 @@ function renderizarListasPrecios() {
             const accion =
                 listaPrecioActiva(lista) ? "Desactivar" : "Activar";
 
-            return `
+            return html`
                 <tr>
                     <td>${lista.codigo}</td>
                     <td><strong>${lista.nombre}</strong></td>
@@ -383,20 +384,20 @@ function generarListaPrecios() {
             };
         });
 
-    dom.listaPreciosGeneradaHead.innerHTML = `
+    dom.listaPreciosGeneradaHead.innerHTML = html`
         <tr>
             <th>Codigo</th>
             <th>Producto</th>
             <th>Rubro</th>
             <th>Marca</th>
             ${listas.map(function (lista) {
-                return `<th>${escaparTextoHtml(lista)}</th>`;
+                return html`<th>${lista}</th>`;
             }).join("")}
         </tr>
     `;
 
     if (listaPreciosGeneradaActual.length === 0) {
-        dom.listaPreciosGeneradaBody.innerHTML = `
+        dom.listaPreciosGeneradaBody.innerHTML = html`
             <tr>
                 <td colspan="${4 + listas.length}" class="empty-table">Sin productos para esa seleccion.</td>
             </tr>
@@ -409,14 +410,14 @@ function generarListaPrecios() {
             const producto =
                 fila.producto;
 
-            return `
+            return html`
                 <tr>
-                    <td>${escaparTextoHtml(producto.codigo)}</td>
-                    <td>${escaparTextoHtml(producto.nombre)}</td>
-                    <td>${escaparTextoHtml(producto.rubro || "Sin rubro")}</td>
-                    <td>${escaparTextoHtml(producto.marca || producto.proveedor || "-")}</td>
+                    <td>${producto.codigo}</td>
+                    <td>${producto.nombre}</td>
+                    <td>${producto.rubro || "Sin rubro"}</td>
+                    <td>${producto.marca || producto.proveedor || "-"}</td>
                     ${listas.map(function (lista) {
-                        return `<td>${formatearDinero(obtenerPrecioProductoPorLista(producto, lista))}</td>`;
+                        return html`<td>${formatearDinero(obtenerPrecioProductoPorLista(producto, lista))}</td>`;
                     }).join("")}
                 </tr>
             `;
@@ -484,14 +485,14 @@ function imprimirListaPreciosGenerada() {
             const producto =
                 fila.producto;
 
-            return `
+            return html`
                 <tr>
-                    <td>${escaparTextoHtml(producto.codigo)}</td>
-                    <td>${escaparTextoHtml(producto.nombre)}</td>
-                    <td>${escaparTextoHtml(producto.rubro || "Sin rubro")}</td>
-                    <td>${escaparTextoHtml(producto.marca || producto.proveedor || "-")}</td>
+                    <td>${producto.codigo}</td>
+                    <td>${producto.nombre}</td>
+                    <td>${producto.rubro || "Sin rubro"}</td>
+                    <td>${producto.marca || producto.proveedor || "-"}</td>
                     ${listas.map(function (lista) {
-                        return `<td>${formatearDinero(obtenerPrecioProductoPorLista(producto, lista))}</td>`;
+                        return html`<td>${formatearDinero(obtenerPrecioProductoPorLista(producto, lista))}</td>`;
                     }).join("")}
                 </tr>
             `;
@@ -504,7 +505,7 @@ function imprimirListaPreciosGenerada() {
         return;
     }
 
-    ventana.document.write(`
+    ventana.document.write(html`
         <!DOCTYPE html>
         <html lang="es">
         <head>
@@ -519,7 +520,7 @@ function imprimirListaPreciosGenerada() {
             </style>
         </head>
         <body>
-            <h1>${escaparTextoHtml(CONFIG.empresa || "Lista de precios")}</h1>
+            <h1>${CONFIG.empresa || "Lista de precios"}</h1>
             <table>
                 <thead>
                     <tr>
@@ -528,7 +529,7 @@ function imprimirListaPreciosGenerada() {
                         <th>Rubro</th>
                         <th>Marca</th>
                         ${listas.map(function (lista) {
-                            return `<th>${escaparTextoHtml(lista)}</th>`;
+                            return html`<th>${lista}</th>`;
                         }).join("")}
                     </tr>
                 </thead>
@@ -880,21 +881,21 @@ function renderizarOpcionesPanelPrecios() {
         }))].sort();
 
     dom.priceUpdateRubroInput.innerHTML =
-        `<option value="TODOS">Todos los rubros</option>` +
+        html`<option value="TODOS">Todos los rubros</option>` +
         rubrosDisponibles.map(function (rubro) {
-            return `<option value="${rubro}">${rubro}</option>`;
+            return html`<option value="${rubro}">${rubro}</option>`;
         }).join("");
 
     dom.priceUpdateProveedorInput.innerHTML =
-        `<option value="TODOS">Todos los proveedores</option>` +
+        html`<option value="TODOS">Todos los proveedores</option>` +
         proveedoresDisponibles.map(function (proveedor) {
-            return `<option value="${proveedor}">${proveedor}</option>`;
+            return html`<option value="${proveedor}">${proveedor}</option>`;
         }).join("");
 
     dom.priceUpdateListaInput.innerHTML =
-        `<option value="TODAS">Todas las listas</option>` +
+        html`<option value="TODAS">Todas las listas</option>` +
         listasActivas.map(function (lista) {
-            return `<option value="${lista}">${lista}</option>`;
+            return html`<option value="${lista}">${lista}</option>`;
         }).join("");
 
     dom.priceUpdateRubroInput.value =
@@ -925,12 +926,12 @@ function actualizarVistaActualizacionPrecios() {
         return;
     }
 
-    dom.priceUpdatePreview.innerHTML =
-        "<strong>" + productosFiltrados.length + " productos</strong>" +
-        "<span>" + listas.join(", ") + " | Porcentaje: " + porcentaje + "%</span>" +
-        (listas.includes("Lista 1")
-            ? "<small>Las listas que heredan Lista 1 acompanian el cambio.</small>"
-            : "");
+    dom.priceUpdatePreview.innerHTML = html`
+        <strong>${productosFiltrados.length} productos</strong>
+        <span>${listas.join(", ")} | Porcentaje: ${porcentaje}%</span>
+        ${listas.includes("Lista 1")
+            ? html`<small>Las listas que heredan Lista 1 acompanian el cambio.</small>`
+            : ""}`;
 }
 
 function renderizarHistorialPreciosProductos() {
@@ -960,7 +961,7 @@ function renderizarHistorialPreciosProductos() {
     movimientosPrecios.reverse();
 
     if (movimientosPrecios.length === 0) {
-        dom.priceHistoryTable.innerHTML = `
+        dom.priceHistoryTable.innerHTML = html`
             <tr>
                 <td colspan="6" class="empty-table">Todavia no hay cambios de precios registrados.</td>
             </tr>
@@ -970,7 +971,7 @@ function renderizarHistorialPreciosProductos() {
 
     dom.priceHistoryTable.innerHTML =
         movimientosPrecios.slice(0, 80).map(function (movimiento) {
-            return `
+            return html`
                 <tr>
                     <td>${movimiento.fecha}</td>
                     <td>${movimiento.producto}</td>
@@ -1446,6 +1447,12 @@ function limpiarFormularioProducto() {
     dom.productSubmitButton.textContent = "Agregar producto";
     completarSiguienteCodigoProducto();
     actualizarVistaStockProductoFormulario();
+    if (
+        typeof cerrarEditorCompacto === "function" &&
+        dom.productForm.classList.contains("editor-compacto-activo")
+    ) {
+        cerrarEditorCompacto(true);
+    }
 }
 
 function obtenerDatosStockFormularioProducto() {
@@ -1744,6 +1751,9 @@ async function agregarProducto(event) {
             "Edito producto",
             codigoEditado + " - " + nombre
         );
+        if (typeof mostrarAvisoPractico === "function") {
+            mostrarAvisoPractico("Producto actualizado correctamente.");
+        }
 
         return;
     }
@@ -1786,6 +1796,7 @@ async function agregarProducto(event) {
         bonificacionVenta: bonificacionVenta,
         proveedor: proveedor,
         proveedorAlternativo: proveedorAlternativo,
+        mostrarCatalogo: true,
         activo: true,
         movimientosStock: [],
         historialPrecios: [
@@ -2001,10 +2012,10 @@ function renderizarPrevisualizacionImportacionProductos(analisis) {
         }).join("");
     const duplicados =
         analisis.codigosDuplicados.length > 0
-            ? `<div class="import-preview-warning">Codigos duplicados en el CSV: ${escaparTextoHtml(analisis.codigosDuplicados.slice(0, 12).join(", "))}. La importacion queda bloqueada hasta corregirlos.</div>`
+            ? html`<div class="import-preview-warning">Codigos duplicados en el CSV: ${analisis.codigosDuplicados.slice(0, 12).join(", ")}. La importacion queda bloqueada hasta corregirlos.</div>`
             : "";
 
-    dom.productosImportacionPreview.innerHTML = `
+    dom.productosImportacionPreview.innerHTML = html`
         <h4>Previsualizacion de productos</h4>
         <div class="import-preview-grid">
             <span>Total filas<strong>${analisis.totalFilas}</strong></span>
@@ -2019,7 +2030,7 @@ function renderizarPrevisualizacionImportacionProductos(analisis) {
             <strong>${columnas || "Sin columnas"}</strong>
         </div>
         ${duplicados}
-        ${errores ? `<ul class="import-preview-list">${errores}</ul>` : ""}
+        ${errores ? html`<ul class="import-preview-list">${errores}</ul>` : ""}
         <ul class="import-preview-list">${ejemplos}</ul>
     `;
     dom.productosImportacionPreview.classList.remove("hidden");
@@ -3278,7 +3289,6 @@ function editarProducto(codigo) {
     }
 
     productoEditando = producto;
-    mostrarSeccionProducto("alta");
 
     dom.productCodeInput.value = producto.codigo;
     dom.productBarcodeInput.value = producto.codigoReal || "";
@@ -3322,6 +3332,15 @@ function editarProducto(codigo) {
     dom.productCodeInput.disabled = true;
     dom.productSubmitButton.textContent = "Guardar cambios";
     actualizarVistaStockProductoFormulario();
+    if (typeof abrirEditorCompacto === "function") {
+        abrirEditorCompacto(dom.productForm, {
+            titulo: "Editar producto",
+            subtitulo: producto.codigo + " · " + producto.nombre,
+            alCerrar: limpiarFormularioProducto
+        });
+    } else {
+        mostrarSeccionProducto("alta");
+    }
     dom.productNameInput.focus();
 }
 
@@ -3536,7 +3555,7 @@ function renderizarProductos() {
             dom.productosPaginacion.classList.add("hidden");
         }
 
-        dom.productsTable.innerHTML = `
+        dom.productsTable.innerHTML = html`
       <tr>
         <td colspan="9" class="empty-table">
           No hay productos para mostrar.
@@ -3603,14 +3622,14 @@ function renderizarProductos() {
         const acciones =
             obtenerBotonesAccionProducto(producto, accionEstado);
         const estado =
-            `<span class="stock-pill ${estadoStock.clase}">${estadoStock.texto}</span>`;
+            html`<span class="stock-pill ${estadoStock.clase}">${estadoStock.texto}</span>`;
         const productoNombre =
-            `<strong>${producto.nombre}</strong><small>${producto.codigoReal || producto.marca || "-"}</small>`;
+            html`<strong>${producto.nombre}</strong><small>${producto.codigoReal || producto.marca || "-"}</small>`;
         const valorStock =
             formatearDinero((Number(producto.precio) || 0) * obtenerStockTotalProducto(producto));
 
         if (vista === "precio") {
-            row.innerHTML = `
+            row.innerHTML = html`
               <td>${producto.codigo}</td>
               <td>${productoNombre}</td>
               <td>${formatearDinero(producto.precio)}</td>
@@ -3619,7 +3638,7 @@ function renderizarProductos() {
               <td>${acciones}</td>
             `;
         } else if (vista === "stock") {
-            row.innerHTML = `
+            row.innerHTML = html`
               <td>${producto.codigo}</td>
               <td>${productoNombre}</td>
               <td>${formatearStockProducto(producto)}</td>
@@ -3628,7 +3647,7 @@ function renderizarProductos() {
               <td>${acciones}</td>
             `;
         } else if (vista === "stock_valorizado") {
-            row.innerHTML = `
+            row.innerHTML = html`
               <td>${producto.codigo}</td>
               <td>${productoNombre}</td>
               <td>${formatearStockProducto(producto)}</td>
@@ -3637,7 +3656,7 @@ function renderizarProductos() {
               <td>${acciones}</td>
             `;
         } else if (vista === "margenes") {
-            row.innerHTML = `
+            row.innerHTML = html`
               <td>${producto.codigo}</td>
               <td>${productoNombre}</td>
               <td>${formatearDinero(producto.precioCompra || 0)}</td>
@@ -3649,15 +3668,15 @@ function renderizarProductos() {
             const problemasPrecio =
                 obtenerProblemasPrecioProducto(producto).join(" | ") || "Sin problemas";
 
-            row.innerHTML = `
+            row.innerHTML = html`
               <td>${producto.codigo}</td>
               <td>${productoNombre}</td>
-              <td><small>${escaparTextoHtml(problemasPrecio)}</small></td>
+              <td><small>${problemasPrecio}</small></td>
               <td>${formatearDinero(producto.precio)}<br><small>Compra: ${formatearDinero(producto.precioCompra || 0)}</small></td>
               <td>${acciones}</td>
             `;
         } else if (vista === "proveedores") {
-            row.innerHTML = `
+            row.innerHTML = html`
               <td>${producto.codigo}</td>
               <td>${productoNombre}</td>
               <td>${producto.proveedor || "Sin proveedor"}</td>
@@ -3666,10 +3685,12 @@ function renderizarProductos() {
               <td>${acciones}</td>
             `;
         } else {
-            row.innerHTML = `
+            row.innerHTML = html`
               <td>${producto.codigo}</td>
               <td>${productoNombre}</td>
-              <td>${producto.rubro || "Sin rubro"}<br><small>${producto.tipo || "-"}</small></td>
+              <td>${producto.rubro || "Sin rubro"}${producto.tipo ? html`<br><small>${producto.tipo}</small>` : ""}</td>
+              <td class="money-cell">${formatearDinero(producto.precio)}</td>
+              <td>${formatearStockProducto(producto)}</td>
               <td>${estado}</td>
               <td>${acciones}</td>
             `;
@@ -3723,7 +3744,7 @@ function renderizarOpcionesProductosStock() {
             const codigoReal =
                 producto.codigoReal ? " | " + producto.codigoReal : "";
 
-            return `<option value="${producto.codigo} - ${producto.nombre}${codigoReal}"></option>`;
+            return html`<option value="${producto.codigo} - ${producto.nombre}${codigoReal}"></option>`;
         }).join("");
 }
 
@@ -3795,12 +3816,10 @@ function actualizarVistaMovimientoStock() {
     const stockFinal =
         calcularStockFinalMovimiento(producto, tipoMovimiento, cantidad);
 
-    dom.stockMovementPreview.innerHTML =
-        "<strong>" + producto.codigo + " - " + producto.nombre + "</strong>" +
-        "<span>Stock actual: " + formatearStockProducto(producto) + " | Stock final: " +
-        (productoEsPeso(producto) ? stockFinal.toLocaleString("es-AR", { maximumFractionDigits: 3 }) : stockFinal) +
-        "</span>" +
-        "<span>Estado actual: " + obtenerEstadoStockProducto(producto).texto + "</span>";
+    dom.stockMovementPreview.innerHTML = html`
+        <strong>${producto.codigo} - ${producto.nombre}</strong>
+        <span>Stock actual: ${formatearStockProducto(producto)} | Stock final: ${productoEsPeso(producto) ? stockFinal.toLocaleString("es-AR", { maximumFractionDigits: 3 }) : stockFinal}</span>
+        <span>Estado actual: ${obtenerEstadoStockProducto(producto).texto}</span>`;
 }
 
 function actualizarVistaScannerStock() {
@@ -3815,10 +3834,9 @@ function actualizarVistaScannerStock() {
         return;
     }
 
-    dom.stockScannerResult.innerHTML =
-        "<strong>" + producto.codigo + " - " + producto.nombre + "</strong>" +
-        "<span>Stock: " + formatearStockProducto(producto) + " | Minimo: " + obtenerStockMinimoProducto(producto) +
-        " | Estado: " + obtenerEstadoStockProducto(producto).texto + "</span>";
+    dom.stockScannerResult.innerHTML = html`
+        <strong>${producto.codigo} - ${producto.nombre}</strong>
+        <span>Stock: ${formatearStockProducto(producto)} | Minimo: ${obtenerStockMinimoProducto(producto)} | Estado: ${obtenerEstadoStockProducto(producto).texto}</span>`;
 }
 
 function renderizarMovimientosProductos() {
@@ -3857,7 +3875,7 @@ function renderizarMovimientosProductos() {
         movimientos.length > 0 ? movimientos[0].fecha : "-";
 
     if (movimientos.length === 0) {
-        dom.movimientosProductosTable.innerHTML = `
+        dom.movimientosProductosTable.innerHTML = html`
       <tr>
         <td colspan="7" class="empty-table">
           No hay movimientos para mostrar.
@@ -3872,7 +3890,7 @@ function renderizarMovimientosProductos() {
             const pedidoTexto =
                 movimiento.pedido ? "#" + movimiento.pedido : "-";
 
-            return `
+            return html`
       <tr>
         <td>${movimiento.fecha}${movimiento.hora ? " " + movimiento.hora : ""}</td>
         <td>${movimiento.productoCodigo}</td>
@@ -3884,6 +3902,50 @@ function renderizarMovimientosProductos() {
       </tr>
     `;
         }).join("");
+}
+
+// Pide el historial completo del producto a Supabase y vuelve a dibujar el
+// detalle cuando llega. Si no hay sesion online, o falta desplegar el SQL, se
+// muestran los movimientos que ya venian en la fila del producto.
+async function completarHistorialStockProductoDesdeSupabase(producto) {
+    if (!producto ||
+        !producto.idSupabase ||
+        typeof obtenerMovimientosStockProductoSupabase !== "function" ||
+        typeof puedeGuardarOperacionEnSupabase !== "function" ||
+        !puedeGuardarOperacionEnSupabase()) {
+        return;
+    }
+
+    try {
+        const movimientos =
+            await obtenerMovimientosStockProductoSupabase(producto.idSupabase, 500);
+
+        if (!Array.isArray(movimientos) || movimientos.length === 0) {
+            return;
+        }
+
+        // Llegan del mas nuevo al mas viejo; el panel los muestra en el orden
+        // en que ocurrieron, igual que el array de la fila.
+        producto.movimientosStockCompletos =
+            movimientos.slice().reverse();
+
+        if (dom.movimientosStockModal &&
+            !dom.movimientosStockModal.classList.contains("hidden")) {
+            dibujarMovimientosStockProducto(producto, producto.movimientosStockCompletos);
+        }
+    } catch (error) {
+        if (typeof esErrorFuncionSupabaseFaltante === "function" &&
+            esErrorFuncionSupabaseFaltante(error)) {
+            console.warn(
+                "Falta desplegar obtener_movimientos_stock_producto en Supabase. " +
+                "Se muestran los movimientos guardados en el producto.",
+                error
+            );
+            return;
+        }
+
+        console.warn("No se pudo leer el historial de stock del producto:", error);
+    }
 }
 
 function verMovimientosStock(codigo) {
@@ -3904,9 +3966,27 @@ function verMovimientosStock(codigo) {
     dom.movimientosStockTitulo.textContent =
         "Movimientos: " + producto.codigo + " - " + producto.nombre;
 
+    dibujarMovimientosStockProducto(
+        producto,
+        producto.movimientosStockCompletos || producto.movimientosStock
+    );
+
+    dom.movimientosStockModal.classList.remove("hidden");
+
+    // La fila del producto solo trae los ultimos movimientos. El historial
+    // completo esta en la tabla movimientos_stock y se pide recien al abrir
+    // este detalle, para no bajarlo entero en cada inicio de sesion. Cuando
+    // llega, se vuelve a dibujar la tabla.
+    completarHistorialStockProductoDesdeSupabase(producto);
+}
+
+function dibujarMovimientosStockProducto(producto, movimientosAMostrar) {
+    const movimientos =
+        Array.isArray(movimientosAMostrar) ? movimientosAMostrar : [];
+
     const filas =
-        producto.movimientosStock.map(function (movimiento) {
-            return `
+        movimientos.map(function (movimiento) {
+            return html`
       <tr>
         <td>${movimiento.fecha}${movimiento.hora ? " " + movimiento.hora : ""}</td>
         <td>${movimiento.tipo}<br><small>${movimiento.motivo || "-"}</small></td>
@@ -3917,7 +3997,7 @@ function verMovimientosStock(codigo) {
     `;
         }).join("");
 
-    dom.movimientosStockContenido.innerHTML = `
+    dom.movimientosStockContenido.innerHTML = html`
     <div class="estado-cliente">
       <div>
         <h3>${producto.nombre}</h3>
@@ -3939,12 +4019,10 @@ function verMovimientosStock(codigo) {
         </tr>
       </thead>
       <tbody>
-        ${filas || `<tr><td colspan="5">Sin movimientos registrados</td></tr>`}
+        ${filas ? crudo(filas) : html`<tr><td colspan="5">Sin movimientos registrados</td></tr>`}
       </tbody>
     </table>
   `;
-
-    dom.movimientosStockModal.classList.remove("hidden");
 }
 
 function buscarProductoDesdeScannerStock() {
@@ -3974,10 +4052,9 @@ function buscarProductoDesdeScannerStock() {
         String(producto.codigo);
     dom.stockProductInput.value =
         producto.codigo + " - " + producto.nombre;
-    dom.stockScannerResult.innerHTML =
-        "<strong>" + producto.codigo + " - " + producto.nombre + "</strong>" +
-        "<span>Stock actual: " + formatearStockProducto(producto) + " | Estado: " +
-        obtenerEstadoStockProducto(producto).texto + "</span>";
+    dom.stockScannerResult.innerHTML = html`
+        <strong>${producto.codigo} - ${producto.nombre}</strong>
+        <span>Stock actual: ${formatearStockProducto(producto)} | Estado: ${obtenerEstadoStockProducto(producto).texto}</span>`;
 
     actualizarVistaMovimientoStock();
     renderizarMovimientosProductos();
@@ -4142,10 +4219,9 @@ async function registrarMovimientoRapidoStock(tipoMovimiento) {
     dom.stockMovementNoteInput.value = "";
     dom.stockQuickQuantityInput.value = "";
     dom.stockQuickNoteInput.value = "";
-    dom.stockScannerResult.innerHTML =
-        "<strong>Movimiento registrado</strong>" +
-        "<span>" + producto.codigo + " - " + producto.nombre +
-        " | Stock actual: " + formatearStockProducto(producto) + "</span>";
+    dom.stockScannerResult.innerHTML = html`
+        <strong>Movimiento registrado</strong>
+        <span>${producto.codigo} - ${producto.nombre} | Stock actual: ${formatearStockProducto(producto)}</span>`;
     actualizarVistaMovimientoStock();
     dom.stockScannerInput.focus();
 }
@@ -4176,8 +4252,12 @@ async function cambiarEstadoProducto(codigo) {
         return;
     }
 
+    const mostrarCatalogoAnterior = producto.mostrarCatalogo;
     producto.activo = !productoActivo(producto);
     producto.bajaAutomaticaStock = false;
+    if (productoActivo(producto)) {
+        producto.mostrarCatalogo = true;
+    }
 
     if (!productoActivo(producto)) {
         pedidoActual.items =
@@ -4207,6 +4287,7 @@ async function cambiarEstadoProducto(codigo) {
 
     if (!productoConfirmadoOnline) {
         producto.activo = !productoActivo(producto);
+        producto.mostrarCatalogo = mostrarCatalogoAnterior;
         guardarProductos();
         renderizarProductos();
         renderizarPedidoActual();

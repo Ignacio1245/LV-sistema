@@ -23,7 +23,7 @@ function renderizarOpcionesProductosCompra() {
 
   dom.productosCompraLista.innerHTML =
     productos.filter(productoActivo).map(function (producto) {
-      return `<option value="${producto.codigo} - ${producto.nombre}"></option>`;
+      return html`<option value="${producto.codigo} - ${producto.nombre}"></option>`;
     }).join("");
 }
 
@@ -45,7 +45,7 @@ function actualizarVistaCompra() {
     dom.compraProveedorInput.value = producto.proveedor || "Sin proveedor";
   }
 
-  dom.compraPreview.innerHTML = `
+  dom.compraPreview.innerHTML = html`
     <strong>${producto.codigo} - ${producto.nombre}</strong>
     <span>Stock actual: ${formatearStockProducto(producto)}</span>
     <b>Proveedor: ${producto.proveedor || "Sin proveedor"}</b>
@@ -214,7 +214,7 @@ function renderizarCompras() {
   dom.comprasValorResumen.textContent = formatearDinero(valor);
 
   if (comprasFiltradas.length === 0) {
-    dom.comprasTable.innerHTML = `
+    dom.comprasTable.innerHTML = html`
       <tr>
         <td colspan="9" class="empty-table">
           No hay compras para mostrar.
@@ -226,7 +226,7 @@ function renderizarCompras() {
 
   dom.comprasTable.innerHTML =
     comprasFiltradas.map(function (compra) {
-      return `
+      return html`
         <tr>
           <td>${compra.fecha}</td>
           <td>${compra.proveedor}</td>

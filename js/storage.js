@@ -447,7 +447,7 @@ function cargarDatos() {
                 }
                 if (typeof item.subtotal !== "number" && item.producto) {
                     item.subtotal =
-                        item.precioUnitario * item.cantidad;
+                        redondearDinero(item.precioUnitario * item.cantidad);
                 }
             });
         });

@@ -12,8 +12,8 @@
   <title>LV Sistema</title>
   <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest-admin.webmanifest">
-  <link rel="stylesheet" href="./css/styles.css?v=20260902-mobile5">
-  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260902-instalable2">
+  <link rel="stylesheet" href="./css/styles.css?v=20260908-ux1">
+  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260908-ux1">
 </head>
 
 <body class="login-required">
@@ -32,7 +32,11 @@
 
       <label>
         Clave
-        <input id="loginPasswordInput" type="password" autocomplete="current-password" placeholder="Clave de acceso">
+        <span class="campo-con-boton">
+          <input id="loginPasswordInput" type="password" autocomplete="current-password" placeholder="Clave de acceso">
+          <button type="button" class="ver-clave" data-ver-clave="loginPasswordInput"
+                  aria-label="Mostrar u ocultar la clave">Ver</button>
+        </span>
       </label>
 
       <div class="sync-status" id="loginStatus">
@@ -196,6 +200,7 @@
         </div>
 
         <div class="topbar-actions">
+          <button id="catalogoPedidosAviso" class="catalogo-pedidos-aviso" type="button" aria-live="polite" hidden>Catalogo · 0 por preparar</button>
           <button id="logoutButton" class="secondary-button" type="button">Salir</button>
         </div>
       </header>
@@ -373,7 +378,7 @@
           <div class="account-module-content">
             <div id="cuentaDeudoresBloque">
               <div class="list-tools">
-                <input id="buscarCuentaClienteInput" class="table-search"
+                <input type="search" id="buscarCuentaClienteInput" class="table-search"
                   placeholder="Buscar cliente por codigo, nombre, telefono o direccion...">
                 <select id="cuentaSaldoFiltro" title="Filtro de saldo">
                   <option value="TODOS">Todos los saldos</option>
@@ -512,7 +517,7 @@
 
                 <label>
                   Importe
-                  <input id="pagoImporteInput" type="number" min="0.01" step="0.01" placeholder="Ej: 15000">
+                  <input inputmode="decimal" id="pagoImporteInput" type="number" min="0.01" step="0.01" placeholder="Ej: 15000">
                 </label>
               </div>
 
@@ -556,7 +561,7 @@
 
                 <label>
                   Importe calculado
-                  <input id="notaCreditoImporteInput" type="number" min="0" readonly placeholder="Se calcula con productos">
+                  <input inputmode="decimal" id="notaCreditoImporteInput" type="number" min="0" readonly placeholder="Se calcula con productos">
                 </label>
 
                 <label class="wide-field">
@@ -608,9 +613,24 @@
           <button class="secondary-button" id="volverPedidosButton" type="button">Volver a pedidos</button>
         </div>
 
-        <div class="pedido-sale-layout">
+        <nav class="pedido-menu-pasos" aria-label="Pasos para cargar el pedido">
+          <button class="activo" type="button" data-pedido-menu-paso="cliente" aria-current="step">
+            <span>1</span><strong>Cliente</strong><small id="pedidoMenuClienteEstado">Elegir</small>
+          </button>
+          <button type="button" data-pedido-menu-paso="productos">
+            <span>2</span><strong>Productos</strong><small id="pedidoMenuProductosEstado">0 cargados</small>
+          </button>
+          <button type="button" data-pedido-menu-paso="resumen">
+            <span>3</span><strong>Revisar</strong><small id="pedidoMenuResumenEstado">$0</small>
+          </button>
+          <button type="button" data-pedido-menu-paso="cierre">
+            <span>4</span><strong>Finalizar</strong><small>Pago y guardado</small>
+          </button>
+        </nav>
+
+        <div class="pedido-sale-layout" data-paso-activo="cliente">
           <div class="pedido-main">
-            <div class="pedido-step-card">
+            <div class="pedido-step-card" data-pedido-paso-panel="cliente">
               <div class="pedido-step-title">
                 <span>1</span>
                 <div>
@@ -627,7 +647,7 @@
               </label>
             </div>
 
-            <div class="pedido-step-card">
+            <div class="pedido-step-card" data-pedido-paso-panel="productos" hidden>
               <div class="pedido-step-title">
                 <span>2</span>
                 <div>
@@ -646,7 +666,7 @@
 
                 <label class="quantity-label">
                   Cant.
-                  <input id="cantidadInput" type="number" min="1" value="1">
+                  <input inputmode="decimal" id="cantidadInput" type="number" min="1" value="1">
                 </label>
 
                 <button id="agregarPedidoButton" class="search-button" type="button">
@@ -654,9 +674,18 @@
                 </button>
               </div>
 
+              <div class="frequent-products-card pedido-habituales-integrados">
+                <div class="frequent-products-header">
+                  <strong>Habituales del cliente</strong>
+                  <span>Ultimas compras</span>
+                </div>
+                <div id="productosHabitualesCliente" class="frequent-products-list">
+                  <p>Elegi un cliente para ver sus productos habituales.</p>
+                </div>
+              </div>
             </div>
 
-            <div class="pedido-step-card pedido-table-card">
+            <div class="pedido-step-card pedido-table-card" data-pedido-paso-panel="resumen" hidden>
               <div class="pedido-step-title">
                 <span>3</span>
                 <div>
@@ -689,7 +718,7 @@
             </div>
           </div>
 
-          <aside class="pedido-side">
+          <aside class="pedido-side" data-pedido-paso-panel="cierre" hidden>
             <div class="total-card">
               <span>Total a pagar:</span>
               <strong id="pedidoTotal">$0</strong>
@@ -714,16 +743,6 @@
               </div>
             </div>
 
-            <div class="frequent-products-card">
-              <div class="frequent-products-header">
-                <strong>Habituales del cliente</strong>
-                <span>Ultimas compras</span>
-              </div>
-              <div id="productosHabitualesCliente" class="frequent-products-list">
-                <p>ElegÃ­ un cliente para ver sus productos habituales.</p>
-              </div>
-            </div>
-
             <div class="observations-card">
               <div class="observations-header">
                 <strong>Observaciones</strong>
@@ -738,12 +757,17 @@
             </div>
 
             <div class="pedido-actions-card">
-              <button class="secondary-button" id="guardarBorradorPedidoButton" type="button">Guardar borrador</button>
-              <button class="primary-button" id="guardarPedidoButton" type="button">Guardar venta</button>
+              <button class="primary-button" id="guardarPedidoButton" type="button">Guardar pedido</button>
               <button class="primary-button success-button" id="pedidoAtendidoButton" type="button">Guardar y
                 atender</button>
-              <button class="secondary-button" id="imprimirPedidoButton" type="button">Imprimir comprobante</button>
-              <button class="danger-button" id="borrarPedidoActualButton" type="button">Limpiar pedido</button>
+              <details class="pedido-opciones-secundarias">
+                <summary>Mas opciones</summary>
+                <div>
+                  <button class="secondary-button" id="guardarBorradorPedidoButton" type="button">Guardar borrador</button>
+                  <button class="secondary-button" id="imprimirPedidoButton" type="button">Imprimir comprobante</button>
+                  <button class="danger-button" id="borrarPedidoActualButton" type="button">Limpiar pedido</button>
+                </div>
+              </details>
             </div>
           </aside>
         </div>
@@ -760,6 +784,10 @@
         <div class="orders-workspace">
           <aside class="orders-menu-card" aria-label="Menu de pedidos">
             <p>Menu pedidos</p>
+            <button id="catalogoPedidosMenu" class="orders-menu-item" type="button" aria-pressed="false">
+              <span>Pedidos del catalogo</span><strong id="catalogoPedidosCount">0</strong>
+            </button>
+            <button id="catalogoVolverPedidos" class="orders-menu-item" type="button" hidden>Ver todas las ventas</button>
 
             <button class="orders-menu-new" id="pedidoMenuNuevoButton" type="button">
               + Nuevo pedido
@@ -787,6 +815,17 @@
           </aside>
 
           <div class="orders-list-panel">
+            <section id="catalogoBandejaHeader" class="catalogo-bandeja-header" aria-labelledby="catalogoBandejaTitulo" hidden>
+              <p class="eyebrow">Pedidos recibidos online</p>
+              <h4 id="catalogoBandejaTitulo">Pedidos del catalogo</h4>
+              <p>Revisa el pedido y marcalo preparado cuando este listo para salir. La entrega y el cobro se registran por separado.</p>
+              <div class="catalogo-bandeja-etapas" aria-label="Etapas de pedidos del catalogo">
+                <button type="button" data-catalogo-estado="PENDIENTE"><span>1 · Por preparar</span><strong>0</strong></button>
+                <button type="button" data-catalogo-estado="ATENDIDO"><span>2 · Listos para entregar</span><strong>0</strong></button>
+                <button type="button" data-catalogo-estado="ENTREGADO"><span>3 · Entregados</span><strong>0</strong></button>
+                <button type="button" data-catalogo-estado="TODOS"><span>Todos, incluidos cancelados</span><strong>0</strong></button>
+              </div>
+            </section>
             <div class="orders-summary-grid">
               <article class="orders-summary-card">
                 <span>Borradores</span>
@@ -798,12 +837,6 @@
                 <span>Pendientes</span>
                 <strong id="pedidoResumenPendientes">$0</strong>
                 <small id="pedidoResumenPendientesCantidad">0 pedidos</small>
-              </article>
-
-              <article class="orders-summary-card">
-                <span>En entrega</span>
-                <strong id="pedidoResumenEntrega">$0</strong>
-                <small id="pedidoResumenEntregaCantidad">0 pedidos</small>
               </article>
 
               <article class="orders-summary-card">
@@ -874,7 +907,7 @@
                   <div class="form-grid">
                     <label>
                       Codigo
-                      <input id="clientCodeInput" type="number" min="1" placeholder="Ej: 4">
+                      <input inputmode="decimal" id="clientCodeInput" type="number" min="1" placeholder="Ej: 4">
                     </label>
 
                     <label>
@@ -927,7 +960,7 @@
 
                     <label>
                       Posicion en zona
-                      <input id="clientPosicionZonaInput" type="number" min="0" placeholder="Ej: 10">
+                      <input inputmode="decimal" id="clientPosicionZonaInput" type="number" min="0" placeholder="Ej: 10">
                     </label>
 
                     <label>
@@ -978,12 +1011,12 @@
 
                     <label>
                       Telefono particular
-                      <input id="clientTelefonoParticularInput" type="text" placeholder="Ej: 0341 555-5555">
+                      <input inputmode="tel" id="clientTelefonoParticularInput" type="tel" placeholder="Ej: 0341 555-5555">
                     </label>
 
                     <label>
                       Telefono movil
-                      <input id="clientTelefonoMovilInput" type="text" placeholder="Ej: 341 555-5555">
+                      <input inputmode="tel" id="clientTelefonoMovilInput" type="tel" placeholder="Ej: 341 555-5555">
                     </label>
 
                     <label>
@@ -1027,7 +1060,7 @@
             </div>
 
             <div class="list-tools" id="clientesListadoBloque">
-              <input id="buscarClienteTabla" class="table-search" aria-label="Buscar clientes"
+              <input type="search" id="buscarClienteTabla" class="table-search" aria-label="Buscar clientes"
                 placeholder="Buscar cliente por codigo, nombre, telefono, direccion o zona...">
               <button class="secondary-button" id="exportarClientesButton" type="button">
                 Exportar CSV
@@ -1037,6 +1070,20 @@
                 <button class="filter-tab" type="button" data-client-status-filter="inactivos">Inactivos</button>
                 <button class="filter-tab" type="button" data-client-status-filter="todos">Todos</button>
               </div>
+              <div class="filter-tabs" aria-label="Filtro de deuda">
+                <button class="filter-tab active" type="button" data-client-debt-filter="todos">Todos</button>
+                <button class="filter-tab" type="button" data-client-debt-filter="deben">Deben</button>
+                <button class="filter-tab" type="button" data-client-debt-filter="alDia">Al dia</button>
+              </div>
+              <label class="orden-listado">
+                Ordenar
+                <select id="clientesOrdenInput">
+                  <option value="codigo">Por codigo</option>
+                  <option value="deudaMayor">Mayor deuda primero</option>
+                  <option value="deudaMenor">Menor deuda primero</option>
+                  <option value="nombre">Por nombre</option>
+                </select>
+              </label>
             </div>
 
             <p class="list-counter" id="clientesResultadoContador">Clientes | 0 en total</p>
@@ -1065,6 +1112,7 @@
                     <th>Telefono</th>
                     <th>Direccion</th>
                     <th>Zona</th>
+                    <th>Saldo</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
@@ -1115,7 +1163,7 @@
                   </label>
                   <label>
                     Telefono
-                    <input id="vendedorTelefonoInput" type="text" placeholder="Ej: 341 5555555">
+                    <input inputmode="tel" id="vendedorTelefonoInput" type="tel" placeholder="Ej: 341 5555555">
                   </label>
                   <label>
                     Usuario movil
@@ -1259,7 +1307,7 @@
                   </label>
                   <label>
                     Margen sobre costo %
-                    <input id="listaPrecioPorcentajeInput" type="number" min="0" step="0.01" placeholder="Ej: 35">
+                    <input inputmode="decimal" id="listaPrecioPorcentajeInput" type="number" min="0" step="0.01" placeholder="Ej: 35">
                   </label>
                 </div>
 
@@ -1502,7 +1550,7 @@
 
               <label>
                 Telefono
-                <input id="proveedorTelefonoInput" type="text" placeholder="Ej: 11 5555-5555">
+                <input inputmode="tel" id="proveedorTelefonoInput" type="tel" placeholder="Ej: 11 5555-5555">
               </label>
 
               <label>
@@ -1541,7 +1589,7 @@
           </div>
 
           <div class="list-tools">
-            <input id="buscarProveedorInput" class="table-search" aria-label="Buscar proveedores"
+            <input type="search" id="buscarProveedorInput" class="table-search" aria-label="Buscar proveedores"
               placeholder="Buscar proveedor por nombre, telefono, contacto u observacion...">
             <div class="filter-tabs" aria-label="Filtro de proveedores">
               <button class="filter-tab active" type="button" data-provider-status-filter="activos">Activos</button>
@@ -1586,7 +1634,7 @@
 
               <label>
                 Importe
-                <input id="proveedorPagoImporteInput" type="number" min="0" step="0.01" placeholder="Ej: 15000">
+                <input inputmode="decimal" id="proveedorPagoImporteInput" type="number" min="0" step="0.01" placeholder="Ej: 15000">
               </label>
 
               <label>
@@ -1769,7 +1817,7 @@
                   <div class="form-grid">
                     <label>
                       Codigo
-                      <input id="productCodeInput" type="number" min="1">
+                      <input inputmode="decimal" id="productCodeInput" type="number" min="1">
                     </label>
                     <label>
                       Codigo real / barras
@@ -1798,7 +1846,7 @@
                     </label>
                     <label>
                       Pack
-                      <input id="productPackInput" type="number" min="0" placeholder="Ej: 15">
+                      <input inputmode="decimal" id="productPackInput" type="number" min="0" placeholder="Ej: 15">
                     </label>
                     <label>
                       Unidad
@@ -1826,24 +1874,24 @@
                     </label>
                     <label>
                       Stock total
-                      <input id="productStockInput" type="number" min="0" step="0.001">
+                      <input inputmode="decimal" id="productStockInput" type="number" min="0" step="0.001">
                     </label>
                     <label>
                       Stock minimo
-                      <input id="productMinimumStockInput" type="number" min="0" step="0.001"
+                      <input inputmode="decimal" id="productMinimumStockInput" type="number" min="0" step="0.001"
                         placeholder="Usa configuracion si queda vacio">
                     </label>
                     <label class="stock-bulk-field hidden">
                       Unidades por bulto
-                      <input id="productUnitsPerBulkInput" type="number" min="1" placeholder="Ej: 12">
+                      <input inputmode="decimal" id="productUnitsPerBulkInput" type="number" min="1" placeholder="Ej: 12">
                     </label>
                     <label class="stock-bulk-field hidden">
                       Bultos
-                      <input id="productBulkStockInput" type="number" min="0" placeholder="Ej: 4">
+                      <input inputmode="decimal" id="productBulkStockInput" type="number" min="0" placeholder="Ej: 4">
                     </label>
                     <label class="stock-bulk-field hidden">
                       Unidades sueltas
-                      <input id="productUnitStockInput" type="number" min="0" placeholder="Ej: 6">
+                      <input inputmode="decimal" id="productUnitStockInput" type="number" min="0" placeholder="Ej: 6">
                     </label>
                     <label class="stock-bulk-field hidden">
                       Venta
@@ -1874,27 +1922,27 @@
                   <div class="form-grid">
                     <label>
                       Precio compra
-                      <input id="productPurchasePriceInput" type="number" min="0">
+                      <input inputmode="decimal" id="productPurchasePriceInput" type="number" min="0">
                     </label>
                     <label>
                       Precio Lista 1
-                      <input id="productPriceInput" type="number" min="0">
+                      <input inputmode="decimal" id="productPriceInput" type="number" min="0">
                     </label>
                     <label>
                       Precio Lista 2
-                      <input id="productPriceList2Input" type="number" min="0" placeholder="Opcional">
+                      <input inputmode="decimal" id="productPriceList2Input" type="number" min="0" placeholder="Opcional">
                     </label>
                     <label>
                       Precio Lista 3
-                      <input id="productPriceList3Input" type="number" min="0" placeholder="Opcional">
+                      <input inputmode="decimal" id="productPriceList3Input" type="number" min="0" placeholder="Opcional">
                     </label>
                     <label>
                       Precio Lista 4
-                      <input id="productPriceList4Input" type="number" min="0" placeholder="Opcional">
+                      <input inputmode="decimal" id="productPriceList4Input" type="number" min="0" placeholder="Opcional">
                     </label>
                     <label>
                       IVA %
-                      <input id="productIvaInput" type="number" min="0" step="0.01" placeholder="Ej: 21">
+                      <input inputmode="decimal" id="productIvaInput" type="number" min="0" step="0.01" placeholder="Ej: 21">
                     </label>
                   </div>
                   <input id="productMarginList1Input" type="hidden" value="">
@@ -2016,7 +2064,7 @@
 
                   <label>
                     Porcentaje
-                    <input id="priceUpdatePercentInput" type="number" step="0.01" placeholder="Ej: 12 o -5">
+                    <input inputmode="decimal" id="priceUpdatePercentInput" type="number" step="0.01" placeholder="Ej: 12 o -5">
                   </label>
                 </div>
 
@@ -2065,12 +2113,10 @@
                 <thead id="productosTableHead">
                   <tr>
                     <th>Codigo</th>
-                    <th>Nombre</th>
-                    <th>Precio</th>
+                    <th>Descripcion</th>
                     <th>Rubro</th>
-                    <th>Proveedor</th>
+                    <th>Precio</th>
                     <th>Stock</th>
-                    <th>Valor stock</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
@@ -2116,7 +2162,8 @@
 
             <label>
               WhatsApp
-              <input id="whatsappInput" type="text">
+              <input id="whatsappInput" type="tel" placeholder="Ej: 5491112345678" inputmode="tel">
+              <small>Numero comercial con codigo de pais y area. El catalogo lo usa automaticamente; el cliente no lo completa.</small>
             </label>
 
             <label>
@@ -2126,7 +2173,7 @@
 
             <label>
               Stock minimo
-              <input id="stockMinimoInput" type="number">
+              <input inputmode="decimal" id="stockMinimoInput" type="number">
             </label>
 
           </div>
@@ -2160,18 +2207,20 @@
                 <input id="usuarioEmailInput" type="text" placeholder="Ej: juan o vendedor@empresa.com">
               </label>
 
-              <label>
-                ContraseÃ±a provisoria
+              <label id="usuarioPasswordLabel">
+                Clave inicial
                 <input id="usuarioPasswordInput" type="password" placeholder="Minimo 6 caracteres" autocomplete="new-password">
+                <small>Se usa solamente al crear el usuario.</small>
               </label>
 
-              <label>
+              <label class="usuario-rol-campo">
                 Rol
                 <select id="usuarioNuevoRolInput">
                   <option value="VENDEDOR">Vendedor</option>
                   <option value="ADMINISTRADOR">Administrador</option>
                   <option value="SUPERADMIN">Superadmin</option>
                 </select>
+                <small id="usuarioRolAyuda">Vendedor: pedidos y clientes.</small>
               </label>
             </div>
 
@@ -2199,6 +2248,22 @@
                 Nombre del rol
                 <input id="rolNombreInput" type="text" placeholder="Ej: Repartidor">
               </label>
+              <label>
+                Plantilla rapida
+                <select id="rolPlantillaInput">
+                  <option value="personalizado">Elegir permisos manualmente</option>
+                  <option value="vendedor">Ventas y clientes</option>
+                  <option value="cobranza">Clientes y cobranzas</option>
+                  <option value="stock">Productos y stock</option>
+                  <option value="administracion">Administracion general</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="rol-acciones-rapidas">
+              <span id="rolPermisosResumen">0 permisos seleccionados</span>
+              <button id="rolMarcarTodosButton" class="secondary-button" type="button">Marcar todos</button>
+              <button id="rolLimpiarPermisosButton" class="secondary-button" type="button">Limpiar</button>
             </div>
 
             <div class="permission-grid">
@@ -2227,8 +2292,8 @@
           </form>
 
           <div class="list-tools" data-config-panel="accesos">
-            <input id="buscarUsuarioSistemaInput" class="table-search" placeholder="Buscar nombre, usuario, rol o codigo">
-            <select id="usuarioSistemaRolFiltro">
+            <input id="buscarUsuarioSistemaInput" class="table-search" aria-label="Buscar usuarios" placeholder="Buscar nombre, usuario, rol o codigo">
+            <select id="usuarioSistemaRolFiltro" aria-label="Filtrar usuarios por rol">
               <option value="TODOS">Todos los roles</option>
             </select>
             <button id="verTodosUsuariosSistemaButton" class="secondary-button" type="button">
@@ -2309,7 +2374,7 @@
               <h4>Catalogo WhatsApp</h4>
               <span>Link simple para que el cliente arme un pedido y lo envie por WhatsApp.</span>
             </div>
-            <a id="linkCatalogoSistema" data-system-link data-system-path="/catalogo" data-system-whatsapp="true" href="/catalogo" target="_blank" rel="noopener"></a>
+            <a id="linkCatalogoSistema" data-system-link data-system-path="/catalogo" href="/catalogo" target="_blank" rel="noopener"></a>
             <div class="actions-row">
               <a class="secondary-button" data-system-open="linkCatalogoSistema" href="/catalogo" target="_blank" rel="noopener">Abrir</a>
               <button class="primary-button" data-system-copy="linkCatalogoSistema" type="button">Copiar</button>
@@ -2891,12 +2956,12 @@
 
               <label>
                 Cantidad
-                <input id="compraCantidadInput" type="number" min="0.001" step="0.001" placeholder="Ej: 20">
+                <input inputmode="decimal" id="compraCantidadInput" type="number" min="0.001" step="0.001" placeholder="Ej: 20">
               </label>
 
               <label>
                 Costo unitario
-                <input id="compraCostoInput" type="number" min="0" placeholder="Opcional">
+                <input inputmode="decimal" id="compraCostoInput" type="number" min="0" placeholder="Opcional">
               </label>
 
               <label>
@@ -3054,7 +3119,7 @@
               <div class="stock-quick-actions">
                 <label>
                   Cantidad rapida
-                  <input id="stockQuickQuantityInput" type="number" min="0" step="0.001" placeholder="Ej: 1">
+                  <input inputmode="decimal" id="stockQuickQuantityInput" type="number" min="0" step="0.001" placeholder="Ej: 1">
                 </label>
                 <label>
                   Motivo rapido
@@ -3093,7 +3158,7 @@
 
                   <label>
                     Cantidad / stock final
-                    <input id="stockMovementQuantityInput" type="number" min="0" step="0.001" placeholder="Ej: 10">
+                    <input inputmode="decimal" id="stockMovementQuantityInput" type="number" min="0" step="0.001" placeholder="Ej: 10">
                   </label>
 
                   <label>
@@ -3234,7 +3299,7 @@
         <div class="modal-content delivery-modal-content">
           <div class="modal-header">
             <h3>Entregar pedido</h3>
-            <button id="cerrarEntregaPedido" type="button">x</button>
+            <button id="cerrarEntregaPedido" type="button" aria-label="Cerrar entrega">×</button>
           </div>
 
           <form id="entregaPedidoForm" class="delivery-form">
@@ -3243,8 +3308,8 @@
             </div>
 
             <label>
-              Pago recibido al entregar
-              <input id="entregaPagoInput" type="number" min="0" step="0.01" placeholder="Ej: 15000">
+              Cobro recibido ahora (opcional)
+              <input inputmode="decimal" id="entregaPagoInput" type="number" min="0" step="0.01" placeholder="Ej: 15000">
             </label>
 
             <div class="delivery-balance-preview" id="entregaSaldoPreview">
@@ -3253,7 +3318,7 @@
 
             <div class="delivery-shortcuts">
               <button class="secondary-button" id="entregaSinPagoButton" type="button">
-                No pago
+                Entregar sin cobrar
               </button>
               <button class="secondary-button" id="entregaPagoTotalButton" type="button">
                 Pago total
@@ -3287,7 +3352,7 @@
           <form id="pedidoRapidoCantidadForm" class="pedido-rapido-form">
             <label>
               Cantidad
-              <input id="pedidoRapidoCantidadInput" type="number" min="1" step="1" value="1">
+              <input inputmode="decimal" id="pedidoRapidoCantidadInput" type="number" min="1" step="1" value="1">
             </label>
 
             <div class="pedido-rapido-preview" id="pedidoRapidoPrecioPreview">
@@ -3307,7 +3372,7 @@
           <form id="pedidoRapidoBonificacionForm" class="pedido-rapido-form hidden">
             <label>
               Bonificacion %
-              <input id="pedidoRapidoBonificacionInput" type="number" min="0" max="100" step="0.01" value="0">
+              <input inputmode="decimal" id="pedidoRapidoBonificacionInput" type="number" min="0" max="100" step="0.01" value="0">
             </label>
 
             <div class="pedido-rapido-preview" id="pedidoRapidoSubtotalPreview">
@@ -3338,6 +3403,36 @@
           <div id="movimientosStockContenido"></div>
         </div>
       </div>
+
+      <div id="usuarioClaveModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="usuarioClaveTitulo">
+        <div class="modal-content modal-content-compacta">
+          <div class="modal-header">
+            <div>
+              <p class="eyebrow">Acceso</p>
+              <h3 id="usuarioClaveTitulo">Cambiar clave</h3>
+            </div>
+            <button id="cerrarUsuarioClaveModal" type="button" aria-label="Cerrar cambio de clave">×</button>
+          </div>
+          <form id="usuarioClaveForm" class="usuario-clave-form">
+            <p class="usuario-clave-destino">Usuario: <strong id="usuarioClaveNombre">-</strong></p>
+            <label>
+              Nueva clave provisoria
+              <div class="campo-clave-practico">
+                <input id="usuarioClaveNuevaInput" type="password" minlength="6" autocomplete="new-password" placeholder="Minimo 6 caracteres">
+                <button id="usuarioClaveMostrarButton" class="secondary-button" type="button">Mostrar</button>
+              </div>
+            </label>
+            <button id="usuarioClaveGenerarButton" class="secondary-button" type="button">Generar una clave segura</button>
+            <p id="usuarioClaveEstado" class="estado-accion-practica" role="status" aria-live="polite">Podes guardar una clave provisoria o enviar un enlace al email.</p>
+            <div class="acciones-modal-practico">
+              <button id="usuarioClaveEmailButton" class="secondary-button" type="button">Enviar enlace por email</button>
+              <button id="usuarioClaveGuardarButton" class="primary-button" type="submit">Guardar clave provisoria</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div id="editorCompactoFondo" class="editor-compacto-fondo hidden" aria-hidden="true"></div>
     </main>
 
     <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Navegacion principal movil">
@@ -3368,50 +3463,53 @@
 
   <!-- Supabase y autenticacion -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="./js/supabase-config.js?v=20260618-entrega2"></script>
-  <script src="./js/supabase-auth.js?v=20260713-loginclave1"></script>
+  <script src="./js/supabase-config.js?v=20260908-ux1"></script>
+  <script src="./js/supabase-auth.js?v=20260908-ux1"></script>
 
   <!-- Datos base y utilidades compartidas -->
-  <script src="./js/data.js?v=20260816-listas0"></script>
-  <script src="./js/helpers.js?v=20260717-importsegura1"></script>
+  <script src="./js/data.js?v=20260908-ux1"></script>
+  <script src="./js/helpers.js?v=20260908-ux1"></script>
 
   <!-- Modulos administrativos principales -->
-  <script src="./js/clientes.js?v=20260902-mobile3"></script>
-  <script src="./js/rubros.js?v=20260816-online-confirm1"></script>
-  <script src="./js/zonas.js?v=20260816-online-confirm1"></script>
-  <script src="./js/proveedores.js?v=20260816-online-confirm1"></script>
-  <script src="./js/compras.js?v=20260816-online-confirm1"></script>
-  <script src="./js/movimientos.js?v=20260816-stockcompra1"></script>
-  <script src="./js/productos.js?v=20260717-stocktraza1"></script>
-  <script src="./js/productos-admin.js?v=20260902-mobile3"></script>
+  <script src="./js/clientes.js?v=20260908-ux1"></script>
+  <script src="./js/rubros.js?v=20260908-ux1"></script>
+  <script src="./js/zonas.js?v=20260908-ux1"></script>
+  <script src="./js/proveedores.js?v=20260908-ux1"></script>
+  <script src="./js/compras.js?v=20260908-ux1"></script>
+  <script src="./js/movimientos.js?v=20260908-ux1"></script>
+  <script src="./js/productos.js?v=20260908-ux1"></script>
+  <script src="./js/productos-admin.js?v=20260908-ux1"></script>
 
   <!-- Persistencia local y repositorio Supabase -->
-  <script src="./js/data-store.js?v=20260626-local1"></script>
-  <script src="./js/storage.js?v=20260816-bonif0"></script>
-  <script src="./js/database/supabase-mappers.js?v=20260816-bonif0"></script>
-  <script src="./js/database/supabase-repository.js?v=20260714-roles1"></script>
-  <script src="./js/supabase-data.js?v=20260816-realtime1"></script>
+  <script src="./js/data-store.js?v=20260908-ux1"></script>
+  <script src="./js/storage.js?v=20260908-ux1"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260908-ux1"></script>
+  <script src="./js/database/supabase-repository.js?v=20260908-ux1"></script>
+  <script src="./js/supabase-data.js?v=20260908-ux1"></script>
 
   <!-- Configuracion, usuarios y permisos -->
-  <script src="./js/config/configuracion.js?v=20260618-loginfix2"></script>
-  <script src="./js/config/permisos.js?v=20260618-loginfix2"></script>
-  <script src="./js/config/usuarios.js?v=20260816-online-confirm1"></script>
-  <script src="./js/config/login.js?v=20260902-seguridad1"></script>
+  <script src="./js/config/configuracion.js?v=20260908-ux1"></script>
+  <script src="./js/config/permisos.js?v=20260908-ux1"></script>
+  <script src="./js/config/usuarios.js?v=20260908-ux1"></script>
+  <script src="./js/config/login.js?v=20260908-ux1"></script>
 
   <!-- Control administrativo -->
-  <script src="./js/auditoria.js?v=20260719-auditoria2"></script>
-  <script src="./js/informes.js?v=20260719-auditoria2"></script>
-  <script src="./js/respaldo.js?v=20260712-seguro1"></script>
+  <script src="./js/auditoria.js?v=20260908-ux1"></script>
+  <script src="./js/informes.js?v=20260908-ux1"></script>
+  <script src="./js/respaldo.js?v=20260908-ux1"></script>
 
   <!-- Pedidos y comprobantes -->
-  <script src="./js/pedido.js?v=20260902-acciones1"></script>
-  <script src="./js/pedido/habituales.js?v=20260618-loginfix2"></script>
-  <script src="./js/pedido/observaciones.js?v=20260801-autosave1"></script>
-  <script src="./js/pedido/impresion.js?v=20260902-local1"></script>
+  <script src="./js/pedido.js?v=20260908-ux1"></script>
+  <script src="./js/pedido/habituales.js?v=20260908-ux1"></script>
+  <script src="./js/pedido/observaciones.js?v=20260908-ux1"></script>
+  <script src="./js/pedido/impresion.js?v=20260908-ux1"></script>
 
   <!-- Inicializacion de pantalla y eventos -->
-  <script src="./js/app.js?v=20260902-mobile5"></script>
-  <script src="./js/public/instalacion-app.js?v=20260902-instalable2"></script>
+  <script src="./js/catalogo-admin.js?v=20260908-ux1"></script>
+  <script src="./js/app.js?v=20260908-ux1"></script>
+  <script src="./js/ui-practica.js?v=20260908-ux1"></script>
+  <script src="./js/public/instalacion-app.js?v=20260908-ux1"></script>
+  <script src="./js/public/estado-conexion.js?v=20260908-ux1"></script>
 </body>
 
 </html>

@@ -1,0 +1,32 @@
+/* Bandeja operativa de pedidos del catalogo. */
+.catalogo-pedidos-aviso {
+  min-height: 44px; padding: 10px 16px; border-radius: 12px;
+  border: 1px solid #77bdd7; background: #e8f6fd; color: #075777;
+  font: inherit; font-weight: 800; cursor: pointer;
+}
+.catalogo-pedidos-aviso[hidden], #catalogoBandejaHeader[hidden],
+#catalogoVolverPedidos[hidden], #ventasPage [hidden] { display: none !important; }
+.catalogo-bandeja-header { padding: 22px; border: 1px solid #c8dce8; border-radius: 16px; background: #f3f9fc; margin-bottom: 18px; }
+.catalogo-bandeja-header h4 { margin: 4px 0 8px; font-size: 24px; color: #12364c; }
+.catalogo-bandeja-header p { line-height: 1.5; margin: 0 0 14px; color: #486476; }
+.catalogo-bandeja-etapas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.catalogo-bandeja-etapas button { display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  padding: 14px; min-height: 80px; background: white; border: 1px solid #c4d7e2; border-radius: 12px;
+  font: inherit; text-align: left; color: #23495e; cursor: pointer; }
+.catalogo-bandeja-etapas button strong { font-size: 24px; }
+.catalogo-bandeja-etapas button.active { background: #087faa; border-color: #087faa; color: white; }
+.catalogo-bandeja-etapas button:focus-visible, .catalogo-pedidos-aviso:focus-visible { outline: 3px solid #f4b83f; outline-offset: 3px; }
+.catalogo-pedido-contacto { display: block; max-width: 340px; margin-top: 6px; color: #526c7d; line-height: 1.4; overflow-wrap: anywhere; }
+.catalogo-pedido-origen { display: inline-block; margin-top: 4px; padding: 3px 7px; border-radius: 7px; color: #076080; background: #e3f4fa; font-size: 11px; font-weight: 800; }
+#ventasPage:has(#catalogoBandejaHeader:not([hidden])) .orders-menu-card button,
+#ventasPage:has(#catalogoBandejaHeader:not([hidden])) .orders-list-panel .btn,
+.topbar-actions .catalogo-pedidos-aviso { min-height: 44px; }
+#entregaPedidoModal button { min-height: 44px; }
+#cerrarEntregaPedido { min-width: 44px; }
+body .topbar-actions button, body #sidebarToggleButton { min-height: 44px; }
+@media (max-width: 720px) {
+  .catalogo-bandeja-header { padding: 15px; }
+  .catalogo-bandeja-etapas { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .catalogo-pedidos-aviso { font-size: 12px; padding: 8px; }
+}
+@media print { .catalogo-pedidos-aviso, .catalogo-bandeja-header { display: none; } }

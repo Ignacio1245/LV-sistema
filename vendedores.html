@@ -11,9 +11,9 @@
   <title>Vendedores - Pedido movil</title>
   <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest-vendedores.webmanifest">
-  <link rel="stylesheet" href="./css/styles.css?v=20260902-mobile5">
-  <link rel="stylesheet" href="./css/vendedores-mobile.css?v=20260902-pedido-guiado1">
-  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260902-instalable2">
+  <link rel="stylesheet" href="./css/styles.css?v=20260908-ux1">
+  <link rel="stylesheet" href="./css/vendedores-mobile.css?v=20260908-ux1">
+  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260908-ux1">
 </head>
 <body class="vendedores-mobile">
   <section id="vendedorLogin" class="vendedores-login vendedores-oculto" aria-labelledby="vendedorLoginTitulo">
@@ -26,7 +26,11 @@
       </label>
       <label>
         Clave
-        <input id="vendedorLoginPassword" type="password" autocomplete="current-password" placeholder="Clave">
+        <span class="campo-con-boton">
+          <input id="vendedorLoginPassword" type="password" autocomplete="current-password" placeholder="Clave">
+          <button type="button" class="ver-clave" data-ver-clave="vendedorLoginPassword"
+                  aria-label="Mostrar u ocultar la clave">Ver</button>
+        </span>
       </label>
       <button type="submit" class="vendedores-principal">Entrar</button>
       <p id="vendedorLoginEstado" class="vendedores-login-estado">Usa tu usuario de vendedor y clave.</p>
@@ -285,16 +289,29 @@
     <button id="vendedorBotonBarraWhatsapp" type="button">Revisar pedido</button>
   </div>
 
+  <div id="vendedorConfirmacion" class="vendedores-confirmacion-fondo vendedores-oculto" aria-hidden="true">
+    <section class="vendedores-confirmacion" role="dialog" aria-modal="true" aria-labelledby="vendedorConfirmacionTitulo" aria-describedby="vendedorConfirmacionMensaje">
+      <p class="vendedores-etiqueta">Confirmacion</p>
+      <h2 id="vendedorConfirmacionTitulo">Confirmar accion</h2>
+      <p id="vendedorConfirmacionMensaje">Revisa la informacion antes de continuar.</p>
+      <div class="vendedores-confirmacion-acciones">
+        <button id="vendedorConfirmacionCancelar" type="button" class="vendedores-secundario">Volver</button>
+        <button id="vendedorConfirmacionAceptar" type="button" class="vendedores-principal">Continuar</button>
+      </div>
+    </section>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="./js/supabase-config.js"></script>
-  <script src="./js/data.js?v=20260816-listas0"></script>
-  <script src="./js/helpers.js"></script>
-  <script src="./js/productos.js"></script>
-  <script src="./js/database/supabase-mappers.js?v=20260816-bonif0"></script>
-  <script src="./js/database/supabase-repository.js?v=20260714-roles1"></script>
-  <script src="./js/supabase-auth.js?v=20260713-loginclave1"></script>
-  <script src="./js/mobile/vendedores-mobile.js?v=20260902-pedido-guiado1"></script>
-  <script src="./js/public/instalacion-app.js?v=20260902-instalable2"></script>
+  <script src="./js/supabase-config.js?v=20260908-ux1"></script>
+  <script src="./js/data.js?v=20260908-ux1"></script>
+  <script src="./js/helpers.js?v=20260908-ux1"></script>
+  <script src="./js/productos.js?v=20260908-ux1"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260908-ux1"></script>
+  <script src="./js/database/supabase-repository.js?v=20260908-ux1"></script>
+  <script src="./js/supabase-auth.js?v=20260908-ux1"></script>
+  <script src="./js/mobile/vendedores-mobile.js?v=20260908-ux1"></script>
+  <script src="./js/public/instalacion-app.js?v=20260908-ux1"></script>
+  <script src="./js/public/estado-conexion.js?v=20260908-ux1"></script>
 </body>
 </html>
 

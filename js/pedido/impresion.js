@@ -5,12 +5,12 @@ function obtenerItemsParaImprimirPedido(pedido) {
                 ? item.descuentoPorcentaje + "%"
                 : "-";
 
-        return `
+        return html`
       <tr>
-        <td>${escaparTextoHtml(item.producto.codigo)}</td>
-        <td>${escaparTextoHtml(item.producto.nombre)}</td>
-        <td>${escaparTextoHtml(item.cantidad)}</td>
-        <td>${escaparTextoHtml(descuentoTexto)}</td>
+        <td>${item.producto.codigo}</td>
+        <td>${item.producto.nombre}</td>
+        <td>${item.cantidad}</td>
+        <td>${descuentoTexto}</td>
         <td>${formatearDinero(typeof item.precioUnitario === "number" ? item.precioUnitario : item.producto.precio)}</td>
         <td>${formatearDinero(item.subtotal)}</td>
       </tr>
@@ -34,19 +34,19 @@ function obtenerNotasCreditoParaImprimirPedido(pedido) {
                         ? item.producto.codigo + " - " + item.producto.nombre
                         : "Producto";
 
-                return `
+                return html`
                   <tr>
-                    <td>${escaparTextoHtml(nota.fecha || "-")}</td>
-                    <td>${escaparTextoHtml(nota.motivo || "Nota de credito")}</td>
-                    <td>${escaparTextoHtml(textoProducto)}</td>
-                    <td>${escaparTextoHtml(item.cantidad)}</td>
+                    <td>${nota.fecha || "-"}</td>
+                    <td>${nota.motivo || "Nota de credito"}</td>
+                    <td>${textoProducto}</td>
+                    <td>${item.cantidad}</td>
                     <td>${formatearDinero(item.subtotal || 0)}</td>
                   </tr>
                 `;
             });
         }).join("");
 
-    return `
+    return html`
       <div class="box">
         <strong>Notas de credito aplicadas</strong>
         <table>
@@ -78,13 +78,13 @@ function obtenerQrComprobanteHtml(totalComprobante) {
     const totalPago =
         Number(totalComprobante) || 0;
 
-    return `
+    return html`
       <div class="qr-box qr-box-mercado-pago">
         <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${textoQr}" alt="QR Mercado Pago">
         <strong>Mercado Pago</strong>
         <span>Escanea y paga el total</span>
         <b>${formatearDinero(totalPago)}</b>
-        <small>${escaparTextoHtml(textoQrPago)}</small>
+        <small>${textoQrPago}</small>
       </div>
     `;
 }
@@ -113,12 +113,12 @@ function obtenerQrCatalogoPublicoHtml() {
     const textoQr =
         encodeURIComponent(urlCatalogoPublico);
 
-    return `
+    return html`
       <div class="qr-box qr-box-catalogo">
         <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${textoQr}" alt="QR catalogo">
         <strong>Catalogo</strong>
         <span>Escanea para cargar otro pedido</span>
-        <small>${escaparTextoHtml(urlCatalogoPublico)}</small>
+        <small>${urlCatalogoPublico}</small>
       </div>
     `;
 }
@@ -148,12 +148,12 @@ function imprimirPedido(pedidoParaImprimir) {
     const pieComprobante =
         CONFIG.impresionPie || "";
 
-    ventana.document.write(`
+    ventana.document.write(html`
     <!DOCTYPE html>
     <html lang="es">
     <head>
       <meta charset="UTF-8">
-      <title>Pedido #${escaparTextoHtml(pedidoParaImprimir.numero)}</title>
+      <title>Pedido #${pedidoParaImprimir.numero}</title>
       <style>
         body { font-family: Arial, sans-serif; margin: 28px; color: #102033; }
         h1 { margin: 0 0 6px; }
@@ -177,14 +177,14 @@ function imprimirPedido(pedidoParaImprimir) {
     <body>
       <div class="header">
         <div>
-          <h1>Pedido #${escaparTextoHtml(pedidoParaImprimir.numero)}</h1>
-          <div class="muted">Fecha: ${escaparTextoHtml(pedidoParaImprimir.fecha)}</div>
+          <h1>Pedido #${pedidoParaImprimir.numero}</h1>
+          <div class="muted">Fecha: ${pedidoParaImprimir.fecha}</div>
         </div>
         <div class="brand">
-          <strong>${escaparTextoHtml(tituloComprobante)}</strong><br>
-          <span class="muted">${escaparTextoHtml(subtituloComprobante)}</span><br>
-          ${CONFIG.cuit ? `<span class="muted">CUIT: ${escaparTextoHtml(CONFIG.cuit)}</span><br>` : ""}
-          ${CONFIG.whatsapp ? `<span class="muted">WhatsApp: ${escaparTextoHtml(CONFIG.whatsapp)}</span><br>` : ""}
+          <strong>${tituloComprobante}</strong><br>
+          <span class="muted">${subtituloComprobante}</span><br>
+          ${CONFIG.cuit ? html`<span class="muted">CUIT: ${CONFIG.cuit}</span><br>` : ""}
+          ${CONFIG.whatsapp ? html`<span class="muted">WhatsApp: ${CONFIG.whatsapp}</span><br>` : ""}
           <div class="qr-row">
             ${obtenerQrCatalogoPublicoHtml()}
             ${obtenerQrComprobanteHtml(pedidoParaImprimir.total)}
@@ -193,11 +193,11 @@ function imprimirPedido(pedidoParaImprimir) {
       </div>
 
       <div class="box">
-        <strong>Cliente:</strong> ${escaparTextoHtml(pedidoParaImprimir.cliente.codigo)} - ${escaparTextoHtml(pedidoParaImprimir.cliente.nombre)}<br>
-        <strong>Direccion:</strong> ${escaparTextoHtml(pedidoParaImprimir.cliente.direccion)}<br>
-        <strong>Forma de pago:</strong> ${escaparTextoHtml(obtenerTextoFormaPago(pedidoParaImprimir.formaPago))}<br>
-        <strong>Vendedor:</strong> ${escaparTextoHtml(pedidoParaImprimir.vendedor || "Sin vendedor")}<br>
-        <strong>Estado de cobro:</strong> ${escaparTextoHtml(pedidoParaImprimir.estadoCobro || "-")}
+        <strong>Cliente:</strong> ${pedidoParaImprimir.cliente.codigo} - ${pedidoParaImprimir.cliente.nombre}<br>
+        <strong>Direccion:</strong> ${pedidoParaImprimir.cliente.direccion}<br>
+        <strong>Forma de pago:</strong> ${obtenerTextoFormaPago(pedidoParaImprimir.formaPago)}<br>
+        <strong>Vendedor:</strong> ${pedidoParaImprimir.vendedor || "Sin vendedor"}<br>
+        <strong>Estado de cobro:</strong> ${pedidoParaImprimir.estadoCobro || "-"}
       </div>
 
       <table>
@@ -225,7 +225,7 @@ function imprimirPedido(pedidoParaImprimir) {
         ${observacionesHtml}
       </div>
 
-      ${pieComprobante ? `<div class="footer">${escaparTextoHtml(pieComprobante)}</div>` : ""}
+      ${pieComprobante ? html`<div class="footer">${pieComprobante}</div>` : ""}
     </body>
     </html>
   `);

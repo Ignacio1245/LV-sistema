@@ -8,10 +8,14 @@ const path = require("path");
 const CHROME_PATH = process.env.CHROME_PATH ||
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const BASE_URL = process.argv[2] || "http://127.0.0.1:5600";
+if (!["127.0.0.1", "localhost", "[::1]"].includes(new URL(BASE_URL).hostname)) {
+  throw new Error("La auditoria interactiva solo puede ejecutarse contra un servidor local aislado.");
+}
 const OUTPUT_PATH = path.join(os.tmpdir(), "lv-sistema-mobile-audit");
 const MOBILE_COMPACTO = { width: 360, height: 800, deviceScaleFactor: 1, mobile: true };
 const MOBILE = { width: 390, height: 844, deviceScaleFactor: 1, mobile: true };
 const TABLET = { width: 768, height: 1024, deviceScaleFactor: 1, mobile: true };
+const DESKTOP = { width: 1366, height: 900, deviceScaleFactor: 1, mobile: false };
 
 function esperar(ms) {
   return new Promise(function (resolver) {
@@ -203,7 +207,11 @@ function expresionAuditoria(nombre) {
   return `(() => {
     const ancho = window.innerWidth;
     const raiz = document.documentElement;
-    const visibles = [...document.querySelectorAll("body *")].filter((elemento) => {
+    const editorActivo = document.querySelector(".editor-compacto-activo");
+    const modalActivo = [...document.querySelectorAll(".modal")].find((elemento) => !elemento.classList.contains("hidden"));
+    const carritoCatalogoActivo = document.querySelector("#catalogoCarrito.catalogo-carrito-abierto");
+    const superficieActiva = editorActivo || modalActivo || carritoCatalogoActivo || document.body;
+    const visibles = [...superficieActiva.querySelectorAll("*")].filter((elemento) => {
       const estilo = getComputedStyle(elemento);
       const rect = elemento.getBoundingClientRect();
       return estilo.display !== "none" && estilo.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
@@ -213,6 +221,13 @@ function expresionAuditoria(nombre) {
       : elemento.tagName.toLowerCase() + ([...elemento.classList].length ? "." + [...elemento.classList].slice(0, 3).join(".") : "");
     const controlesPequenos = visibles
       .filter((elemento) => elemento.matches("button, a, input:not([type=hidden]), select, textarea"))
+      .filter((elemento) => {
+        if (!elemento.matches('input[type="checkbox"], input[type="radio"]')) return true;
+        const etiqueta = elemento.closest("label");
+        if (!etiqueta) return true;
+        const rectEtiqueta = etiqueta.getBoundingClientRect();
+        return rectEtiqueta.width < 40 || rectEtiqueta.height < 40;
+      })
       .map((elemento) => ({ selector: selector(elemento), ancho: Math.round(elemento.getBoundingClientRect().width), alto: Math.round(elemento.getBoundingClientRect().height) }))
       .filter((control) => control.alto < 40 || control.ancho < 40)
       .slice(0, 30);
@@ -483,6 +498,30 @@ async function auditarVendedores(cliente) {
     actualizarVistaVendedorDespuesDeCargarDatos();
     window.scrollTo(0, 0);
   })()`);
+
+  const reglaVisibilidadClientes = await evaluar(cliente, `(() => {
+    const usuarioAnterior = usuarioSistemaVendedorActual;
+    const autorizadoAnterior = vendedorMovilAutorizado;
+    usuarioSistemaVendedorActual = {
+      rol: "VENDEDOR",
+      nombre: "Vendedor de prueba",
+      email: "vendedor@prueba.local",
+      vendedorComercial: { nombre: "Vendedor de prueba", email: "vendedor@prueba.local" }
+    };
+    vendedorMovilAutorizado = true;
+    const resultado = {
+      sinAsignar: clienteAsignadoAlVendedorActual({ vendedorAsignado: "" }),
+      propio: clienteAsignadoAlVendedorActual({ vendedorAsignado: "Vendedor de prueba" }),
+      ajeno: clienteAsignadoAlVendedorActual({ vendedorAsignado: "Otro vendedor" })
+    };
+    usuarioSistemaVendedorActual = usuarioAnterior;
+    vendedorMovilAutorizado = autorizadoAnterior;
+    return resultado;
+  })()`);
+  if (!reglaVisibilidadClientes.sinAsignar || !reglaVisibilidadClientes.propio || reglaVisibilidadClientes.ajeno) {
+    throw new Error("Regla de clientes vendedor invalida: " + JSON.stringify(reglaVisibilidadClientes));
+  }
+
   resultados.push(await capturar(cliente, "vendedores-inicio-mobile"));
 
   await evaluar(cliente, `seleccionarModuloVendedor("venta"); window.scrollTo(0, 0);`);
@@ -524,6 +563,37 @@ async function auditarVendedores(cliente) {
     throw new Error("Revision de pedido vendedor invalida: " + JSON.stringify(estadoResumen));
   }
 
+  await evaluar(cliente, `void intentarSeleccionarClienteVendedor(clientesVendedor[1]);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "vendedores-confirmar-cambio-cliente-mobile"));
+  const cambioClienteAvisado = await evaluar(cliente, `(() => ({
+    visible: !vendedorDom.confirmacion.classList.contains("vendedores-oculto"),
+    titulo: vendedorDom.confirmacionTitulo.textContent,
+    aceptar: vendedorDom.confirmacionAceptar.textContent
+  }))()`);
+  if (!cambioClienteAvisado.visible || !cambioClienteAvisado.titulo.includes("Cambiar") || !cambioClienteAvisado.aceptar.includes("vaciar")) {
+    throw new Error("La confirmacion de cambio de cliente no es clara: " + JSON.stringify(cambioClienteAvisado));
+  }
+  await evaluar(cliente, `vendedorDom.confirmacionAceptar.click();`);
+  await esperar(80);
+  const cambioClienteSeguro = await evaluar(cliente, `(() => ({
+    cliente: clienteSeleccionadoVendedor && clienteSeleccionadoVendedor.codigo,
+    items: itemsPedidoVendedor.length
+  }))()`);
+  if (Number(cambioClienteSeguro.cliente) !== 202 || cambioClienteSeguro.items !== 0) {
+    throw new Error("El cambio seguro de cliente fallo: " + JSON.stringify(cambioClienteSeguro));
+  }
+
+  await evaluar(cliente, `agregarProductoPedidoVendedor(productosVendedor[1], 1, 0); void solicitarVaciarPedidoVendedor();`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "vendedores-confirmar-vaciar-pedido-mobile"));
+  await evaluar(cliente, `vendedorDom.confirmacionCancelar.click();`);
+  await esperar(80);
+  const vaciadoCancelado = await evaluar(cliente, `itemsPedidoVendedor.length`);
+  if (vaciadoCancelado !== 1) {
+    throw new Error("Cancelar Vaciar pedido elimino productos");
+  }
+
   await evaluar(cliente, `volverInicioVendedor(); window.scrollTo(0, 0);`);
   await esperar(80);
   resultados.push(await capturar(cliente, "vendedores-regreso-tareas-mobile"));
@@ -541,26 +611,332 @@ async function auditarVendedores(cliente) {
   return resultados;
 }
 
+async function auditarEditoresAdmin(cliente) {
+  const resultados = [];
+  await navegar(
+    cliente,
+    BASE_URL + "/",
+    DESKTOP,
+    "typeof abrirEditorCompacto === 'function' && typeof abrirCambioClaveUsuario === 'function'"
+  );
+  await evaluar(cliente, `(() => {
+    const usuario = obtenerAdministradorLocalInicial();
+    if (!usuario) throw new Error("No hay administrador local de prueba");
+    aplicarUsuarioSistemaAutenticado(usuario);
+    desactivarSincronizacionAutomaticaSupabase();
+    usuariosSistema.splice(0, usuariosSistema.length,
+      { codigo: 1, nombre: "Administrador de prueba", rol: "SUPERADMIN", email: "admin@prueba.local", activo: true },
+      { codigo: 2, nombre: "Vendedor de prueba", rol: "VENDEDOR", email: "vendedor@prueba.local", activo: true }
+    );
+    vendedoresSistema.splice(0, vendedoresSistema.length,
+      { codigo: 21, nombre: "Vendedor de prueba", telefono: "11 5555-1234", email: "vendedor", zona: "Centro", tipo: "Calle", activo: true }
+    );
+    proveedores.splice(0, proveedores.length,
+      { codigo: 31, nombre: "Mayorista Central", telefono: "11 4444-1234", contacto: "Juan", observacion: "Entrega semanal", activo: true }
+    );
+    zonas.splice(0, zonas.length,
+      { codigo: 41, nombre: "Centro", descripcion: "Zona centro", activo: true },
+      { codigo: 42, nombre: "Norte", descripcion: "Zona norte", activo: true }
+    );
+    rubros.splice(0, rubros.length,
+      { codigo: 51, nombre: "Almacen", descripcion: "Productos de almacen", activo: true }
+    );
+    window.__confirmacionesEditor = 0;
+    window.confirm = function () {
+      window.__confirmacionesEditor += 1;
+      return true;
+    };
+    ROLES.REPARTIDOR = obtenerPermisosRolSistema("REPARTIDOR", { ventas: true, clientes: true });
+  })()`);
+  await cargarDatosFicticiosAdmin(cliente);
+  await evaluar(cliente, `(() => {
+    zonas.splice(0, zonas.length,
+      { codigo: 41, nombre: "Centro", descripcion: "Zona centro", activo: true },
+      { codigo: 42, nombre: "Norte", descripcion: "Zona norte", activo: true }
+    );
+    rubros.splice(0, rubros.length,
+      { codigo: 51, nombre: "Almacen", descripcion: "Productos de almacen", activo: true }
+    );
+  })()`);
+
+  await evaluar(cliente, `mostrarPagina("clientes"); editarCliente(10); window.scrollTo(0, 0);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-editor-cliente-desktop"));
+  const clienteEstado = await evaluar(cliente, `(() => ({
+    modal: dom.clientForm.classList.contains("editor-compacto-activo"),
+    listadoVisible: !dom.clientesTablaBloque.classList.contains("hidden"),
+    fondoVisible: !document.getElementById("editorCompactoFondo").classList.contains("hidden")
+  }))()`);
+  if (!clienteEstado.modal || !clienteEstado.listadoVisible || !clienteEstado.fondoVisible) {
+    throw new Error("Editor de cliente invalido: " + JSON.stringify(clienteEstado));
+  }
+  await evaluar(cliente, `cerrarEditorCompacto();`);
+
+  await evaluar(cliente, `mostrarPagina("productos"); editarProducto(101); window.scrollTo(0, 0);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-editor-producto-desktop"));
+  const productoEstado = await evaluar(cliente, `(() => ({
+    modal: dom.productForm.classList.contains("editor-compacto-activo"),
+    listadoVisible: !dom.productosTablaBloque.classList.contains("hidden"),
+    codigoBloqueado: dom.productCodeInput.disabled
+  }))()`);
+  if (!productoEstado.modal || !productoEstado.listadoVisible || !productoEstado.codigoBloqueado) {
+    throw new Error("Editor de producto invalido: " + JSON.stringify(productoEstado));
+  }
+  await evaluar(cliente, `cerrarEditorCompacto();`);
+
+  await evaluar(cliente, `mostrarPagina("configuracion"); mostrarSeccionConfiguracion("accesos"); renderizarUsuariosSistema(); editarUsuarioSistema(2); window.scrollTo(0, 0);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-editor-usuario-desktop"));
+  const usuarioEstado = await evaluar(cliente, `(() => ({
+    modal: dom.usuarioForm.classList.contains("editor-compacto-activo"),
+    claveOculta: document.getElementById("usuarioPasswordLabel").classList.contains("hidden"),
+    rol: dom.usuarioNuevoRolInput.value
+  }))()`);
+  if (!usuarioEstado.modal || !usuarioEstado.claveOculta || usuarioEstado.rol !== "VENDEDOR") {
+    throw new Error("Editor de usuario invalido: " + JSON.stringify(usuarioEstado));
+  }
+  await evaluar(cliente, `cerrarEditorCompacto(); abrirCambioClaveUsuario(2);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-cambiar-clave-desktop"));
+  const claveEstado = await evaluar(cliente, `(() => {
+    generarClaveProvisoriaUsuario();
+    return {
+      modalVisible: !document.getElementById("usuarioClaveModal").classList.contains("hidden"),
+      largo: document.getElementById("usuarioClaveNuevaInput").value.length,
+      visible: document.getElementById("usuarioClaveNuevaInput").type === "text"
+    };
+  })()`);
+  if (!claveEstado.modalVisible || claveEstado.largo < 8 || !claveEstado.visible) {
+    throw new Error("Cambio de clave invalido: " + JSON.stringify(claveEstado));
+  }
+  await evaluar(cliente, `cerrarCambioClaveUsuario();`);
+
+  await evaluar(cliente, `mostrarSeccionConfiguracion("roles"); renderizarRolesSistema(); editarRolSistema("REPARTIDOR"); aplicarPlantillaPermisosPractica("stock"); window.scrollTo(0, 0);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-editor-rol-desktop"));
+  const rolEstado = await evaluar(cliente, `(() => ({
+    modal: dom.rolForm.classList.contains("editor-compacto-activo"),
+    permisos: Array.from(dom.rolPermisosInputs).filter(function (input) { return input.checked; }).map(function (input) { return input.dataset.rolePermission; }),
+    resumen: document.getElementById("rolPermisosResumen").textContent
+  }))()`);
+  if (!rolEstado.modal || !rolEstado.permisos.includes("productos") || rolEstado.permisos.includes("ventas") || !rolEstado.resumen.includes("6 permisos")) {
+    throw new Error("Editor de rol invalido: " + JSON.stringify(rolEstado));
+  }
+  await evaluar(cliente, `cerrarEditorCompacto(true); cancelarEdicionRolSistema();`);
+
+  await evaluar(cliente, `mostrarSeccionConfiguracion("vendedores"); renderizarVendedores(); editarVendedor(21); window.scrollTo(0, 0);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-editor-vendedor-desktop"));
+  if (!await evaluar(cliente, `dom.vendedorForm.classList.contains("editor-compacto-activo")`)) {
+    throw new Error("El vendedor no abrio en editor compacto");
+  }
+  await evaluar(cliente, `cerrarEditorCompacto();`);
+
+  await evaluar(cliente, `mostrarPagina("proveedores"); renderizarProveedores(); editarProveedor(31); window.scrollTo(0, 0);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-editor-proveedor-desktop"));
+  if (!await evaluar(cliente, `dom.proveedorForm.classList.contains("editor-compacto-activo")`)) {
+    throw new Error("El proveedor no abrio en editor compacto");
+  }
+  await evaluar(cliente, `cerrarEditorCompacto();`);
+
+  await evaluar(cliente, `mostrarPagina("rubros"); renderizarRubros(); editarRubro(51); window.scrollTo(0, 0);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-editor-rubro-desktop"));
+  if (!await evaluar(cliente, `dom.rubroForm.classList.contains("editor-compacto-activo")`)) {
+    throw new Error("El rubro no abrio en editor compacto");
+  }
+  await evaluar(cliente, `cerrarEditorCompacto();`);
+
+  await evaluar(cliente, `mostrarPagina("zonas"); renderizarZonas(); editarZona(41); window.scrollTo(0, 0);`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "admin-editor-zona-desktop"));
+  const proteccionEstado = await evaluar(cliente, `(() => {
+    dom.zonaNombreInput.value = "Centro modificado";
+    window.confirm = function () {
+      window.__confirmacionesEditor += 1;
+      return false;
+    };
+    const cerro = cerrarEditorCompacto();
+    const siguioAbierto = dom.zonaForm.classList.contains("editor-compacto-activo");
+    window.confirm = function () {
+      window.__confirmacionesEditor += 1;
+      return true;
+    };
+    cerrarEditorCompacto();
+    return {
+      cerro: cerro,
+      siguioAbierto: siguioAbierto,
+      confirmaciones: window.__confirmacionesEditor
+    };
+  })()`);
+  if (proteccionEstado.cerro !== false || !proteccionEstado.siguioAbierto || proteccionEstado.confirmaciones < 2) {
+    throw new Error("La proteccion de cambios sin guardar fallo: " + JSON.stringify(proteccionEstado));
+  }
+
+  return resultados;
+}
+
 async function auditarCatalogo(cliente) {
+  const resultados = [];
   await navegar(
     cliente,
     BASE_URL + "/catalogo.html",
     MOBILE,
-    "typeof renderizarProductosCatalogo === 'function' && typeof renderizarCarritoCatalogo === 'function'"
+    "typeof catalogoInicializacion !== 'undefined'"
   );
+  await evaluar(cliente, "catalogoInicializacion");
+  await evaluar(cliente, "detenerActualizacionTiempoRealCatalogo();");
   await evaluar(cliente, `(() => {
+    localStorage.removeItem(CLAVE_BORRADOR_CATALOGO);
+    carritoCatalogo = [];
     productosCatalogo = [
       { codigo: 101, nombre: "Yerba mate tradicional 1 kg", marca: "Marca Norte", detalle: "Paquete", rubro: "Almacen", stock: 25, precio: 4250, precioBase: 4250, activo: true, mostrarCatalogo: true, tipo: "UNIDAD" },
       { codigo: 102, nombre: "Aceite de girasol 1,5 l", marca: "Campo", detalle: "Botella", rubro: "Almacen", stock: 12, precio: 3100, precioBase: 3100, activo: true, mostrarCatalogo: true, tipo: "UNIDAD" },
-      { codigo: 103, nombre: "Galletitas surtidas", marca: "Dulce", detalle: "Pack x 6", rubro: "Golosinas", stock: 40, precio: 5800, precioBase: 5800, activo: true, mostrarCatalogo: true, tipo: "UNIDAD" }
+      { codigo: 103, nombre: "Galletitas surtidas", marca: "Dulce", detalle: "Pack x 6", rubro: "Golosinas", stock: 40, precio: 5800, precioBase: 5800, activo: true, mostrarCatalogo: true, tipo: "UNIDAD" },
+      { codigo: 104, nombre: "Producto temporalmente agotado", marca: "Marca", detalle: "Unidad", rubro: "Almacen", stock: 0, precio: 1900, precioBase: 1900, activo: true, mostrarCatalogo: true, tipo: "UNIDAD" }
     ];
+    rubroCatalogoActual = "TODOS";
+    ordenCatalogoActual = "relevancia";
+    catalogoDom.busquedaProducto.value = "";
+    renderizarFiltrosRubrosCatalogo();
     renderizarProductosCatalogo();
-    carritoCatalogo = [{ producto: productosCatalogo[0], cantidad: 2 }];
     renderizarCarritoCatalogo();
     actualizarEstadoCatalogo("Catalogo actualizado");
     window.scrollTo(0, 0);
   })()`);
-  return [await capturar(cliente, "catalogo-mobile")];
+  resultados.push(await capturar(cliente, "catalogo-productos-mobile"));
+  const sinStockEstado = await evaluar(cliente, `(() => ({
+    tarjetas: catalogoDom.listaProductos.querySelectorAll(".catalogo-producto-sin-stock").length,
+    bloqueados: catalogoDom.listaProductos.querySelectorAll(".catalogo-producto-sin-stock button:disabled").length
+  }))()`);
+  if (sinStockEstado.tarjetas !== 1 || sinStockEstado.bloqueados !== 1) {
+    throw new Error("El producto sin stock no se mostro bloqueado: " + JSON.stringify(sinStockEstado));
+  }
+
+  const filtroEstado = await evaluar(cliente, `(() => {
+    const botonGolosinas = Array.from(catalogoDom.filtrosRubros.querySelectorAll("button")).find(function (boton) {
+      return boton.textContent === "Golosinas";
+    });
+    if (!botonGolosinas) throw new Error("No se creo el filtro Golosinas");
+    botonGolosinas.click();
+    return {
+      tarjetas: catalogoDom.listaProductos.querySelectorAll(".catalogo-producto").length,
+      activo: catalogoDom.filtrosRubros.querySelector("button.activo").textContent
+    };
+  })()`);
+  if (filtroEstado.tarjetas !== 1 || filtroEstado.activo !== "Golosinas") {
+    throw new Error("El filtro por rubro fallo: " + JSON.stringify(filtroEstado));
+  }
+
+  await evaluar(cliente, `(() => {
+    limpiarFiltrosCatalogo();
+    agregarProductoAlCarrito(productosCatalogo[0], 2);
+    window.scrollTo(0, 0);
+  })()`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "catalogo-producto-agregado-mobile"));
+  const agregadoEstado = await evaluar(cliente, `(() => {
+    const cantidad = catalogoDom.listaProductos.querySelector(".catalogo-producto-en-carrito .catalogo-producto-accion strong");
+    return {
+      cantidadEnTarjeta: cantidad ? cantidad.textContent : "",
+      items: carritoCatalogo.length,
+      tarjetasAgregadas: catalogoDom.listaProductos.querySelectorAll(".catalogo-producto-en-carrito").length,
+      borrador: Boolean(JSON.parse(localStorage.getItem(CLAVE_BORRADOR_CATALOGO) || "null")),
+      resumenActivo: catalogoDom.resumenMovil.classList.contains("catalogo-resumen-movil-activo")
+    };
+  })()`);
+  if (agregadoEstado.cantidadEnTarjeta !== "2" || !agregadoEstado.borrador || !agregadoEstado.resumenActivo) {
+    throw new Error("Agregar producto o guardar borrador fallo: " + JSON.stringify(agregadoEstado));
+  }
+
+  await evaluar(cliente, `abrirCarritoCatalogo();`);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "catalogo-carrito-mobile"));
+  const carritoEstado = await evaluar(cliente, `(() => ({
+    abierto: document.getElementById("catalogoCarrito").classList.contains("catalogo-carrito-abierto"),
+    fondo: !catalogoDom.carritoFondo.hidden,
+    items: catalogoDom.itemsCarrito.querySelectorAll(".catalogo-item-carrito").length
+  }))()`);
+  if (!carritoEstado.abierto || !carritoEstado.fondo || carritoEstado.items !== 1) {
+    throw new Error("El carrito movil fallo: " + JSON.stringify(carritoEstado));
+  }
+
+  const confirmacion = await evaluar(cliente, `(async () => {
+    catalogoDom.nombreCliente.value = "Cliente de prueba";
+    catalogoDom.direccionCliente.value = "Calle de prueba 123";
+    catalogoDom.telefonoCliente.value = "1112345678";
+    catalogoDom.telefonoDestino.value = "5491112345678";
+    let llamadas = 0;
+    const original = crearPedidoCatalogoPublicoSupabase;
+    const contactoOriginal = obtenerConfiguracionCatalogoPublicoSupabase;
+    obtenerConfiguracionCatalogoPublicoSupabase = async function () { return { whatsapp: "5491112345678" }; };
+    crearPedidoCatalogoPublicoSupabase = async function () {
+      llamadas += 1;
+      return { numero: 999, total: 8500, cliente_codigo: 15 };
+    };
+    try {
+      await enviarPedidoPorWhatsapp({ preventDefault() {} });
+      await enviarPedidoPorWhatsapp({ preventDefault() {} });
+      return { llamadas, items: carritoCatalogo.length, confirmado: leerEnvioCatalogo().estado,
+        enlace: catalogoDom.resultadoWhatsapp.href, visible: !catalogoDom.resultado.hidden };
+    } finally { crearPedidoCatalogoPublicoSupabase = original; obtenerConfiguracionCatalogoPublicoSupabase = contactoOriginal; }
+  })()`);
+  if (confirmacion.llamadas !== 1 || confirmacion.items !== 0 || confirmacion.confirmado !== "confirmado" || !confirmacion.visible || !confirmacion.enlace.includes("wa.me")) {
+    throw new Error("Confirmacion aislada de catalogo fallo: " + JSON.stringify(confirmacion));
+  }
+  resultados.push(await capturar(cliente, "catalogo-confirmacion-mobile"));
+
+  await evaluar(cliente, `cerrarCarritoCatalogo();`);
+  await cliente.enviar("Emulation.setDeviceMetricsOverride", DESKTOP);
+  await esperar(80);
+  resultados.push(await capturar(cliente, "catalogo-desktop"));
+  return resultados;
+}
+
+async function auditarBandejaCatalogo(cliente) {
+  await navegar(cliente, BASE_URL + "/", DESKTOP, "typeof abrirBandejaCatalogo === 'function' && typeof aplicarUsuarioSistemaAutenticado === 'function'");
+  await evaluar(cliente, `(() => {
+    aplicarUsuarioSistemaAutenticado(obtenerAdministradorLocalInicial());
+    desactivarSincronizacionAutomaticaSupabase();
+    document.querySelector(".app").classList.add("sidebar-collapsed");
+  })()`);
+  await cargarDatosFicticiosAdmin(cliente);
+  await evaluar(cliente, `(() => {
+    const base = pedidos[0];
+    pedidos.splice(0, pedidos.length,
+      { ...base, id: 700, numero: 700, origen: "administracion", estado: "PENDIENTE" },
+      { ...base, id: 701, numero: 701, origen: "catalogo", estado: "PENDIENTE", importePagado: 0, estadoCobro: "",
+        observaciones: ["Pedido desde catalogo publico", "Direccion de entrega: Av. Central 1234", "Telefono de contacto: 1112345678", "Comentario: Entregar despues de las 16 hs"] },
+      { ...base, id: 702, numero: 702, origen: "catalogo", estado: "ATENDIDO", importePagado: 0, estadoCobro: "" },
+      { ...base, id: 703, numero: 703, origen: "catalogo", estado: "ENTREGADO", importePagado: 0, estadoCobro: "CUENTA_CORRIENTE", saldoPendiente: 8500 }
+    );
+    abrirBandejaCatalogo();
+  })()`);
+  const estado = await evaluar(cliente, `(() => ({
+    ids: obtenerPedidosFiltrados().map(p => p.id),
+    aviso: !document.getElementById("catalogoPedidosAviso").hidden,
+    direccion: dom.pedidosTable.textContent.includes("Av. Central 1234"),
+    telefono: dom.pedidosTable.textContent.includes("1112345678"),
+    cobro: dom.pedidosTable.textContent.includes("Sin cobro registrado"),
+    preparado: dom.pedidosTable.textContent.includes("Marcar preparado")
+  }))()`);
+  if (JSON.stringify(estado.ids) !== "[701]" || !estado.aviso || !estado.direccion || !estado.telefono || !estado.cobro || !estado.preparado) {
+    throw new Error("Bandeja de catalogo incorrecta: " + JSON.stringify(estado));
+  }
+  const resultados = [await capturar(cliente, "admin-catalogo-desktop")];
+  await evaluar(cliente, `document.querySelector('[data-catalogo-estado="ATENDIDO"]').click(); entregarPedido(702);`);
+  const pago = await evaluar(cliente, "Number(dom.entregaPagoInput.value)");
+  if (pago !== 0) throw new Error("La entrega del catalogo presupone un cobro");
+  resultados.push(await capturar(cliente, "admin-catalogo-entrega-desktop"));
+  await evaluar(cliente, "cerrarEntregaPedidoModal(); abrirBandejaCatalogo();");
+  await cliente.enviar("Emulation.setDeviceMetricsOverride", MOBILE);
+  resultados.push(await capturar(cliente, "admin-catalogo-mobile"));
+  await evaluar(cliente, "salirBandejaCatalogo();");
+  const todos = await evaluar(cliente, "obtenerPedidosFiltrados().map(p=>p.id).sort()");
+  if (JSON.stringify(todos) !== "[700,701]") throw new Error("Volver a todas las ventas conserva el filtro de origen");
+  return resultados;
 }
 
 async function ejecutar() {
@@ -587,6 +963,10 @@ async function ejecutar() {
     cliente = new ClienteCdp(pagina.webSocketDebuggerUrl);
     await cliente.conectar();
     await cliente.enviar("Page.enable");
+    await cliente.enviar("Network.enable");
+    await cliente.enviar("Network.setBlockedURLs", {
+      urls: ["*supabase.co*", "*supabase.in*", "*wa.me*", "*api.whatsapp.com*"]
+    });
     await cliente.enviar("Runtime.enable");
     const resultados = [];
     const auditoriaCompacta = await auditarAdmin(cliente, MOBILE_COMPACTO, "compacto");
@@ -595,6 +975,8 @@ async function ejecutar() {
     resultados.push(...auditoriaCompacta);
     resultados.push(...auditoriaMovil);
     resultados.push(...auditoriaTablet);
+    resultados.push(...await auditarEditoresAdmin(cliente));
+    resultados.push(...await auditarBandejaCatalogo(cliente));
     resultados.push(...await auditarVendedores(cliente));
     resultados.push(...await auditarCatalogo(cliente));
     const aplicacionesInstalables = [];

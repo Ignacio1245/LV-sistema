@@ -85,11 +85,11 @@ function renderizarOpcionesZonasActivas() {
     zonas.filter(zonaActiva);
   const opcionesZonas =
     zonasActivas.map(function (zona) {
-      return `<option value="${zona.nombre}">${zona.nombre}</option>`;
+      return html`<option value="${zona.nombre}">${zona.nombre}</option>`;
     }).join("");
   const opcionSinZona =
     zonasActivas.length === 0
-      ? `<option value="Sin zona">Sin zona</option>`
+      ? html`<option value="Sin zona">Sin zona</option>`
       : "";
 
   if (dom.clientZoneInput) {
@@ -97,7 +97,7 @@ function renderizarOpcionesZonasActivas() {
       dom.clientZoneInput.value;
 
     dom.clientZoneInput.innerHTML =
-      `<option value="">Seleccionar zona</option>` + opcionSinZona + opcionesZonas;
+      html`<option value="">Seleccionar zona</option>` + opcionSinZona + opcionesZonas;
 
     dom.clientZoneInput.value =
       zonaSeleccionada === "Sin zona" && zonasActivas.length === 0
@@ -147,7 +147,7 @@ function renderizarZonas() {
   renderizarOpcionesZonasActivas();
 
   if (zonasFiltradas.length === 0) {
-    dom.zonasTable.innerHTML = `
+    dom.zonasTable.innerHTML = html`
       <tr>
         <td colspan="6" class="empty-table">
           No hay zonas para mostrar.
@@ -159,11 +159,11 @@ function renderizarZonas() {
 
   dom.zonasTable.innerHTML =
     zonasFiltradas.map(function (zona) {
-      return `
+      return html`
         <tr>
-          <td>${escaparTextoHtml(zona.codigo)}</td>
-          <td>${escaparTextoHtml(zona.nombre)}</td>
-          <td>${escaparTextoHtml(zona.descripcion || "-")}</td>
+          <td>${zona.codigo}</td>
+          <td>${zona.nombre}</td>
+          <td>${zona.descripcion || "-"}</td>
           <td>${contarClientesPorZona(zona.nombre)}</td>
           <td>
             <span class="stock-pill stock-ok">Activa</span>
@@ -172,7 +172,7 @@ function renderizarZonas() {
             <button class="btn btn-secondary" onclick="editarZona(${zona.codigo})">
               Editar
             </button>
-            <button class="btn btn-danger" onclick="eliminarZona(${zona.codigo})">
+            <button class="btn btn-danger btn-eliminar" onclick="eliminarZona(${zona.codigo})">
               Eliminar
             </button>
           </td>
@@ -281,9 +281,6 @@ async function agregarZona(event) {
       }
     });
 
-    zonaEditando = null;
-    dom.zonaForm.reset();
-    dom.zonaSubmitButton.textContent = "Agregar zona";
     guardarZonas();
     guardarClientes();
 
@@ -294,8 +291,16 @@ async function agregarZona(event) {
       return;
     }
 
+    if (typeof cerrarEditorCompacto === "function") {
+      cerrarEditorCompacto(true);
+    }
+    cancelarEdicionZona();
+
     renderizarZonas();
     renderizarClientes();
+    if (typeof mostrarAvisoPractico === "function") {
+      mostrarAvisoPractico("Zona actualizada correctamente.");
+    }
 
     registrarAuditoria(
       "Zonas",
@@ -352,7 +357,20 @@ function editarZona(codigo) {
   dom.zonaNombreInput.value = zona.nombre;
   dom.zonaDescripcionInput.value = zona.descripcion || "";
   dom.zonaSubmitButton.textContent = "Guardar cambios";
+  if (typeof abrirEditorCompacto === "function") {
+    abrirEditorCompacto(dom.zonaForm, {
+      titulo: "Editar zona",
+      subtitulo: zona.codigo + " · " + zona.nombre,
+      alCerrar: cancelarEdicionZona
+    });
+  }
   dom.zonaNombreInput.focus();
+}
+
+function cancelarEdicionZona() {
+  zonaEditando = null;
+  dom.zonaForm.reset();
+  dom.zonaSubmitButton.textContent = "Agregar zona";
 }
 
 async function eliminarZona(codigo) {

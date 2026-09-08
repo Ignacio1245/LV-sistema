@@ -147,7 +147,7 @@ function renderizarOpcionesRolesUsuario() {
 
     dom.usuarioNuevoRolInput.innerHTML =
         Object.keys(ROLES).map(function (nombreRol) {
-            return `<option value="${nombreRol}">${nombreRol}</option>`;
+            return html`<option value="${nombreRol}">${nombreRol}</option>`;
         }).join("");
 
     dom.usuarioNuevoRolInput.value =
@@ -168,13 +168,13 @@ function renderizarOpcionesVendedoresCliente() {
             : usuariosSistema;
 
     dom.clientVendedorAsignadoInput.innerHTML =
-        `<option value="">Seleccionar vendedor</option>` +
+        html`<option value="">Seleccionar vendedor</option>` +
         vendedoresDisponibles.filter(function (vendedor) {
             return vendedor.activo;
         }).map(function (vendedor) {
             const detalle =
                 vendedor.zona ? " | " + vendedor.zona : vendedor.tipo ? " | " + vendedor.tipo : "";
-            return `<option value="${vendedor.nombre}">${vendedor.nombre}${detalle}</option>`;
+            return html`<option value="${vendedor.nombre}">${vendedor.nombre}${detalle}</option>`;
         }).join("");
 
     const existeVendedor =
@@ -282,7 +282,7 @@ function renderizarRolesSistema() {
         Object.keys(ROLES).sort();
 
     if (roles.length === 0) {
-        dom.rolesSistemaTable.innerHTML = `
+        dom.rolesSistemaTable.innerHTML = html`
             <tr>
                 <td colspan="4" class="empty-table">No hay roles configurados.</td>
             </tr>
@@ -300,16 +300,16 @@ function renderizarRolesSistema() {
             const esBase =
                 obtenerRolesBaseSistema().includes(nombreRol);
 
-            return `
+            return html`
                 <tr>
                     <td><strong>${nombreRol}</strong></td>
                     <td>${permisos.length > 0 ? permisos.join(", ") : "Sin permisos"}</td>
                     <td>${esBase ? "Base" : "Personalizado"}</td>
                     <td>
-                        <button class="btn btn-secondary" onclick="editarRolSistema('${nombreRol}')" ${esBase ? "disabled" : ""}>
+                        <button class="btn btn-secondary" onclick="editarRolSistema(${literalJsHtml(nombreRol)})" ${esBase ? "disabled" : ""}>
                             Editar
                         </button>
-                        <button class="btn btn-danger" onclick="eliminarRolSistema('${nombreRol}')" ${esBase ? "disabled" : ""}>
+                        <button class="btn btn-danger btn-eliminar" onclick="eliminarRolSistema(${literalJsHtml(nombreRol)})" ${esBase ? "disabled" : ""}>
                             Eliminar
                         </button>
                     </td>
@@ -338,6 +338,12 @@ function cancelarEdicionRolSistema() {
         dom.rolForm.reset();
     }
     actualizarModoFormularioRol();
+    if (typeof cerrarEditorCompacto === "function") {
+        cerrarEditorCompacto(true);
+    }
+    if (typeof actualizarResumenPermisosPracticos === "function") {
+        actualizarResumenPermisosPracticos();
+    }
 }
 
 function editarRolSistema(nombreRol) {
@@ -357,6 +363,16 @@ function editarRolSistema(nombreRol) {
         input.checked = ROLES[nombreRol][input.dataset.rolePermission] === true;
     });
     actualizarModoFormularioRol();
+    if (typeof abrirEditorCompacto === "function") {
+        abrirEditorCompacto(dom.rolForm, {
+            titulo: "Editar rol",
+            subtitulo: nombreRol + " · Elegi solamente los modulos necesarios",
+            alCerrar: cancelarEdicionRolSistema
+        });
+    }
+    if (typeof actualizarResumenPermisosPracticos === "function") {
+        actualizarResumenPermisosPracticos();
+    }
     dom.rolNombreInput.focus();
 }
 
@@ -617,7 +633,7 @@ function renderizarUsuarioActual() {
             usuariosSistema.filter(function (usuario) {
                 return usuario.activo;
             }).map(function (usuario) {
-                return `
+                return html`
           <option value="${usuario.codigo}">
             ${usuario.nombre} | ${usuario.rol}
           </option>
@@ -648,9 +664,9 @@ function renderizarFiltroRolesUsuariosSistema() {
         dom.usuarioSistemaRolFiltro.value || filtroRolUsuariosSistema || "TODOS";
 
     dom.usuarioSistemaRolFiltro.innerHTML =
-        `<option value="TODOS">Todos los roles</option>` +
+        html`<option value="TODOS">Todos los roles</option>` +
         Object.keys(ROLES).map(function (nombreRol) {
-            return `<option value="${nombreRol}">${nombreRol}</option>`;
+            return html`<option value="${nombreRol}">${nombreRol}</option>`;
         }).join("");
 
     dom.usuarioSistemaRolFiltro.value =
@@ -693,7 +709,7 @@ function renderizarUsuariosSistema() {
         obtenerUsuariosSistemaFiltrados();
 
     if (usuariosSistema.length === 0) {
-        dom.usuariosSistemaTable.innerHTML = `
+        dom.usuariosSistemaTable.innerHTML = html`
       <tr>
         <td colspan="6" class="empty-table">No hay usuarios cargados.</td>
       </tr>
@@ -702,7 +718,7 @@ function renderizarUsuariosSistema() {
     }
 
     if (usuariosFiltrados.length === 0) {
-        dom.usuariosSistemaTable.innerHTML = `
+        dom.usuariosSistemaTable.innerHTML = html`
       <tr>
         <td colspan="6" class="empty-table">No hay usuarios para ese filtro.</td>
       </tr>
@@ -721,7 +737,7 @@ function renderizarUsuariosSistema() {
             const botonEstado =
                 usuario.activo ? "Desactivar" : "Activar";
 
-            return `
+            return html`
       <tr>
         <td>${usuario.codigo}</td>
         <td>
@@ -737,13 +753,13 @@ function renderizarUsuariosSistema() {
           <button class="btn btn-secondary" onclick="editarUsuarioSistema(${usuario.codigo})">
             Editar
           </button>
-          <button class="btn btn-secondary" onclick="enviarRecuperacionUsuarioSistema(${usuario.codigo})">
-            Restablecer clave
+          <button class="btn btn-secondary" onclick="abrirCambioClaveUsuario(${usuario.codigo})">
+            Cambiar clave
           </button>
           <button class="btn btn-secondary" onclick="cambiarEstadoUsuarioSistema(${usuario.codigo})">
             ${botonEstado}
           </button>
-          <button class="btn btn-danger" onclick="eliminarUsuarioSistema(${usuario.codigo})">
+          <button class="btn btn-danger btn-eliminar" onclick="eliminarUsuarioSistema(${usuario.codigo})">
             Eliminar
           </button>
         </td>
@@ -775,12 +791,24 @@ function actualizarModoFormularioUsuario() {
             editando ? "Dejar vacio si no cambia" : "Minimo 6 caracteres";
         dom.usuarioPasswordInput.required = false;
     }
+
+    const etiquetaPassword = document.getElementById("usuarioPasswordLabel");
+    if (etiquetaPassword) {
+        etiquetaPassword.classList.toggle("hidden", editando);
+    }
+
+    if (typeof actualizarAyudaRolUsuario === "function") {
+        actualizarAyudaRolUsuario();
+    }
 }
 
 function cancelarEdicionUsuarioSistema() {
     usuarioEditandoCodigo = null;
     dom.usuarioForm.reset();
     actualizarModoFormularioUsuario();
+    if (typeof cerrarEditorCompacto === "function") {
+        cerrarEditorCompacto(true);
+    }
 }
 
 function editarUsuarioSistema(codigo) {
@@ -808,6 +836,13 @@ function editarUsuarioSistema(codigo) {
     }
 
     actualizarModoFormularioUsuario();
+    if (typeof abrirEditorCompacto === "function") {
+        abrirEditorCompacto(dom.usuarioForm, {
+            titulo: "Editar usuario",
+            subtitulo: usuario.nombre + " · Datos de acceso y rol",
+            alCerrar: cancelarEdicionUsuarioSistema
+        });
+    }
     dom.usuarioNombreInput.focus();
 }
 
@@ -979,6 +1014,9 @@ async function guardarEdicionUsuarioSistema(codigo, nombre, email, rol, password
     cancelarEdicionUsuarioSistema();
     renderizarUsuariosSistema();
     renderizarOpcionesVendedoresCliente();
+    if (typeof mostrarAvisoPractico === "function") {
+        mostrarAvisoPractico("Usuario actualizado correctamente.");
+    }
 }
 
 async function enviarRecuperacionUsuarioSistema(codigo) {

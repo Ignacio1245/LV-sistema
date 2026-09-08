@@ -81,7 +81,7 @@ function renderizarProductosHabitualesCliente() {
         const boton = document.createElement("button");
         boton.type = "button";
         boton.className = "frequent-product-button";
-        boton.innerHTML = `
+        boton.innerHTML = html`
       <span>
         <strong>${habitual.producto.nombre}</strong>
         <small>${habitual.cantidadVeces} compras | ${habitual.unidades} unidades</small>

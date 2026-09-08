@@ -125,7 +125,10 @@ as $$
   select case
     when public.usuario_es_vendedor_sistema() then
       public.usuario_tiene_permiso('ventas')
-      and public.texto_corresponde_usuario_vendedor(vendedor_asignado)
+      and (
+        length(trim(coalesce(vendedor_asignado, ''))) = 0
+        or public.texto_corresponde_usuario_vendedor(vendedor_asignado)
+      )
     else
       public.usuario_tiene_permiso('clientes')
       or public.usuario_tiene_permiso('ventas')
@@ -144,7 +147,10 @@ as $$
   select case
     when public.usuario_es_vendedor_sistema() then
       public.usuario_tiene_permiso('ventas')
-      and public.texto_corresponde_usuario_vendedor(vendedor_asignado)
+      and (
+        length(trim(coalesce(vendedor_asignado, ''))) = 0
+        or public.texto_corresponde_usuario_vendedor(vendedor_asignado)
+      )
     else
       public.usuario_tiene_permiso('clientes')
       or public.usuario_tiene_permiso('cuentaCorriente')
@@ -168,7 +174,10 @@ as $$
           select 1
           from clientes
           where clientes.id = pedido_cliente_id
-            and public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+            and (
+              length(trim(coalesce(clientes.vendedor_asignado, ''))) = 0
+              or public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+            )
         )
       )
     else
@@ -194,7 +203,10 @@ as $$
           select 1
           from clientes
           where clientes.id = pedido_cliente_id
-            and public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+            and (
+              length(trim(coalesce(clientes.vendedor_asignado, ''))) = 0
+              or public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+            )
         )
       )
     else
@@ -217,7 +229,10 @@ as $$
         select 1
         from clientes
         where clientes.id = pago_cliente_id
-          and public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+          and (
+            length(trim(coalesce(clientes.vendedor_asignado, ''))) = 0
+            or public.texto_corresponde_usuario_vendedor(clientes.vendedor_asignado)
+          )
       )
     else
       public.usuario_tiene_permiso('cuentaCorriente')
