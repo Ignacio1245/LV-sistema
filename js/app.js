@@ -427,6 +427,8 @@ const dom = {
   productPriceList4Input: document.querySelector("#productPriceList4Input"),
   productMarginList4Input: document.querySelector("#productMarginList4Input"),
   productPurchasePriceInput: document.querySelector("#productPurchasePriceInput"),
+  productPriceSummary: document.querySelector("#productPriceSummary"),
+  productRecalcPricesButton: document.querySelector("#productRecalcPricesButton"),
   productStockInput: document.querySelector("#productStockInput"),
   productMinimumStockInput: document.querySelector("#productMinimumStockInput"),
   productStockModeInput: document.querySelector("#productStockModeInput"),
@@ -1622,6 +1624,12 @@ function mostrarSeccionConfiguracion(seccion) {
 
   if (seccionActual === "accesos") {
     renderizarUsuariosSistema();
+
+    // Avisa si falta la funcion segura ANTES de que se cargue un usuario que
+    // despues no va a poder entrar desde el celular.
+    if (typeof verificarFuncionAccesosSupabase === "function") {
+      verificarFuncionAccesosSupabase();
+    }
   }
 }
 
@@ -2766,304 +2774,6 @@ function actualizarDatosOnlineAlVolverAlSistema() {
   actualizarDatosOnlineAlCambiarApartado(
     ultimaPaginaVisibleSistema || "sistema"
   );
-}
-
-async function sincronizarClientesYProductosConSupabase() {
-  const validacion =
-    validarDatosLocalesParaSupabase();
-
-  if (validacion.errores.length > 0) {
-    throw new Error("No se puede subir: " + validacion.errores.join(" | "));
-  }
-
-  const clientesCantidad =
-    await sincronizarClientesLocalesConSupabase();
-  const productosCantidad =
-    await sincronizarProductosLocalesConSupabase();
-
-  return {
-    clientes: clientesCantidad,
-    productos: productosCantidad
-  };
-}
-
-async function sincronizarPedidosValidadosConSupabase() {
-  const validacion =
-    validarDatosLocalesParaSupabase();
-
-  if (validacion.errores.length > 0) {
-    throw new Error("No se puede subir pedidos: " + validacion.errores.join(" | "));
-  }
-
-  return await sincronizarPedidosLocalesConSupabase();
-}
-
-async function sincronizarCuentaValidaConSupabase() {
-  const validacion =
-    validarDatosLocalesParaSupabase();
-
-  if (validacion.errores.length > 0) {
-    throw new Error("No se puede subir cuenta corriente: " + validacion.errores.join(" | "));
-  }
-
-  return await sincronizarCuentaCorrienteLocalConSupabase();
-}
-
-function obtenerDuplicadosPorCodigo(lista) {
-  const vistos = {};
-  const duplicados = [];
-
-  lista.forEach(function (item) {
-    const codigo =
-      String(item.codigo);
-
-    if (vistos[codigo]) {
-      duplicados.push(codigo);
-      return;
-    }
-
-    vistos[codigo] = true;
-  });
-
-  return [...new Set(duplicados)];
-}
-
-function validarDatosLocalesParaSupabase() {
-  const errores = [];
-  const advertencias = [];
-
-  const productosDuplicados =
-    obtenerDuplicadosPorCodigo(productos);
-  const clientesDuplicados =
-    obtenerDuplicadosPorCodigo(clientes);
-
-  if (productosDuplicados.length > 0) {
-    errores.push("Productos con codigo repetido: " + productosDuplicados.slice(0, 10).join(", "));
-  }
-
-  if (clientesDuplicados.length > 0) {
-    errores.push("Clientes con codigo repetido: " + clientesDuplicados.slice(0, 10).join(", "));
-  }
-
-  const productosCodigoInvalido =
-    productos.filter(function (producto) {
-      return !Number.isInteger(Number(producto.codigo)) || Number(producto.codigo) <= 0;
-    }).length;
-  const clientesCodigoInvalido =
-    clientes.filter(function (cliente) {
-      return !Number.isInteger(Number(cliente.codigo)) || Number(cliente.codigo) <= 0;
-    }).length;
-
-  if (productosCodigoInvalido > 0) {
-    errores.push("Productos con codigo invalido/no positivo: " + productosCodigoInvalido);
-  }
-
-  if (clientesCodigoInvalido > 0) {
-    errores.push("Clientes con codigo invalido/no positivo: " + clientesCodigoInvalido);
-  }
-
-  const productosSinNombre =
-    productos.filter(function (producto) {
-      return !producto.nombre || producto.nombre.trim() === "";
-    }).length;
-  const productosPrecioCero =
-    productos.filter(function (producto) {
-      return Number(producto.precio) <= 0;
-    }).length;
-  const productosStockCero =
-    productos.filter(function (producto) {
-      return obtenerStockTotalProducto(producto) <= 0;
-    }).length;
-  const productosSinRubro =
-    productos.filter(function (producto) {
-      return !producto.rubro || producto.rubro === "Sin rubro";
-    }).length;
-  const productosSinListaUno =
-    productos.filter(function (producto) {
-      const preciosLista =
-        obtenerPreciosListaProducto(producto);
-
-      return Number(preciosLista["Lista 1"]) <= 0;
-    }).length;
-  const productosConStockDecimal =
-    productos.filter(function (producto) {
-      const stock =
-        Number(producto.stock) || 0;
-      const stockMinimo =
-        Number(producto.stockMinimo) || 0;
-
-      return !Number.isInteger(stock) || !Number.isInteger(stockMinimo);
-    }).length;
-
-  if (productosSinNombre > 0) {
-    errores.push("Productos sin nombre: " + productosSinNombre);
-  }
-
-  if (productosPrecioCero > 0) {
-    advertencias.push("Productos con precio 0: " + productosPrecioCero);
-  }
-
-  if (productosStockCero > 0) {
-    advertencias.push("Productos con stock 0: " + productosStockCero);
-  }
-
-  if (productosSinRubro > 0) {
-    advertencias.push("Productos sin rubro real: " + productosSinRubro);
-  }
-
-  if (productosSinListaUno > 0) {
-    advertencias.push("Productos sin precio Lista 1: " + productosSinListaUno);
-  }
-
-  if (productosConStockDecimal > 0) {
-    advertencias.push(
-      "Productos con stock decimal: " + productosConStockDecimal +
-      ". Supabase debe tener schema-ajustes-js.sql actualizado."
-    );
-  }
-
-  const clientesSinNombre =
-    clientes.filter(function (cliente) {
-      return !cliente.nombre || cliente.nombre.trim() === "";
-    }).length;
-  const clientesSinZona =
-    clientes.filter(function (cliente) {
-      return !cliente.zona || cliente.zona === "Sin zona";
-    }).length;
-  const clientesConSaldo =
-    clientes.filter(function (cliente) {
-      return Number(cliente.saldo) !== 0;
-    }).length;
-
-  if (clientesSinNombre > 0) {
-    errores.push("Clientes sin nombre: " + clientesSinNombre);
-  }
-
-  if (clientesSinZona > 0) {
-    advertencias.push("Clientes sin zona real: " + clientesSinZona);
-  }
-
-  if (clientesConSaldo > 0) {
-    advertencias.push("Clientes con saldo inicial/cuenta: " + clientesConSaldo);
-  }
-
-  const pedidosSinCliente =
-    pedidos.filter(function (pedido) {
-      return !pedido.cliente;
-    }).length;
-  const pedidosSinItems =
-    pedidos.filter(function (pedido) {
-      return !Array.isArray(pedido.items) || pedido.items.length === 0;
-    }).length;
-  const pedidosConItemsIncompletos =
-    pedidos.filter(function (pedido) {
-      return Array.isArray(pedido.items) && pedido.items.some(function (item) {
-        return !item.producto ||
-          item.producto.codigo === undefined ||
-          Number(item.cantidad) <= 0 ||
-          Number(obtenerPrecioUnitarioItemPedido(item)) < 0;
-      });
-    }).length;
-  const pedidosNumeroDuplicado =
-    obtenerDuplicadosPorCodigo(
-      pedidos.map(function (pedido) {
-        return {
-          codigo: Number(pedido.numero || pedido.id) || 0
-        };
-      })
-    );
-  const pedidosNumeroInvalido =
-    pedidos.filter(function (pedido) {
-      return !Number.isInteger(Number(pedido.numero || pedido.id)) || Number(pedido.numero || pedido.id) <= 0;
-    }).length;
-  const pedidosConCantidadDecimal =
-    pedidos.filter(function (pedido) {
-      return Array.isArray(pedido.items) && pedido.items.some(function (item) {
-        const cantidad =
-          Number(item.cantidad) || 0;
-
-        return !Number.isInteger(cantidad);
-      });
-    }).length;
-  const clientesSaldoInvalido =
-    clientes.filter(function (cliente) {
-      return !Number.isFinite(Number(cliente.saldo));
-    }).length;
-
-  if (pedidosSinCliente > 0) {
-    errores.push("Pedidos sin cliente: " + pedidosSinCliente);
-  }
-
-  if (pedidosSinItems > 0) {
-    errores.push("Pedidos sin productos: " + pedidosSinItems);
-  }
-
-  if (pedidosConItemsIncompletos > 0) {
-    errores.push("Pedidos con productos incompletos: " + pedidosConItemsIncompletos);
-  }
-
-  if (pedidosNumeroDuplicado.length > 0) {
-    errores.push("Pedidos con numero repetido: " + pedidosNumeroDuplicado.slice(0, 10).join(", "));
-  }
-
-  if (pedidosNumeroInvalido > 0) {
-    errores.push("Pedidos con numero invalido/no positivo: " + pedidosNumeroInvalido);
-  }
-
-  if (pedidosConCantidadDecimal > 0) {
-    advertencias.push(
-      "Pedidos con cantidades decimales: " + pedidosConCantidadDecimal +
-      ". Supabase debe tener pedido_items.cantidad como numeric."
-    );
-  }
-
-  if (clientesSaldoInvalido > 0) {
-    errores.push("Clientes con saldo invalido: " + clientesSaldoInvalido);
-  }
-
-  return {
-    productos: productos.length,
-    clientes: clientes.length,
-    pedidos: pedidos.length,
-    zonas: zonas.length,
-    rubros: rubros.length,
-    proveedores: proveedores.length,
-    listasPrecios: listasPrecios.length,
-    errores: errores,
-    advertencias: advertencias
-  };
-}
-
-function validarDatosLocalesDesdePanel() {
-  const validacion =
-    validarDatosLocalesParaSupabase();
-  const partes = [
-    "Productos: " + validacion.productos,
-    "Clientes: " + validacion.clientes,
-    "Pedidos: " + validacion.pedidos,
-    "Zonas: " + validacion.zonas,
-    "Rubros: " + validacion.rubros,
-    "Proveedores: " + validacion.proveedores,
-    "Listas: " + validacion.listasPrecios
-  ];
-
-  if (validacion.errores.length > 0) {
-    partes.push("Errores: " + validacion.errores.join(" | "));
-  }
-
-  if (validacion.advertencias.length > 0) {
-    partes.push("Advertencias: " + validacion.advertencias.join(" | "));
-  }
-
-  return {
-    resumen: partes.join(" | "),
-    errores: validacion.errores,
-    advertencias: validacion.advertencias
-  };
-}
-
-function mantenerSincronizacionManualSupabase() {
-  desactivarSincronizacionAutomaticaSupabase();
 }
 
 function mostrarSeccionDatosBase(seccion) {
@@ -4507,19 +4217,35 @@ function configurarEventos() {
     agregarProducto
   );
 
-  [
-    dom.productPurchasePriceInput,
-    dom.productMarginList1Input,
-    dom.productMarginList2Input,
-    dom.productMarginList3Input,
-    dom.productMarginList4Input
-  ].forEach(function (input) {
-    if (!input) {
-      return;
-    }
+  // Precios del formulario de producto. Tres entradas distintas, tres efectos
+  // distintos, y ninguna pisa un precio escrito a mano:
+  //   costo   -> completa los precios vacios y refresca los margenes
+  //   margen  -> recalcula el precio de esa lista
+  //   precio  -> recalcula el margen de esa lista (el precio manda)
+  if (dom.productPurchasePriceInput) {
+    dom.productPurchasePriceInput.addEventListener("input", actualizarPreciosProductoPorMargenes);
+  }
 
-    input.addEventListener("input", actualizarPreciosProductoPorMargenes);
-  });
+  if (typeof LISTAS_FORMULARIO_PRECIO !== "undefined") {
+    LISTAS_FORMULARIO_PRECIO.forEach(function (fila) {
+      const inputMargen = dom[fila.campoMargen];
+      const inputPrecio = dom[fila.campoPrecio];
+
+      if (inputMargen) {
+        inputMargen.addEventListener("input", function () {
+          sincronizarPrecioDesdeMargen(fila);
+        });
+      }
+
+      if (inputPrecio) {
+        inputPrecio.addEventListener("input", sincronizarMargenesDesdePrecios);
+      }
+    });
+  }
+
+  if (dom.productRecalcPricesButton) {
+    dom.productRecalcPricesButton.addEventListener("click", recalcularPreciosFormularioPorMargen);
+  }
 
   [
     dom.productStockModeInput,

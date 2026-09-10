@@ -137,6 +137,19 @@ function cargarRolesPersonalizados() {
     asegurarPermisosRolesBaseSistema();
 }
 
+// Quien esta usando el sistema ahora mismo, es SUPERADMIN?
+//
+// No alcanza con mirar el rol que quedo en memoria: se busca la ficha real del
+// usuario en la lista, y solo si esa dice SUPERADMIN vale.
+function usuarioActualEsSuperadmin() {
+    const fichaActual =
+        usuariosSistema.find(function (usuarioGuardado) {
+            return Number(usuarioGuardado.codigo) === Number(usuarioActual.codigo);
+        });
+
+    return rolEsSuperadmin(fichaActual ? fichaActual.rol : usuarioActual.rol);
+}
+
 function renderizarOpcionesRolesUsuario() {
     if (!dom.usuarioNuevoRolInput) {
         return;
@@ -145,10 +158,19 @@ function renderizarOpcionesRolesUsuario() {
     const rolActual =
         dom.usuarioNuevoRolInput.value || "VENDEDOR";
 
+    // Solo un SUPERADMIN puede repartir SUPERADMIN. Antes el desplegable lo
+    // ofrecia siempre, y nada mas abajo lo revisaba: cualquier rol con el
+    // permiso "Configuracion" (que en la pantalla parece "los datos de la
+    // empresa y la impresion") podia entrar a Usuarios, editarse a si mismo,
+    // elegir SUPERADMIN y guardar.
     dom.usuarioNuevoRolInput.innerHTML =
-        Object.keys(ROLES).map(function (nombreRol) {
-            return html`<option value="${nombreRol}">${nombreRol}</option>`;
-        }).join("");
+        Object.keys(ROLES)
+            .filter(function (nombreRol) {
+                return nombreRol !== "SUPERADMIN" || usuarioActualEsSuperadmin();
+            })
+            .map(function (nombreRol) {
+                return html`<option value="${nombreRol}">${nombreRol}</option>`;
+            }).join("");
 
     dom.usuarioNuevoRolInput.value =
         ROLES[rolActual] ? rolActual : "VENDEDOR";
@@ -697,6 +719,80 @@ function obtenerUsuariosSistemaFiltrados() {
     });
 }
 
+// Chequeo de la funcion segura que crea los accesos.
+//
+// Sin esa funcion desplegada, el sistema no puede crear un acceso confirmado, y
+// el usuario que se cargue va a quedar sin poder entrar desde el celular con el
+// mensaje "tu acceso existe pero no esta confirmado". Antes eso se descubria
+// recien cuando el vendedor intentaba entrar; ahora se avisa al abrir la
+// pantalla de Usuarios, antes de cargar a nadie.
+let funcionAccesosVerificada = false;
+
+async function verificarFuncionAccesosSupabase() {
+  const aviso =
+    document.getElementById("avisoFuncionAccesos");
+
+  if (!aviso || funcionAccesosVerificada) {
+    return;
+  }
+
+  if (typeof usuarioSupabaseAutenticado !== "function" || !usuarioSupabaseAutenticado()) {
+    return;
+  }
+
+  funcionAccesosVerificada = true;
+
+  try {
+    // Se manda un pedido a proposito incompleto: si la funcion esta desplegada
+    // contesta 400 "Email invalido", que es exactamente lo que queremos ver.
+    // No crea ningun usuario.
+    const respuesta =
+      await fetch(SUPABASE_URL + "/functions/v1/crear-usuario-sistema", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + sesionSupabase.access_token
+        },
+        body: JSON.stringify({ email: "", password: "" })
+      });
+
+    if (typeof esFuncionSupabaseNoDesplegada === "function" &&
+      esFuncionSupabaseNoDesplegada(respuesta)) {
+      mostrarAvisoFuncionAccesos(
+        "Falta desplegar la funcion segura de accesos. Hasta que este, los usuarios " +
+        "que crees no van a poder entrar desde el celular. Desplegala con: " +
+        "supabase functions deploy crear-usuario-sistema"
+      );
+      return;
+    }
+
+    aviso.hidden = true;
+  } catch (error) {
+    if (typeof esFuncionSupabaseNoDesplegada === "function" &&
+      esFuncionSupabaseNoDesplegada(error)) {
+      mostrarAvisoFuncionAccesos(
+        "No se pudo contactar la funcion segura de accesos. Hasta que responda, " +
+        "los usuarios nuevos no van a poder entrar desde el celular."
+      );
+      return;
+    }
+
+    console.warn("No se pudo verificar la funcion de accesos:", error);
+  }
+}
+
+function mostrarAvisoFuncionAccesos(texto) {
+  const aviso =
+    document.getElementById("avisoFuncionAccesos");
+
+  if (!aviso) {
+    return;
+  }
+
+  aviso.textContent = texto;
+  aviso.hidden = false;
+}
+
 function renderizarUsuariosSistema() {
     if (!dom.usuariosSistemaTable) {
         return;
@@ -864,6 +960,14 @@ async function agregarUsuarioSistema(event) {
 
     const rol =
         obtenerRolValidoUsuarioSistema(dom.usuarioNuevoRolInput.value);
+
+    // Ocultarlo del desplegable no alcanza: el valor se puede cambiar desde la
+    // consola del navegador. Este es el chequeo que manda.
+    if (rol === "SUPERADMIN" && !usuarioActualEsSuperadmin()) {
+        alert("Solo un SUPERADMIN puede asignar el rol SUPERADMIN.");
+        return;
+    }
+
     const email =
         obtenerEmailInternoUsuarioSistema(dom.usuarioEmailInput.value);
     const password =
@@ -1016,43 +1120,6 @@ async function guardarEdicionUsuarioSistema(codigo, nombre, email, rol, password
     renderizarOpcionesVendedoresCliente();
     if (typeof mostrarAvisoPractico === "function") {
         mostrarAvisoPractico("Usuario actualizado correctamente.");
-    }
-}
-
-async function enviarRecuperacionUsuarioSistema(codigo) {
-    if (!tienePermiso("configuracion")) {
-        alert("No tenes permiso para restablecer claves.");
-        return;
-    }
-
-    const usuario =
-        usuariosSistema.find(function (usuarioGuardado) {
-            return usuarioGuardado.codigo === codigo;
-        });
-
-    if (!usuario || !usuario.email) {
-        alert("Ese usuario no tiene email de acceso.");
-        return;
-    }
-
-    const confirmar =
-        confirm("Enviar email para restablecer clave a " + usuario.email + "?");
-
-    if (!confirmar) {
-        return;
-    }
-
-    try {
-        await enviarRecuperacionPasswordSupabase(usuario.email);
-        registrarAuditoria(
-            "Usuarios",
-            "Envio restablecimiento de clave",
-            usuario.codigo + " - " + usuario.nombre
-        );
-        alert("Listo. Supabase envio el email de restablecimiento a " + usuario.email + ".");
-    } catch (error) {
-        console.error("No se pudo enviar restablecimiento:", error);
-        alert("No se pudo enviar el restablecimiento: " + (error.message || "error"));
     }
 }
 

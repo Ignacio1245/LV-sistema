@@ -426,3 +426,57 @@ document.addEventListener("click", function (evento) {
   boton.setAttribute("aria-pressed", seEstaViendo ? "false" : "true");
   campo.focus();
 });
+
+// ---------------------------------------------------------------------------
+// Numero de pago
+// ---------------------------------------------------------------------------
+// Este numero es la llave con la que el servidor decide si un cobro ya se
+// aplico. Tiene que cumplir dos cosas a la vez:
+//
+//   - Ser DISTINTO en cada cobro nuevo, aunque dos cajas cobren al mismo
+//     cliente en el mismo segundo. Antes se calculaba como "el mayor del
+//     historial + 1": las dos cajas sacaban el mismo numero, la segunda recibia
+//     "este pago ya estaba registrado" y esa plata nunca se descontaba.
+//
+//   - Ser EL MISMO si se reintenta el mismo cobro (se corto la señal y se
+//     vuelve a tocar Guardar). Por eso no se puede generar al azar en cada
+//     intento: se genera una vez por cobro y se reusa.
+//
+// Marca de tiempo en milisegundos + 3 digitos de sufijo. Entra en un bigint de
+// Postgres y sigue siendo un entero seguro de JavaScript (el techo son 9.007
+// billones, y ms * 1000 anda por 1.789 billones).
+//
+// El sufijo arranca al azar (para que dos equipos distintos no coincidan) pero
+// despues INCREMENTA en vez de volver a sortear: asi un mismo equipo no puede
+// repetir un codigo aunque saque varios cobros dentro del mismo milisegundo.
+// Con puro azar, 500 cobros seguidos daban solo 380 codigos distintos.
+let ultimaMarcaCodigoPago = 0;
+let ultimoSufijoCodigoPago = Math.floor(Math.random() * 1000);
+
+function crearCodigoPagoUnico() {
+  const marcaTiempo =
+    Date.now();
+
+  if (marcaTiempo === ultimaMarcaCodigoPago) {
+    ultimoSufijoCodigoPago = (ultimoSufijoCodigoPago + 1) % 1000;
+  } else {
+    ultimaMarcaCodigoPago = marcaTiempo;
+    ultimoSufijoCodigoPago = Math.floor(Math.random() * 1000);
+  }
+
+  return (marcaTiempo * 1000) + ultimoSufijoCodigoPago;
+}
+
+// El numero de arriba es largo para imprimirlo en un comprobante que se le da
+// al cliente. Para mostrar alcanza con la cola: dos cobros del mismo cliente
+// tendrian que caer en el mismo milisegundo para repetirla.
+function formatearNumeroComprobantePago(codigoPago) {
+  const texto =
+    String(codigoPago || "").replace(/[^0-9]/g, "");
+
+  if (texto === "") {
+    return "-";
+  }
+
+  return texto.length > 6 ? texto.slice(-6) : texto;
+}

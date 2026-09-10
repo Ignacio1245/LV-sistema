@@ -247,6 +247,36 @@ async function eliminarClienteSupabase(cliente) {
   }
 }
 
+// Faltaba: era la unica entidad del sistema sin forma de borrarse en el
+// servidor. `eliminarPedido` hacia un splice del array local y nada mas, asi que
+// el pedido desaparecia de esta pantalla y volvia en la proxima sincronizacion
+// (la carga reemplaza el array entero desde la nube). En las otras computadoras
+// nunca se habia ido.
+//
+// pedido_items tiene `on delete cascade`, asi que borrar la fila del pedido se
+// lleva sus renglones.
+async function eliminarPedidoSupabase(pedido) {
+  if (!pedido) {
+    return;
+  }
+
+  if (!pedido.idSupabase && !pedido.numero) {
+    return;
+  }
+
+  const consulta =
+    pedido.idSupabase
+      ? supabaseClient.from("pedidos").delete().eq("id", pedido.idSupabase)
+      : supabaseClient.from("pedidos").delete().eq("numero", pedido.numero);
+
+  const { error } =
+    await consulta;
+
+  if (error) {
+    throw error;
+  }
+}
+
 async function obtenerPedidosSupabase() {
   const pedidosSupabase =
     await consultarTablaSupabase("pedidos", "numero", {

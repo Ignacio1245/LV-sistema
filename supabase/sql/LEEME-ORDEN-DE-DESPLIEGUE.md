@@ -51,6 +51,7 @@ Despues de desplegar, en el panel:
 | `indices-rendimiento.sql` | Los indices que faltaban. El mas importante es `pedido_items(producto_id)`: sin el, cada apertura del catalogo recorria la tabla entera de items una vez por producto. |
 | `operaciones-atomicas.sql` | Saldo de cuenta corriente, stock e items de pedido calculados dentro de una transaccion con la fila bloqueada. Es el arreglo del problema multiusuario. |
 | `historial-fuera-del-producto.sql` | Pasa el historial de los JSONB del producto a tablas propias y recorta los arrays de la fila. |
+| `codigo-pago-unico.sql` | **Correr este.** `pagos_cliente.codigo_pago` era `integer` y el celular mandaba 16 digitos: toda cobranza desde el celular moria con `integer out of range`. Ademas el numero se calculaba como "el ultimo + 1", asi que dos cajas cobrandole al mismo cliente sacaban el mismo numero y la segunda perdia el cobro. |
 
 ## Pendiente que dejo sin aplicar, a proposito
 

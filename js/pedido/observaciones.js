@@ -1,16 +1,3 @@
-function escaparTextoObservacionPedido(valor) {
-    if (typeof escaparTextoHtml === "function") {
-        return escaparTextoHtml(valor);
-    }
-
-    return String(valor === null || valor === undefined ? "" : valor)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-}
-
 function guardarObservacionesPedidoActualLocalSiExiste() {
     if (typeof guardarPedidoActualLocal === "function") {
         guardarPedidoActualLocal();

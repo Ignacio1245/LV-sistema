@@ -11,9 +11,9 @@
   <title>Vendedores - Pedido movil</title>
   <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest-vendedores.webmanifest">
-  <link rel="stylesheet" href="./css/styles.css?v=20260908-ux1">
-  <link rel="stylesheet" href="./css/vendedores-mobile.css?v=20260908-ux1">
-  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260908-ux1">
+  <link rel="stylesheet" href="./css/styles.css?v=20260910-seguridad1">
+  <link rel="stylesheet" href="./css/vendedores-mobile.css?v=20260910-seguridad1">
+  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260910-seguridad1">
 </head>
 <body class="vendedores-mobile">
   <section id="vendedorLogin" class="vendedores-login vendedores-oculto" aria-labelledby="vendedorLoginTitulo">
@@ -41,18 +41,17 @@
 
   <main id="vendedorContenido" class="vendedores-layout vendedores-oculto">
     <header class="vendedores-encabezado">
-      <div>
-        <p class="vendedores-etiqueta">Ventas moviles</p>
+      <div class="vendedores-identidad">
         <h1 id="vendedorNombreEncabezado">Vendedor</h1>
+        <span id="vendedorEstadoConexion" class="vendedores-estado">Cargando...</span>
       </div>
       <div class="vendedores-sesion">
-        <span id="vendedorEstadoConexion" class="vendedores-estado">Cargando...</span>
         <button id="vendedorBotonSalir" type="button" class="vendedores-salir">Salir</button>
       </div>
     </header>
 
     <div id="vendedorNavegacionFlujo" class="vendedores-navegacion-flujo vendedores-oculto">
-      <button id="vendedorVolverInicio" type="button" class="vendedores-volver-inicio">← Tareas</button>
+      <button id="vendedorVolverInicio" type="button" class="vendedores-volver-inicio" aria-label="Volver a tareas">←</button>
       <nav id="vendedorPasosPedido" class="vendedores-pasos-pedido vendedores-oculto" aria-label="Pasos del pedido">
         <button type="button" data-vendedor-paso="cliente">
           <span>1</span>
@@ -67,31 +66,31 @@
           <strong>Revisar</strong>
         </button>
       </nav>
+      <span id="vendedorNavegacionTitulo" class="vendedores-navegacion-titulo"></span>
     </div>
 
     <section id="vendedorInicio" class="vendedores-panel vendedores-inicio">
-      <div>
-        <p class="vendedores-etiqueta">Trabajo de calle</p>
-        <h2>Elegir tarea</h2>
-      </div>
+      <!-- "Cuantos productos tiene el catalogo" no le sirve a nadie parado en la
+           puerta de un cliente. Lo que sirve es cuanta plata hay para cobrar. -->
       <div class="vendedores-jornada" aria-label="Resumen de jornada">
+        <article>
+          <span>Por cobrar</span>
+          <strong id="vendedorMetricaPorCobrar">$0</strong>
+        </article>
+        <article>
+          <span>Le deben</span>
+          <strong id="vendedorMetricaDeuda">0</strong>
+        </article>
         <article>
           <span>Clientes</span>
           <strong id="vendedorMetricaClientes">0</strong>
         </article>
         <article>
-          <span>Productos</span>
-          <strong id="vendedorMetricaProductos">0</strong>
-        </article>
-        <article>
-          <span>Con deuda</span>
-          <strong id="vendedorMetricaDeuda">0</strong>
-        </article>
-        <article>
-          <span>Pedido</span>
+          <span>Pedido en curso</span>
           <strong id="vendedorMetricaPedido">$0</strong>
         </article>
       </div>
+      <span id="vendedorMetricaProductos" hidden>0</span>
       <div class="vendedores-modulos">
         <button id="vendedorModuloVenta" type="button" class="vendedores-modulo-card" data-vendedor-modulo="venta">
           <strong>Venta</strong>
@@ -113,10 +112,14 @@
         <p id="vendedorFlujoPaso" class="vendedores-etiqueta">Paso 1</p>
         <h2 id="vendedorFlujoTitulo">Buscar cliente</h2>
       </div>
-      <label>
+      <!-- El nombre del vendedor ya esta en el encabezado. Este campo solo se
+           muestra cuando la cuenta NO es de un vendedor (prueba local del
+           admin); si es de vendedor, se oculta desde el JS y queda de apoyo. -->
+      <label id="vendedorCampoNombre">
         Vendedor
         <input id="vendedorNombre" type="text" autocomplete="name" placeholder="Nombre del vendedor">
       </label>
+      <div id="vendedorResumenCobranza" class="vendedores-resumen-cobranza vendedores-oculto"></div>
       <label class="vendedores-oculto">
         Zona
         <select id="vendedorZonaCliente">
@@ -124,7 +127,7 @@
         </select>
       </label>
       <label>
-        Cliente
+        <span class="vendedores-etiqueta-oculta">Cliente</span>
         <input id="vendedorBusquedaCliente" type="search" placeholder="Codigo o nombre del cliente">
       </label>
       <div id="vendedorClientesRecientes" class="vendedores-recientes"></div>
@@ -173,7 +176,7 @@
         <button id="vendedorCambiarCliente" type="button" class="vendedores-secundario">Cambiar</button>
       </div>
       <label class="vendedores-productos-busqueda">
-        Producto
+        <span class="vendedores-etiqueta-oculta">Producto</span>
         <input id="vendedorBusquedaProducto" type="search" placeholder="Codigo, producto, marca o rubro">
       </label>
       <p id="vendedorProductoEstado" class="vendedores-producto-estado" role="status" aria-live="polite"></p>
@@ -195,13 +198,18 @@
     </section>
 
     <section id="vendedorSeccionPedido" class="vendedores-panel vendedores-resumen vendedores-oculto">
-      <div class="vendedores-resumen-titulo">
+      <!-- Revisar un pedido sin ver de quien es era facil de mandar al cliente
+           equivocado: el nombre solo estaba dos pantallas atras. -->
+      <div class="vendedores-contexto-pedido">
         <div>
-          <h2>Pedido</h2>
-          <div class="vendedores-metricas">
-            <span><strong id="vendedorCantidadItems">0</strong> productos</span>
-            <span><strong id="vendedorCantidadUnidades">0</strong> unidades</span>
-          </div>
+          <span>Pedido para</span>
+          <strong id="vendedorResumenClienteNombre">Cliente</strong>
+        </div>
+      </div>
+      <div class="vendedores-resumen-titulo">
+        <div class="vendedores-metricas">
+          <span><strong id="vendedorCantidadItems">0</strong> productos</span>
+          <span><strong id="vendedorCantidadUnidades">0</strong> unidades</span>
         </div>
         <strong id="vendedorTotalPedido">$0</strong>
       </div>
@@ -222,29 +230,27 @@
 
       <div class="vendedores-acciones vendedores-acciones-final">
         <button id="vendedorBotonVolverProductos" type="button" class="vendedores-secundario">Seguir agregando</button>
-        <button id="vendedorBotonWhatsapp" type="button" class="vendedores-principal">Guardar y enviar</button>
+        <button id="vendedorBotonWhatsapp" type="button" class="vendedores-principal">Guardar pedido</button>
       </div>
 
-      <details class="vendedores-opciones-envio">
-        <summary>Opciones del pedido</summary>
-        <label>
-          WhatsApp de la distribuidora
-          <input id="vendedorTelefonoDestino" type="tel" inputmode="tel" placeholder="Ej: 5491123456789">
-        </label>
-        <div class="vendedores-acciones">
-          <button id="vendedorBotonCopiar" type="button" class="vendedores-secundario">Copiar texto</button>
-          <button id="vendedorBotonLimpiar" type="button" class="vendedores-secundario vendedores-peligro-suave">Vaciar pedido</button>
-        </div>
-      </details>
+      <!-- El pedido se guarda en el sistema y listo. No se manda por WhatsApp:
+           WhatsApp queda solo para pasarle el catalogo al cliente. -->
+      <div class="vendedores-acciones">
+        <button id="vendedorBotonLimpiar" type="button" class="vendedores-secundario vendedores-peligro-suave">Vaciar pedido</button>
+      </div>
       <p id="vendedorEstadoEnvio" class="vendedores-envio-estado"></p>
     </section>
 
     <section id="vendedorSeccionCobranza" class="vendedores-panel vendedores-cobranza vendedores-oculto">
-      <div class="vendedores-resumen-titulo">
+      <div class="vendedores-contexto-pedido">
         <div>
-          <h2>Cobranza</h2>
-          <p id="vendedorCobranzaCliente" class="vendedores-texto-ayuda">Elegi un cliente para ver su saldo.</p>
+          <span>Cobrar a</span>
+          <strong id="vendedorCobranzaCliente">Elegi un cliente</strong>
         </div>
+        <button id="vendedorCambiarClienteCobranza" type="button" class="vendedores-secundario">Cambiar</button>
+      </div>
+      <div class="vendedores-cobranza-saldo">
+        <span>Debe</span>
         <strong id="vendedorCobranzaSaldo">$0</strong>
       </div>
 
@@ -286,7 +292,7 @@
       <span id="vendedorBarraItems">0 productos</span>
       <strong id="vendedorBarraTotal">$0</strong>
     </div>
-    <button id="vendedorBotonBarraWhatsapp" type="button">Revisar pedido</button>
+    <button id="vendedorBotonBarraWhatsapp" type="button">Revisar</button>
   </div>
 
   <div id="vendedorConfirmacion" class="vendedores-confirmacion-fondo vendedores-oculto" aria-hidden="true">
@@ -302,16 +308,16 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="./js/supabase-config.js?v=20260908-ux1"></script>
-  <script src="./js/data.js?v=20260908-ux1"></script>
-  <script src="./js/helpers.js?v=20260908-ux1"></script>
-  <script src="./js/productos.js?v=20260908-ux1"></script>
-  <script src="./js/database/supabase-mappers.js?v=20260908-ux1"></script>
-  <script src="./js/database/supabase-repository.js?v=20260908-ux1"></script>
-  <script src="./js/supabase-auth.js?v=20260908-ux1"></script>
-  <script src="./js/mobile/vendedores-mobile.js?v=20260908-ux1"></script>
-  <script src="./js/public/instalacion-app.js?v=20260908-ux1"></script>
-  <script src="./js/public/estado-conexion.js?v=20260908-ux1"></script>
+  <script src="./js/supabase-config.js?v=20260910-seguridad1"></script>
+  <script src="./js/data.js?v=20260910-seguridad1"></script>
+  <script src="./js/helpers.js?v=20260910-seguridad1"></script>
+  <script src="./js/productos.js?v=20260910-seguridad1"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260910-seguridad1"></script>
+  <script src="./js/database/supabase-repository.js?v=20260910-seguridad1"></script>
+  <script src="./js/supabase-auth.js?v=20260910-seguridad1"></script>
+  <script src="./js/mobile/vendedores-mobile.js?v=20260910-seguridad1"></script>
+  <script src="./js/public/instalacion-app.js?v=20260910-seguridad1"></script>
+  <script src="./js/public/estado-conexion.js?v=20260910-seguridad1"></script>
 </body>
 </html>
 

@@ -203,14 +203,17 @@ function programarSincronizacionAutomatica(tipo, opciones) {
   }, 700);
 }
 
-async function sincronizarTipoLocalConSupabase(tipo) {
+async function sincronizarTipoLocalConSupabase(tipo, opciones) {
   if (tipo === "datosBase") {
     await sincronizarDatosBaseLocalesConSupabase();
   }
 
   if (tipo === "clientes") {
-    await sincronizarClientesLocalesConSupabase();
-    await sincronizarCuentaCorrienteLocalConSupabase();
+    const codigosAfectados =
+      opciones && opciones.codigosClientes;
+
+    await sincronizarClientesLocalesConSupabase(codigosAfectados);
+    await sincronizarCuentaCorrienteLocalConSupabase(codigosAfectados);
   }
 
   if (tipo === "productos") {
@@ -1331,10 +1334,29 @@ async function sincronizarProductosLocalesConSupabase() {
   return productos.length;
 }
 
-async function sincronizarClientesLocalesConSupabase() {
+// Sube clientes locales a Supabase.
+//
+// `codigosAfectados` (opcional) limita la subida a esos clientes. Es importante
+// que exista: subir TODOS pisa la fila entera de cada cliente, saldo incluido,
+// con el valor que este navegador tiene en memoria. Si abriste el sistema a las
+// 9, el vendedor cobro $30.000 desde el celular a las 14, y a las 16 importas un
+// CSV de 12 clientes nuevos, esa cobranza se borra de la nube sin dejar rastro.
+async function sincronizarClientesLocalesConSupabase(codigosAfectados) {
+  const filtro =
+    codigosAfectados instanceof Set
+      ? codigosAfectados
+      : Array.isArray(codigosAfectados) && codigosAfectados.length > 0
+        ? new Set(codigosAfectados.map(String))
+        : null;
+
   const clientesSincronizados = [];
 
   for (const cliente of clientes) {
+    if (filtro && !filtro.has(String(cliente.codigo))) {
+      clientesSincronizados.push(cliente);
+      continue;
+    }
+
     const clienteGuardado =
       await guardarClienteSupabase(cliente);
 
@@ -1395,11 +1417,22 @@ async function sincronizarPedidosLocalesConSupabase() {
   return pedidos.length;
 }
 
-async function sincronizarCuentaCorrienteLocalConSupabase() {
+async function sincronizarCuentaCorrienteLocalConSupabase(codigosAfectados) {
+  const filtro =
+    codigosAfectados instanceof Set
+      ? codigosAfectados
+      : Array.isArray(codigosAfectados) && codigosAfectados.length > 0
+        ? new Set(codigosAfectados.map(String))
+        : null;
+
   let movimientosSincronizados = 0;
 
   for (const cliente of clientes) {
     if (!cliente.idSupabase) {
+      continue;
+    }
+
+    if (filtro && !filtro.has(String(cliente.codigo))) {
       continue;
     }
 

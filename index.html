@@ -12,8 +12,8 @@
   <title>LV Sistema</title>
   <link rel="icon" href="./assets/icons/lv-icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest-admin.webmanifest">
-  <link rel="stylesheet" href="./css/styles.css?v=20260908-ux1">
-  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260908-ux1">
+  <link rel="stylesheet" href="./css/styles.css?v=20260910-seguridad1">
+  <link rel="stylesheet" href="./css/instalacion-app.css?v=20260910-seguridad1">
 </head>
 
 <body class="login-required">
@@ -1916,8 +1916,10 @@
                     <div>
                       <p class="eyebrow">Precio</p>
                       <h4>Compra y listas de venta</h4>
-                      <span>Carga precio de compra y precios de venta. Sin margenes automaticos ni bonificacion por defecto.</span>
+                      <span>El precio que escribís es el que se guarda. Si preferís, escribí el margen % y el precio se calcula solo.</span>
                     </div>
+                    <button class="secondary-button" id="productRecalcPricesButton" type="button"
+                      title="Reemplaza los precios cargados por costo + margen">Recalcular por margen</button>
                   </div>
                   <div class="form-grid">
                     <label>
@@ -1925,30 +1927,43 @@
                       <input inputmode="decimal" id="productPurchasePriceInput" type="number" min="0">
                     </label>
                     <label>
-                      Precio Lista 1
-                      <input inputmode="decimal" id="productPriceInput" type="number" min="0">
-                    </label>
-                    <label>
-                      Precio Lista 2
-                      <input inputmode="decimal" id="productPriceList2Input" type="number" min="0" placeholder="Opcional">
-                    </label>
-                    <label>
-                      Precio Lista 3
-                      <input inputmode="decimal" id="productPriceList3Input" type="number" min="0" placeholder="Opcional">
-                    </label>
-                    <label>
-                      Precio Lista 4
-                      <input inputmode="decimal" id="productPriceList4Input" type="number" min="0" placeholder="Opcional">
-                    </label>
-                    <label>
                       IVA %
                       <input inputmode="decimal" id="productIvaInput" type="number" min="0" step="0.01" placeholder="Ej: 21">
                     </label>
+                    <label>
+                      Precio Lista 1 <small>precio · margen % sobre el costo</small>
+                      <span class="precio-con-margen">
+                        <input inputmode="decimal" id="productPriceInput" type="number" min="0">
+                        <input aria-label="Margen % Lista 1" inputmode="decimal" id="productMarginList1Input"
+                          type="number" step="0.1" placeholder="% marg.">
+                      </span>
+                    </label>
+                    <label>
+                      Precio Lista 2 <small>precio · margen % sobre el costo</small>
+                      <span class="precio-con-margen">
+                        <input inputmode="decimal" id="productPriceList2Input" type="number" min="0" placeholder="Opcional">
+                        <input aria-label="Margen % Lista 2" inputmode="decimal" id="productMarginList2Input"
+                          type="number" step="0.1" placeholder="% marg.">
+                      </span>
+                    </label>
+                    <label>
+                      Precio Lista 3 <small>precio · margen % sobre el costo</small>
+                      <span class="precio-con-margen">
+                        <input inputmode="decimal" id="productPriceList3Input" type="number" min="0" placeholder="Opcional">
+                        <input aria-label="Margen % Lista 3" inputmode="decimal" id="productMarginList3Input"
+                          type="number" step="0.1" placeholder="% marg.">
+                      </span>
+                    </label>
+                    <label>
+                      Precio Lista 4 <small>precio · margen % sobre el costo</small>
+                      <span class="precio-con-margen">
+                        <input inputmode="decimal" id="productPriceList4Input" type="number" min="0" placeholder="Opcional">
+                        <input aria-label="Margen % Lista 4" inputmode="decimal" id="productMarginList4Input"
+                          type="number" step="0.1" placeholder="% marg.">
+                      </span>
+                    </label>
                   </div>
-                  <input id="productMarginList1Input" type="hidden" value="">
-                  <input id="productMarginList2Input" type="hidden" value="">
-                  <input id="productMarginList3Input" type="hidden" value="">
-                  <input id="productMarginList4Input" type="hidden" value="">
+                  <div class="precio-resumen" id="productPriceSummary"></div>
                   <input id="productSaleDiscountInput" type="hidden" value="">
                 </section>
 
@@ -2193,6 +2208,8 @@
               <span>Define quien usa el sistema y que permisos tiene.</span>
             </div>
           </div>
+
+          <p id="avisoFuncionAccesos" class="aviso-accesos" hidden></p>
 
           <form id="usuarioForm" class="settings-user-form" data-config-panel="accesos">
             <input id="usuarioEditandoCodigoInput" type="hidden">
@@ -3463,53 +3480,53 @@
 
   <!-- Supabase y autenticacion -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="./js/supabase-config.js?v=20260908-ux1"></script>
-  <script src="./js/supabase-auth.js?v=20260908-ux1"></script>
+  <script src="./js/supabase-config.js?v=20260910-seguridad1"></script>
+  <script src="./js/supabase-auth.js?v=20260910-seguridad1"></script>
 
   <!-- Datos base y utilidades compartidas -->
-  <script src="./js/data.js?v=20260908-ux1"></script>
-  <script src="./js/helpers.js?v=20260908-ux1"></script>
+  <script src="./js/data.js?v=20260910-seguridad1"></script>
+  <script src="./js/helpers.js?v=20260910-seguridad1"></script>
 
   <!-- Modulos administrativos principales -->
-  <script src="./js/clientes.js?v=20260908-ux1"></script>
-  <script src="./js/rubros.js?v=20260908-ux1"></script>
-  <script src="./js/zonas.js?v=20260908-ux1"></script>
-  <script src="./js/proveedores.js?v=20260908-ux1"></script>
-  <script src="./js/compras.js?v=20260908-ux1"></script>
-  <script src="./js/movimientos.js?v=20260908-ux1"></script>
-  <script src="./js/productos.js?v=20260908-ux1"></script>
-  <script src="./js/productos-admin.js?v=20260908-ux1"></script>
+  <script src="./js/clientes.js?v=20260910-seguridad1"></script>
+  <script src="./js/rubros.js?v=20260910-seguridad1"></script>
+  <script src="./js/zonas.js?v=20260910-seguridad1"></script>
+  <script src="./js/proveedores.js?v=20260910-seguridad1"></script>
+  <script src="./js/compras.js?v=20260910-seguridad1"></script>
+  <script src="./js/movimientos.js?v=20260910-seguridad1"></script>
+  <script src="./js/productos.js?v=20260910-seguridad1"></script>
+  <script src="./js/productos-admin.js?v=20260910-seguridad1"></script>
 
   <!-- Persistencia local y repositorio Supabase -->
-  <script src="./js/data-store.js?v=20260908-ux1"></script>
-  <script src="./js/storage.js?v=20260908-ux1"></script>
-  <script src="./js/database/supabase-mappers.js?v=20260908-ux1"></script>
-  <script src="./js/database/supabase-repository.js?v=20260908-ux1"></script>
-  <script src="./js/supabase-data.js?v=20260908-ux1"></script>
+  <script src="./js/data-store.js?v=20260910-seguridad1"></script>
+  <script src="./js/storage.js?v=20260910-seguridad1"></script>
+  <script src="./js/database/supabase-mappers.js?v=20260910-seguridad1"></script>
+  <script src="./js/database/supabase-repository.js?v=20260910-seguridad1"></script>
+  <script src="./js/supabase-data.js?v=20260910-seguridad1"></script>
 
   <!-- Configuracion, usuarios y permisos -->
-  <script src="./js/config/configuracion.js?v=20260908-ux1"></script>
-  <script src="./js/config/permisos.js?v=20260908-ux1"></script>
-  <script src="./js/config/usuarios.js?v=20260908-ux1"></script>
-  <script src="./js/config/login.js?v=20260908-ux1"></script>
+  <script src="./js/config/configuracion.js?v=20260910-seguridad1"></script>
+  <script src="./js/config/permisos.js?v=20260910-seguridad1"></script>
+  <script src="./js/config/usuarios.js?v=20260910-seguridad1"></script>
+  <script src="./js/config/login.js?v=20260910-seguridad1"></script>
 
   <!-- Control administrativo -->
-  <script src="./js/auditoria.js?v=20260908-ux1"></script>
-  <script src="./js/informes.js?v=20260908-ux1"></script>
-  <script src="./js/respaldo.js?v=20260908-ux1"></script>
+  <script src="./js/auditoria.js?v=20260910-seguridad1"></script>
+  <script src="./js/informes.js?v=20260910-seguridad1"></script>
+  <script src="./js/respaldo.js?v=20260910-seguridad1"></script>
 
   <!-- Pedidos y comprobantes -->
-  <script src="./js/pedido.js?v=20260908-ux1"></script>
-  <script src="./js/pedido/habituales.js?v=20260908-ux1"></script>
-  <script src="./js/pedido/observaciones.js?v=20260908-ux1"></script>
-  <script src="./js/pedido/impresion.js?v=20260908-ux1"></script>
+  <script src="./js/pedido.js?v=20260910-seguridad1"></script>
+  <script src="./js/pedido/habituales.js?v=20260910-seguridad1"></script>
+  <script src="./js/pedido/observaciones.js?v=20260910-seguridad1"></script>
+  <script src="./js/pedido/impresion.js?v=20260910-seguridad1"></script>
 
   <!-- Inicializacion de pantalla y eventos -->
-  <script src="./js/catalogo-admin.js?v=20260908-ux1"></script>
-  <script src="./js/app.js?v=20260908-ux1"></script>
-  <script src="./js/ui-practica.js?v=20260908-ux1"></script>
-  <script src="./js/public/instalacion-app.js?v=20260908-ux1"></script>
-  <script src="./js/public/estado-conexion.js?v=20260908-ux1"></script>
+  <script src="./js/catalogo-admin.js?v=20260910-seguridad1"></script>
+  <script src="./js/app.js?v=20260910-seguridad1"></script>
+  <script src="./js/ui-practica.js?v=20260910-seguridad1"></script>
+  <script src="./js/public/instalacion-app.js?v=20260910-seguridad1"></script>
+  <script src="./js/public/estado-conexion.js?v=20260910-seguridad1"></script>
 </body>
 
 </html>

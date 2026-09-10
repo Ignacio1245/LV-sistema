@@ -95,7 +95,48 @@ async function registrarCompra(event) {
   const costoAnterior =
     Number(producto.precioCompra) || 0;
 
-  reconstruirStockProductoDesdeTotal(producto, stockAnterior + cantidad);
+  // La entrada de stock se suma EN EL SERVIDOR, con la fila del producto
+  // bloqueada.
+  //
+  // Antes se leia el stock de la memoria de este navegador, se sumaba aca, y
+  // despues se subia la fila entera del producto. Eso pisa lo que otros equipos
+  // hicieron mientras tanto:
+  //
+  //   producto con stock 50 en el servidor
+  //   10:15 un vendedor atiende 12 desde el celular (via atomica) -> servidor 38
+  //   10:20 se registra una compra de 30 -> en memoria calcula 50+30 y manda 80
+  //   el stock real deberia ser 68: se inventaron 12 unidades
+  //
+  // Y de paso esa misma escritura pisaba precios y estado del producto con lo
+  // que tuviera en memoria esta computadora.
+  let stockDelServidor = null;
+
+  if (typeof registrarMovimientoStockAtomicoSupabase === "function" &&
+      producto.idSupabase &&
+      typeof puedeGuardarOperacionEnSupabase === "function" &&
+      puedeGuardarOperacionEnSupabase()) {
+    try {
+      stockDelServidor =
+        await registrarMovimientoStockAtomicoSupabase(
+          producto.idSupabase,
+          cantidad,
+          "Entrada por compra",
+          "Compra a proveedor " + proveedor
+        );
+    } catch (error) {
+      console.error("No se pudo sumar el stock de la compra en el servidor:", error);
+      alert(
+        "No se pudo registrar la entrada de stock en el servidor, asi que la " +
+        "compra no se guardo.\n\n" + (error.message || "Revisa la conexion y volve a intentar.")
+      );
+      return;
+    }
+  }
+
+  reconstruirStockProductoDesdeTotal(
+    producto,
+    stockDelServidor === null ? stockAnterior + cantidad : stockDelServidor
+  );
   producto.proveedor = proveedor;
   reactivarProductoSiCorrespondePorStock(producto);
 
@@ -105,7 +146,7 @@ async function registrarCompra(event) {
     producto.ultimoCostoCompra = costoUnitario;
     producto.fechaUltimaCompra = new Date().toLocaleDateString("es-AR");
     preciosActualizados =
-      recalcularPreciosProductoPorCosto(producto, "Compra con costo nuevo");
+      recalcularPreciosProductoPorCosto(producto, "Compra con costo nuevo", costoAnterior);
   }
 
   const fecha =

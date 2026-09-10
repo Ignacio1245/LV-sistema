@@ -428,6 +428,93 @@ table .danger-button {
   gap: 12px;
 }
 
+/* Precio y margen conviven en el mismo campo: se escribe cualquiera de los dos
+   y el otro se acomoda. El precio ocupa el doble porque es el que importa. */
+.product-form-section .settings-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.product-form-section .settings-section-header > div {
+  min-width: 0;
+}
+
+.precio-con-margen {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.precio-con-margen input {
+  min-width: 0;
+}
+
+.precio-con-margen input:first-child {
+  flex: 2 1 0;
+}
+
+.precio-con-margen input:last-child {
+  flex: 1 1 0;
+}
+
+.product-form-section label small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* El cartel que traduce el margen a plata. Existe porque "40% de margen" no es
+   ganar 40%: sobre la venta son 28,6%, y esa diferencia se cobra cara. */
+.precio-resumen {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f1f5f9;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.precio-resumen-vacio {
+  color: var(--muted);
+}
+
+.precio-resumen-costo {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: #223247;
+}
+
+.precio-resumen-listas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
+.precio-resumen-listas li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+
+.precio-resumen-listas strong {
+  min-width: 62px;
+  color: #223247;
+}
+
+.precio-resumen-listas .precio-resumen-alerta,
+.precio-resumen-listas li.precio-resumen-alerta,
+.precio-resumen-listas li.precio-resumen-alerta strong {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 .product-form-section .wide-field {
   grid-column: 1 / -1;
 }
@@ -652,6 +739,13 @@ table .danger-button {
   .account-module-layout,
   .orders-workspace,
   .list-tools {
+    grid-template-columns: 1fr;
+  }
+
+  /* .product-form-section .form-grid pisaba al 1fr de arriba por tener mas
+     especificidad, asi que el formulario de producto seguia en dos columnas de
+     180px minimo y se salia de la pantalla en el celular. */
+  .product-form-section .form-grid {
     grid-template-columns: 1fr;
   }
 

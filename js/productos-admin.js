@@ -34,8 +34,13 @@ function renderizarEncabezadoProductos() {
 }
 
 function obtenerBotonesAccionProducto(producto, accionEstado) {
+    // "Movimientos" abre el historial de stock del producto. La pantalla estaba
+    // entera y andando (el modal, la tabla, la carga del historial completo
+    // desde Supabase), pero ningun boton la abria: la funcion que la muestra no
+    // la llamaba nadie. Era una funcion terminada e inalcanzable.
     return html`
         <button class="btn btn-secondary" onclick="editarProducto(${producto.codigo})">Editar</button>
+        <button class="btn btn-secondary" onclick="verMovimientosStock(${producto.codigo})">Movimientos</button>
         <button class="btn btn-secondary" onclick="cambiarEstadoProducto(${producto.codigo})">${accionEstado}</button>
         <button class="btn btn-danger btn-eliminar" onclick="eliminarProducto(${producto.codigo})">Eliminar</button>
     `;
@@ -571,9 +576,36 @@ function actualizarPorcentajeListaPrecio(codigo, porcentajeNuevo) {
         return;
     }
 
+    const porcentajeAnterior =
+        Number(lista.porcentaje) || 0;
+
     lista.porcentaje = Math.max(Number(porcentajeNuevo) || 0, 0);
+
+    // Cambiar el porcentaje de una lista reescribe el precio de TODOS los
+    // productos de esa lista. Antes pasaba en silencio: se tocaba un numero en
+    // la pantalla de listas y se movia el catalogo entero sin avisar.
+    const productosQueCambian =
+        lista.porcentaje > 0 ? contarProductosAfectadosPorLista(lista) : 0;
+
+    if (productosQueCambian > 0) {
+        const aceptado =
+            confirm(
+                "Cambiar el margen de " + lista.nombre + " de " + porcentajeAnterior + "% a " +
+                lista.porcentaje + "% va a reescribir el precio de " + productosQueCambian +
+                " producto(s), pisando los precios cargados a mano.\n\n" +
+                "Los productos que tengan su propio margen usan ese, no el de la lista.\n\n" +
+                "¿Recalcular ahora?"
+            );
+
+        if (!aceptado) {
+            lista.porcentaje = porcentajeAnterior;
+            renderizarListasPrecios();
+            return;
+        }
+    }
+
     const productosActualizados =
-        recalcularPreciosProductosPorLista(lista);
+        lista.porcentaje > 0 ? recalcularPreciosProductosPorLista(lista) : 0;
 
     guardarListasPrecios();
     if (productosActualizados > 0) {
@@ -590,6 +622,78 @@ function actualizarPorcentajeListaPrecio(codigo, porcentajeNuevo) {
         "Actualizo margen de lista",
         lista.nombre + " - " + lista.porcentaje + "% | Productos recalculados: " + productosActualizados
     );
+}
+
+// El margen propio del producto, si lo tiene. Devuelve null cuando no hay
+// ninguno cargado, para poder distinguirlo de un margen 0 (vender al costo).
+function obtenerMargenListaProducto(margenesProducto, nombreLista) {
+    const valor =
+        obtenerValorPorNombreLista(margenesProducto, nombreLista);
+
+    if (valor === undefined || valor === null || valor === "") {
+        return null;
+    }
+
+    const numero =
+        Number(valor);
+
+    return Number.isFinite(numero) ? numero : null;
+}
+
+// Despues de mover precios a mano (aumento masivo, importacion de precios), el
+// margen atado tiene que seguir diciendo la verdad. Si el producto estaba al 40%
+// sobre el costo y se le aplico un +12%, dejar el 40% guardado haria que la
+// proxima compra le baje el precio de vuelta al viejo: exactamente lo que no
+// queremos que pase solo.
+function sincronizarMargenesAtadosConPrecios(producto, preciosLista, margenesPrevios) {
+    const margenes =
+        margenesPrevios || { ...obtenerMargenesProducto(producto) };
+    const costo =
+        Number(producto && producto.precioCompra) || 0;
+
+    Object.keys(margenes).forEach(function (nombreLista) {
+        const precioFinal =
+            Number(obtenerValorPorNombreLista(preciosLista, nombreLista)) || 0;
+        const margenReal =
+            calcularMargenSobreCosto(costo, precioFinal);
+
+        if (margenReal !== null) {
+            margenes[nombreLista] = margenReal;
+        }
+    });
+
+    return guardarMargenesEnPreciosLista(preciosLista, margenes);
+}
+
+function contarProductosAfectadosPorLista(lista) {
+    if (!lista || !lista.nombre) {
+        return 0;
+    }
+
+    return productos.filter(function (producto) {
+        const precioCompra =
+            Number(producto.precioCompra) || 0;
+
+        if (precioCompra <= 0) {
+            return false;
+        }
+
+        const margenPropio =
+            obtenerMargenListaProducto(obtenerMargenesProducto(producto), lista.nombre);
+        const margenAplicado =
+            margenPropio !== null ? margenPropio : Number(lista.porcentaje);
+        const precioNuevo =
+            calcularPrecioProductoConMargen(precioCompra, margenAplicado);
+
+        if (precioNuevo === null) {
+            return false;
+        }
+
+        const precioAnterior =
+            Number(obtenerValorPorNombreLista(obtenerPreciosListaProducto(producto), lista.nombre)) || 0;
+
+        return precioAnterior !== precioNuevo;
+    }).length;
 }
 
 function recalcularPreciosProductosPorLista(lista) {
@@ -610,13 +714,13 @@ function recalcularPreciosProductosPorLista(lista) {
         const margenesProducto =
             obtenerMargenesProducto(producto);
         const margenPropio =
-            Number(obtenerValorPorNombreLista(margenesProducto, lista.nombre)) || 0;
+            obtenerMargenListaProducto(margenesProducto, lista.nombre);
         const margenAplicado =
-            margenPropio > 0 ? margenPropio : Number(lista.porcentaje) || 0;
+            margenPropio !== null ? margenPropio : Number(lista.porcentaje);
         const precioNuevo =
             calcularPrecioProductoConMargen(precioCompra, margenAplicado);
 
-        if (precioNuevo <= 0) {
+        if (precioNuevo === null) {
             return;
         }
 
@@ -656,7 +760,17 @@ function recalcularPreciosProductosPorLista(lista) {
     return productosActualizados;
 }
 
-function recalcularPreciosProductoPorCosto(producto, motivo) {
+// Se llama sola cuando una compra trae un costo distinto al anterior.
+//
+// Antes reescribia todas las listas con "costo x porcentaje de la lista", asi
+// que una compra te borraba los precios cargados a mano y los reemplazaba por
+// los de la lista. Ahora la regla es: se mantiene el margen que el producto
+// tenia de verdad. Si el precio era el costo + 45%, con el costo nuevo sigue
+// siendo costo + 45%, aunque la lista diga 30%.
+//
+// Si no se puede saber que margen tenia (no habia costo anterior), no se toca
+// el precio: es preferible que quede el precio viejo a inventarle uno.
+function recalcularPreciosProductoPorCosto(producto, motivo, costoAnterior) {
     if (!producto) {
         return 0;
     }
@@ -667,6 +781,9 @@ function recalcularPreciosProductoPorCosto(producto, motivo) {
     if (precioCompra <= 0) {
         return 0;
     }
+
+    const costoPrevio =
+        Number(costoAnterior) || 0;
 
     const listasActivas =
         listasPrecios.filter(function (lista) {
@@ -680,14 +797,29 @@ function recalcularPreciosProductoPorCosto(producto, motivo) {
     let preciosActualizados = 0;
 
     listasActivas.forEach(function (lista) {
+        const precioVigente =
+            Number(obtenerValorPorNombreLista(preciosLista, lista.nombre)) || 0;
         const margenPropio =
-            Number(obtenerValorPorNombreLista(margenesProducto, lista.nombre)) || 0;
+            obtenerMargenListaProducto(margenesProducto, lista.nombre);
+        const margenHistorico =
+            precioVigente > 0 ? calcularMargenSobreCosto(costoPrevio, precioVigente) : null;
         const margenAplicado =
-            margenPropio > 0 ? margenPropio : Number(lista.porcentaje) || 0;
+            margenPropio !== null
+                ? margenPropio
+                : margenHistorico !== null
+                    ? margenHistorico
+                    : precioVigente > 0
+                        ? null                       // habia precio pero no se sabe con que margen: se respeta
+                        : Number(lista.porcentaje);  // lista sin precio: recien ahi vale el porcentaje de la lista
+
+        if (margenAplicado === null) {
+            return;
+        }
+
         const precioNuevo =
             calcularPrecioProductoConMargen(precioCompra, margenAplicado);
 
-        if (precioNuevo <= 0) {
+        if (precioNuevo === null) {
             return;
         }
 
@@ -768,10 +900,17 @@ function agregarListaPrecio(event) {
         const preciosLista =
             obtenerPreciosListaProducto(producto);
 
+        // Con porcentaje cargado se calcula desde el costo; sin porcentaje la
+        // lista nueva arranca copiando el precio actual, no en cero ni al costo.
+        const precioCalculado =
+            porcentaje > 0
+                ? calcularPrecioProductoConMargen(producto.precioCompra, porcentaje)
+                : null;
+
         preciosLista[nombre] =
-            calcularPrecioProductoConMargen(producto.precioCompra, porcentaje) ||
-            Number(producto.precio) ||
-            0;
+            precioCalculado !== null
+                ? precioCalculado
+                : Number(producto.precio) || 0;
         producto.preciosLista = preciosLista;
     });
 
@@ -848,7 +987,16 @@ function obtenerProductosParaActualizacionPrecios() {
 }
 
 function calcularPrecioConPorcentaje(precioActual, porcentaje) {
-    return Math.round((precioActual + (precioActual * porcentaje / 100)) * 100) / 100;
+    const precio =
+        Number(precioActual);
+    const ajuste =
+        Number(porcentaje);
+
+    if (!Number.isFinite(precio) || !Number.isFinite(ajuste)) {
+        return Number.isFinite(precio) ? precio : 0;
+    }
+
+    return redondearDinero(precio * (1 + (ajuste / 100)));
 }
 
 function renderizarOpcionesPanelPrecios() {
@@ -1034,9 +1182,16 @@ async function aplicarActualizacionMasivaPrecios(event) {
     const fecha =
         new Date().toLocaleDateString("es-AR");
 
+    const tocaListaUno =
+        listas.some(function (lista) {
+            return normalizarNombreListaPrecio(lista) === "lista1";
+        });
+
     productosFiltrados.forEach(function (producto) {
         const preciosLista =
             obtenerPreciosListaProducto(producto);
+        const margenesProducto =
+            { ...obtenerMargenesProducto(producto) };
 
         if (!Array.isArray(producto.historialPrecios)) {
             producto.historialPrecios = [];
@@ -1086,8 +1241,15 @@ async function aplicarActualizacionMasivaPrecios(event) {
             }
         });
 
+        sincronizarMargenesAtadosConPrecios(producto, preciosLista, margenesProducto);
+
         producto.preciosLista = preciosLista;
-        producto.precio = preciosLista["Lista 1"];
+
+        // Solo se mueve el precio principal si el aumento realmente toco la
+        // Lista 1. Antes se reasignaba siempre, aunque el filtro fuera Lista 3.
+        if (tocaListaUno) {
+            producto.precio = Number(obtenerValorPorNombreLista(preciosLista, "Lista 1")) || producto.precio;
+        }
     });
 
     guardarProductos();
@@ -1363,6 +1525,8 @@ async function importarPreciosDesdeArchivo() {
                     preciosActualizados += 1;
                 });
 
+                sincronizarMargenesAtadosConPrecios(producto, preciosLista);
+
                 producto.preciosLista = preciosLista;
                 producto.precio = Number(preciosLista["Lista 1"]) || Number(producto.precio) || 0;
                 productosActualizados += 1;
@@ -1447,6 +1611,7 @@ function limpiarFormularioProducto() {
     dom.productSubmitButton.textContent = "Agregar producto";
     completarSiguienteCodigoProducto();
     actualizarVistaStockProductoFormulario();
+    renderizarResumenPreciosProducto();
     if (
         typeof cerrarEditorCompacto === "function" &&
         dom.productForm.classList.contains("editor-compacto-activo")
@@ -1533,60 +1698,417 @@ function actualizarVistaStockProductoFormulario() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// PRECIOS DEL FORMULARIO DE PRODUCTO
+//
+// La regla es una sola: lo que escribis manda.
+//
+// Como estaba antes: el formulario recalculaba solo, con costo x porcentaje de
+// la lista, y PISABA lo escrito. Peor todavia, lo volvia a hacer al apretar
+// Guardar, asi que escribias Lista 1 $1.500 y se guardaba $1.400 sin avisar.
+// Ademas era inconsistente: sin precio de compra cargado no pisaba nada, asi
+// que el mismo producto se comportaba de dos formas distintas.
+//
+// Como quedo:
+//   - Escribis un precio  -> se guarda ese precio. Nada lo toca.
+//   - Escribis un margen  -> se calcula el precio de esa lista con ese margen.
+//   - Campo de precio vacio -> se completa solo con el porcentaje de la lista,
+//     que es la ayuda que sirve al dar de alta un producto nuevo.
+//   - Boton "Recalcular por margen" -> unico lugar donde se pisan precios ya
+//     escritos, y avisa antes.
+// ---------------------------------------------------------------------------
+
+const LISTAS_FORMULARIO_PRECIO = [
+    { nombre: "Lista 1", campoPrecio: "productPriceInput", campoMargen: "productMarginList1Input" },
+    { nombre: "Lista 2", campoPrecio: "productPriceList2Input", campoMargen: "productMarginList2Input" },
+    { nombre: "Lista 3", campoPrecio: "productPriceList3Input", campoMargen: "productMarginList3Input" },
+    { nombre: "Lista 4", campoPrecio: "productPriceList4Input", campoMargen: "productMarginList4Input" }
+];
+
+// Evita que precio -> margen -> precio se persigan en circulo.
+let sincronizandoPreciosFormulario = false;
+
 function calcularPrecioProductoConMargen(precioCompra, margen) {
     const compra =
-        Number(precioCompra) || 0;
+        Number(precioCompra);
     const porcentaje =
-        Number(margen) || 0;
+        Number(margen);
 
-    if (compra <= 0 || porcentaje <= 0) {
+    // Devuelve null, no 0, cuando no se puede calcular. Antes devolvia 0 y
+    // quien llamaba no podia distinguir "no se puede" de "el precio es cero",
+    // asi que margen 0 (vender al costo) y margen negativo (liquidacion) eran
+    // imposibles de expresar.
+    if (!Number.isFinite(compra) || compra <= 0) {
+        return null;
+    }
+
+    if (!Number.isFinite(porcentaje) || porcentaje <= -100) {
+        return null;
+    }
+
+    return redondearDinero(compra * (1 + (porcentaje / 100)));
+}
+
+// Cuanto se le cargo al costo. Es el numero que va en el campo Margen.
+function calcularMargenSobreCosto(precioCompra, precioVenta) {
+    const compra =
+        Number(precioCompra);
+    const venta =
+        Number(precioVenta);
+
+    if (!Number.isFinite(compra) || compra <= 0) {
+        return null;
+    }
+
+    if (!Number.isFinite(venta) || venta <= 0) {
+        return null;
+    }
+
+    return Math.round(((venta - compra) / compra) * 1000) / 10;
+}
+
+// Cuanto de la venta queda como ganancia. NO es lo mismo que el margen sobre
+// costo y es la confusion mas cara del rubro: 40% sobre el costo deja 28,6% de
+// la venta, no 40%. Se muestra al lado del precio para que se vea siempre.
+function calcularGananciaSobreVenta(precioCompra, precioVenta) {
+    const compra =
+        Number(precioCompra);
+    const venta =
+        Number(precioVenta);
+
+    if (!Number.isFinite(compra) || compra <= 0) {
+        return null;
+    }
+
+    if (!Number.isFinite(venta) || venta <= 0) {
+        return null;
+    }
+
+    return Math.round(((venta - compra) / venta) * 1000) / 10;
+}
+
+function formatearPorcentajePrecio(valor) {
+    if (valor === null || valor === undefined || !Number.isFinite(Number(valor))) {
+        return "";
+    }
+
+    const numero =
+        Math.round(Number(valor) * 10) / 10;
+
+    return (numero > 0 ? "+" : "") + String(numero).replace(".", ",") + "%";
+}
+
+// Para la importacion por CSV: cuando la fila no trae precio, se calcula desde
+// el costo SOLO si la lista tiene un porcentaje cargado. Si no, se deja el
+// precio que ya tenia el producto.
+function precioImportacionPorMargen(precioCompra, nombreLista, precioSiNoSePuede) {
+    const porcentaje =
+        Number(obtenerPorcentajeListaPrecio(nombreLista)) || 0;
+
+    if (porcentaje <= 0) {
+        return Number(precioSiNoSePuede) || 0;
+    }
+
+    const precioCalculado =
+        calcularPrecioProductoConMargen(precioCompra, porcentaje);
+
+    return precioCalculado === null ? Number(precioSiNoSePuede) || 0 : precioCalculado;
+}
+
+function obtenerCostoFormularioProducto() {
+    if (!dom.productPurchasePriceInput) {
         return 0;
     }
 
-    return Math.round((compra + (compra * porcentaje / 100)) * 100) / 100;
+    return Number(dom.productPurchasePriceInput.value) || 0;
 }
 
-function completarPrecioListaPorMargen(nombreLista, inputMargen, inputPrecio) {
-    if (!inputMargen || !inputPrecio) {
-        return;
-    }
-
-    const precioCompra =
-        Number(dom.productPurchasePriceInput.value) || 0;
-    const margenProducto =
-        Number(inputMargen.value) || 0;
-    const margenLista =
-        margenProducto > 0 ? margenProducto : obtenerPorcentajeListaPrecio(nombreLista);
+function escribirPrecioListaDesdeMargen(fila, margen) {
+    const inputPrecio =
+        dom[fila.campoPrecio];
     const precioCalculado =
-        calcularPrecioProductoConMargen(
-            precioCompra,
-            margenLista
-        );
+        calcularPrecioProductoConMargen(obtenerCostoFormularioProducto(), margen);
 
-    if (precioCalculado <= 0) {
-        return;
+    if (!inputPrecio || precioCalculado === null) {
+        return false;
     }
 
     inputPrecio.value = precioCalculado;
+    return true;
 }
 
+// Se dispara al escribir un precio. A proposito NO toca el campo de margen: el
+// campo de margen significa "quiero esta lista atada a este porcentaje", y si
+// se llenara solo, cualquier cambio de costo despues movería el precio sin que
+// nadie lo haya pedido. El margen real se ve en el cartel de abajo.
+function sincronizarMargenesDesdePrecios() {
+    renderizarResumenPreciosProducto();
+}
+
+// Se dispara al escribir un margen: solo toca la lista de ese campo.
+function sincronizarPrecioDesdeMargen(fila) {
+    if (sincronizandoPreciosFormulario) {
+        return;
+    }
+
+    const inputMargen =
+        dom[fila.campoMargen];
+
+    if (!inputMargen) {
+        return;
+    }
+
+    const textoMargen =
+        String(inputMargen.value).trim();
+
+    sincronizandoPreciosFormulario = true;
+
+    if (textoMargen !== "") {
+        escribirPrecioListaDesdeMargen(fila, Number(textoMargen));
+    }
+
+    sincronizandoPreciosFormulario = false;
+    renderizarResumenPreciosProducto();
+}
+
+// Se dispara al cambiar el precio de compra. Completa lo que esta vacio y
+// recalcula lo que tiene margen escrito, pero jamas pisa un precio suelto.
 function actualizarPreciosProductoPorMargenes() {
-    completarPrecioListaPorMargen("Lista 1", dom.productMarginList1Input, dom.productPriceInput);
-    completarPrecioListaPorMargen("Lista 2", dom.productMarginList2Input, dom.productPriceList2Input);
-    completarPrecioListaPorMargen("Lista 3", dom.productMarginList3Input, dom.productPriceList3Input);
-    completarPrecioListaPorMargen("Lista 4", dom.productMarginList4Input, dom.productPriceList4Input);
+    if (sincronizandoPreciosFormulario) {
+        return;
+    }
+
+    sincronizandoPreciosFormulario = true;
+
+    LISTAS_FORMULARIO_PRECIO.forEach(function (fila) {
+        const inputPrecio =
+            dom[fila.campoPrecio];
+        const inputMargen =
+            dom[fila.campoMargen];
+
+        if (!inputPrecio) {
+            return;
+        }
+
+        const margenEscrito =
+            inputMargen ? String(inputMargen.value).trim() : "";
+        const precioEscrito =
+            String(inputPrecio.value).trim();
+
+        if (margenEscrito !== "") {
+            escribirPrecioListaDesdeMargen(fila, Number(margenEscrito));
+            return;
+        }
+
+        if (precioEscrito === "") {
+            // Ayuda para el alta: se completa el vacio con el porcentaje que
+            // tiene configurada la lista. Si la lista no tiene porcentaje,
+            // queda vacio y lo escribe la persona.
+            const porcentajeLista =
+                obtenerPorcentajeListaPrecio(fila.nombre);
+
+            if (Number(porcentajeLista) > 0) {
+                escribirPrecioListaDesdeMargen(fila, porcentajeLista);
+            }
+
+            return;
+        }
+
+        // Tiene precio escrito a mano y ningun margen atado: no se toca. El
+        // cartel de abajo muestra como quedo el margen con el costo nuevo.
+    });
+
+    sincronizandoPreciosFormulario = false;
+    renderizarResumenPreciosProducto();
+}
+
+// Unico lugar donde se pisan precios ya escritos, y solo si la persona acepta.
+function recalcularPreciosFormularioPorMargen() {
+    const costo =
+        obtenerCostoFormularioProducto();
+
+    if (costo <= 0) {
+        alert("Cargá primero el precio de compra para poder calcular por margen.");
+
+        if (dom.productPurchasePriceInput) {
+            dom.productPurchasePriceInput.focus();
+        }
+
+        return;
+    }
+
+    const listasConPrecio =
+        LISTAS_FORMULARIO_PRECIO.filter(function (fila) {
+            const inputPrecio = dom[fila.campoPrecio];
+            return inputPrecio && String(inputPrecio.value).trim() !== "";
+        });
+
+    if (listasConPrecio.length > 0) {
+        const aceptado =
+            confirm(
+                "Se van a reemplazar los precios ya cargados por costo + margen.\n\n" +
+                listasConPrecio.map(function (fila) {
+                    const margen =
+                        String(dom[fila.campoMargen] ? dom[fila.campoMargen].value : "").trim();
+                    const porcentaje =
+                        margen !== "" ? Number(margen) : obtenerPorcentajeListaPrecio(fila.nombre);
+                    const precioNuevo =
+                        calcularPrecioProductoConMargen(costo, porcentaje);
+
+                    return fila.nombre + ": " + formatearDinero(Number(dom[fila.campoPrecio].value) || 0) +
+                        " -> " + (precioNuevo === null ? "sin cambio" : formatearDinero(precioNuevo));
+                }).join("\n") +
+                "\n\n¿Reemplazar?"
+            );
+
+        if (!aceptado) {
+            return;
+        }
+    }
+
+    sincronizandoPreciosFormulario = true;
+
+    LISTAS_FORMULARIO_PRECIO.forEach(function (fila) {
+        const inputMargen =
+            dom[fila.campoMargen];
+        const margenEscrito =
+            inputMargen ? String(inputMargen.value).trim() : "";
+        const porcentaje =
+            margenEscrito !== "" ? Number(margenEscrito) : obtenerPorcentajeListaPrecio(fila.nombre);
+
+        if (!Number.isFinite(Number(porcentaje))) {
+            return;
+        }
+
+        if (escribirPrecioListaDesdeMargen(fila, porcentaje) && inputMargen && margenEscrito === "") {
+            inputMargen.value = Number(porcentaje);
+        }
+    });
+
+    sincronizandoPreciosFormulario = false;
+    renderizarResumenPreciosProducto();
+}
+
+// El cartelito debajo de los precios. Existe por una razon concreta: nadie
+// tiene por que saber de memoria que "40% de margen" deja 28,6% de la venta,
+// ni darse cuenta de que un precio quedo por debajo del costo.
+function renderizarResumenPreciosProducto() {
+    if (!dom.productPriceSummary) {
+        return;
+    }
+
+    const costo =
+        obtenerCostoFormularioProducto();
+
+    if (costo <= 0) {
+        dom.productPriceSummary.innerHTML = String(
+            html`<span class="precio-resumen-vacio">Cargá el precio de compra y acá vas a ver cuánto ganás en cada lista.</span>`
+        );
+        return;
+    }
+
+    const filas =
+        LISTAS_FORMULARIO_PRECIO.map(function (fila) {
+            const inputPrecio =
+                dom[fila.campoPrecio];
+            const precio =
+                inputPrecio ? Number(inputPrecio.value) || 0 : 0;
+
+            if (precio <= 0) {
+                return null;
+            }
+
+            const margen =
+                calcularMargenSobreCosto(costo, precio);
+            const ganancia =
+                calcularGananciaSobreVenta(costo, precio);
+            const bajoCosto =
+                precio < costo;
+
+            return html`<li class="${bajoCosto ? "precio-resumen-alerta" : ""}">
+                <strong>${fila.nombre}</strong>
+                <span>${formatearDinero(precio)}</span>
+                <span>${formatearPorcentajePrecio(margen)} sobre el costo</span>
+                <span>${bajoCosto
+                    ? "PERDÉS " + formatearDinero(costo - precio) + " por unidad"
+                    : "ganás " + String(ganancia).replace(".", ",") + "% de la venta (" + formatearDinero(precio - costo) + ")"}</span>
+            </li>`;
+        }).filter(Boolean);
+
+    if (filas.length === 0) {
+        dom.productPriceSummary.innerHTML = String(
+            html`<span class="precio-resumen-vacio">Costo ${formatearDinero(costo)}. Escribí un precio o un margen para ver la ganancia.</span>`
+        );
+        return;
+    }
+
+    dom.productPriceSummary.innerHTML = String(
+        html`<p class="precio-resumen-costo">Costo ${formatearDinero(costo)}</p>
+        <ul class="precio-resumen-listas">${filas}</ul>`
+    );
+}
+
+function confirmarPreciosBajoCostoProducto(precioCompra, preciosLista) {
+    const costo =
+        Number(precioCompra) || 0;
+
+    if (costo <= 0) {
+        return true;
+    }
+
+    const listasEnPerdida =
+        Object.keys(preciosLista || {}).filter(function (nombreLista) {
+            const precio = Number(preciosLista[nombreLista]) || 0;
+            return precio > 0 && precio < costo;
+        });
+
+    if (listasEnPerdida.length === 0) {
+        return true;
+    }
+
+    return confirm(
+        "Ojo: hay precios por debajo del costo de compra (" + formatearDinero(costo) + ").\n\n" +
+        listasEnPerdida.map(function (nombreLista) {
+            const precio = Number(preciosLista[nombreLista]) || 0;
+            return nombreLista + ": " + formatearDinero(precio) +
+                " (perdés " + formatearDinero(costo - precio) + " por unidad)";
+        }).join("\n") +
+        "\n\n¿Guardar igual?"
+    );
 }
 
 function obtenerMargenesFormularioProducto() {
-    return {
-        "Lista 1": Number(dom.productMarginList1Input.value) || 0,
-        "Lista 2": Number(dom.productMarginList2Input.value) || 0,
-        "Lista 3": Number(dom.productMarginList3Input.value) || 0,
-        "Lista 4": Number(dom.productMarginList4Input.value) || 0
-    };
+    const margenes = {};
+
+    LISTAS_FORMULARIO_PRECIO.forEach(function (fila) {
+        const inputMargen =
+            dom[fila.campoMargen];
+        const texto =
+            inputMargen ? String(inputMargen.value).trim() : "";
+
+        if (texto === "") {
+            return;
+        }
+
+        const numero =
+            Number(texto);
+
+        if (Number.isFinite(numero)) {
+            margenes[fila.nombre] = numero;
+        }
+    });
+
+    return margenes;
 }
 
 function guardarMargenesEnPreciosLista(preciosLista, margenesLista) {
+    // Sin margenes cargados no se guarda la clave: un objeto vacio daba a
+    // entender que el producto tenia margenes propios en 0.
+    if (!margenesLista || Object.keys(margenesLista).length === 0) {
+        delete preciosLista.__margenes;
+        return preciosLista;
+    }
+
     preciosLista.__margenes = margenesLista;
     return preciosLista;
 }
@@ -1642,7 +2164,9 @@ async function agregarProducto(event) {
         return;
     }
 
-    actualizarPreciosProductoPorMargenes();
+    // Aca antes se llamaba a actualizarPreciosProductoPorMargenes(), que pisaba
+    // los precios escritos justo antes de leerlos. Ese era el bug: guardabas
+    // $1.500 y quedaba $1.400. Guardar no recalcula nada.
 
     const codigo = Number(dom.productCodeInput.value);
     const codigoReal = dom.productBarcodeInput.value.trim();
@@ -1674,6 +2198,33 @@ async function agregarProducto(event) {
         return;
     }
 
+    // Vender bajo costo puede ser a proposito (liquidacion), asi que no se
+    // bloquea: se avisa. Lo que no puede pasar es que se guarde sin que nadie
+    // lo haya visto.
+    // Solo las listas que la persona completo de verdad. Las que quedan vacias
+    // copian el precio de Lista 1, y avisar cuatro veces por el mismo precio
+    // solo hace que el cartel se lea menos.
+    const preciosParaControl = { "Lista 1": precio };
+
+    if (precioLista2 > 0) {
+        preciosParaControl["Lista 2"] = precioLista2;
+    }
+
+    if (precioLista3 > 0) {
+        preciosParaControl["Lista 3"] = precioLista3;
+    }
+
+    if (precioLista4 > 0) {
+        preciosParaControl["Lista 4"] = precioLista4;
+    }
+
+    if (!confirmarPreciosBajoCostoProducto(precioCompra, preciosParaControl)) {
+        return;
+    }
+
+    const margenesFormulario =
+        obtenerMargenesFormularioProducto();
+
     if (productoEditando) {
         const codigoEditado =
             productoEditando.codigo;
@@ -1686,7 +2237,7 @@ async function agregarProducto(event) {
         preciosNuevos["Lista 2"] = precioLista2 > 0 ? precioLista2 : precio;
         preciosNuevos["Lista 3"] = precioLista3 > 0 ? precioLista3 : precio;
         preciosNuevos["Lista 4"] = precioLista4 > 0 ? precioLista4 : precio;
-        delete preciosNuevos.__margenes;
+        guardarMargenesEnPreciosLista(preciosNuevos, margenesFormulario);
 
         if (!Array.isArray(productoEditando.historialPrecios)) {
             productoEditando.historialPrecios = [];
@@ -1775,7 +2326,7 @@ async function agregarProducto(event) {
     preciosProductoNuevo["Lista 2"] = precioLista2 > 0 ? precioLista2 : precio;
     preciosProductoNuevo["Lista 3"] = precioLista3 > 0 ? precioLista3 : precio;
     preciosProductoNuevo["Lista 4"] = precioLista4 > 0 ? precioLista4 : precio;
-    delete preciosProductoNuevo.__margenes;
+    guardarMargenesEnPreciosLista(preciosProductoNuevo, margenesFormulario);
 
     const productoNuevo = {
         codigo: codigo,
@@ -1928,9 +2479,11 @@ function analizarImportacionProductos(texto) {
             : productoExistente ? Number(productoExistente.precioCompra) || 0 : 0;
         const precio = precioTexto !== ""
             ? obtenerNumeroImportacion(precioTexto, 0)
-            : precioCompra > 0
-                ? calcularPrecioProductoConMargen(precioCompra, obtenerPorcentajeListaPrecio("Lista 1"))
-                : productoExistente ? Number(productoExistente.precio) || 0 : 0;
+            : precioImportacionPorMargen(
+                precioCompra,
+                "Lista 1",
+                productoExistente ? Number(productoExistente.precio) || 0 : 0
+            );
         const stock = stockTexto !== ""
             ? Math.max(0, Math.round(obtenerNumeroImportacion(stockTexto, 0) * 1000) / 1000)
             : productoExistente ? Number(productoExistente.stock) || 0 : 0;
@@ -2227,17 +2780,6 @@ function obtenerValorColumnaImportacion(columnas, mapa, nombre, indiceAlternativ
     return limpiarValorImportacion(columnas[indice]);
 }
 
-function importacionProductoTieneDato(columnas, mapa, nombre, indiceAlternativo) {
-    const indice =
-        obtenerIndiceColumnaImportacion(columnas, mapa, nombre, indiceAlternativo);
-
-    if (indice < 0 || indice >= columnas.length) {
-        return false;
-    }
-
-    return limpiarValorImportacion(columnas[indice]) !== "";
-}
-
 function marcarImportacionProductosPendiente() {
     const tiposPendientes = ["datosBase", "productos"];
 
@@ -2400,26 +2942,38 @@ async function importarProductosDesdeTextoPlano(texto) {
         const precioCompra = precioCompraTexto !== ""
             ? obtenerNumeroImportacion(precioCompraTexto, 0)
             : productoExistente ? Number(productoExistente.precioCompra) || 0 : 0;
+        // Si la columna no viene en el CSV, se respeta el precio que el producto
+        // ya tenia en esa lista. Antes las listas 2/3/4 sin columna se pisaban
+        // con el precio de Lista 1, asi que importar para actualizar el stock te
+        // aplastaba las listas mayoristas.
+        const preciosListaExistentesFila =
+            productoExistente ? obtenerPreciosListaProducto(productoExistente) : null;
+        const precioExistentePorLista = function (nombreLista) {
+            if (!preciosListaExistentesFila) {
+                return 0;
+            }
+
+            return Number(obtenerValorPorNombreLista(preciosListaExistentesFila, nombreLista)) || 0;
+        };
         const precio = precioTexto !== ""
             ? obtenerNumeroImportacion(precioTexto, 0)
-            : precioCompra > 0
-                ? calcularPrecioProductoConMargen(precioCompra, obtenerPorcentajeListaPrecio("Lista 1"))
-            : productoExistente ? Number(productoExistente.precio) || 0 : 0;
+            : precioImportacionPorMargen(
+                precioCompra,
+                "Lista 1",
+                productoExistente ? Number(productoExistente.precio) || 0 : 0
+            );
         const precioLista2 = precioLista2Texto !== ""
             ? obtenerNumeroImportacion(precioLista2Texto, 0)
-            : precioCompra > 0
-                ? calcularPrecioProductoConMargen(precioCompra, obtenerPorcentajeListaPrecio("Lista 2"))
-                : precio;
+            : precioExistentePorLista("Lista 2") ||
+              precioImportacionPorMargen(precioCompra, "Lista 2", precio);
         const precioLista3 = precioLista3Texto !== ""
             ? obtenerNumeroImportacion(precioLista3Texto, 0)
-            : precioCompra > 0
-                ? calcularPrecioProductoConMargen(precioCompra, obtenerPorcentajeListaPrecio("Lista 3"))
-                : precio;
+            : precioExistentePorLista("Lista 3") ||
+              precioImportacionPorMargen(precioCompra, "Lista 3", precio);
         const precioLista4 = precioLista4Texto !== ""
             ? obtenerNumeroImportacion(precioLista4Texto, 0)
-            : precioCompra > 0
-                ? calcularPrecioProductoConMargen(precioCompra, obtenerPorcentajeListaPrecio("Lista 4"))
-                : precio;
+            : precioExistentePorLista("Lista 4") ||
+              precioImportacionPorMargen(precioCompra, "Lista 4", precio);
         const stock = stockTexto !== ""
             ? Math.max(0, Math.round(obtenerNumeroImportacion(stockTexto, 0) * 1000) / 1000)
             : productoExistente ? Number(productoExistente.stock) || 0 : 0;
@@ -2456,6 +3010,10 @@ async function importarProductosDesdeTextoPlano(texto) {
 
             productoExistente.nombre = nombre;
             productoExistente.precio = precio;
+            // El costo se asigna antes de tocar los margenes: si no, el margen
+            // se recalcularia contra el costo viejo.
+            productoExistente.precioCompra = precioCompra;
+            sincronizarMargenesAtadosConPrecios(productoExistente, preciosListaActualizados);
             productoExistente.preciosLista =
                 preciosListaActualizados;
             productoExistente.stock = stock;
@@ -3306,11 +3864,29 @@ function editarProducto(codigo) {
         producto.preciosLista && producto.preciosLista["Lista 4"] !== producto.precio
             ? producto.preciosLista["Lista 4"]
             : "";
-    dom.productMarginList1Input.value = "";
-    dom.productMarginList2Input.value = "";
-    dom.productMarginList3Input.value = "";
-    dom.productMarginList4Input.value = "";
     dom.productPurchasePriceInput.value = producto.precioCompra || "";
+
+    // Solo se muestran los margenes que el producto tiene atados de verdad. Si
+    // el precio se cargo a mano, el campo queda vacio y el precio no se mueve
+    // solo; cuanto esta ganando se ve en el cartel de abajo.
+    const margenesGuardados =
+        obtenerMargenesProducto(producto);
+
+    LISTAS_FORMULARIO_PRECIO.forEach(function (fila) {
+        const inputMargen =
+            dom[fila.campoMargen];
+
+        if (!inputMargen) {
+            return;
+        }
+
+        const margenGuardado =
+            obtenerMargenListaProducto(margenesGuardados, fila.nombre);
+
+        inputMargen.value = margenGuardado === null ? "" : margenGuardado;
+    });
+
+    renderizarResumenPreciosProducto();
     dom.productStockModeInput.value = producto.tipoStock || "simple";
     dom.productUnitsPerBulkInput.value = producto.unidadesPorBulto || "";
     dom.productBulkStockInput.value = producto.stockBultos || "";

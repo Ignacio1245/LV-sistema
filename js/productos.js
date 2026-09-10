@@ -267,13 +267,26 @@ function obtenerPreciosListaProducto(producto) {
     const precioPropio =
       Number(obtenerValorPorNombreLista(producto.preciosLista, lista.nombre));
 
+    // Cada lista usa su propio precio; la que no tenga uno cargado hereda el de
+    // Lista 1. (Las tres ramas del ternario que habia aca daban todas el mismo
+    // resultado, escrito de forma que parecia decir otra cosa.)
     preciosLista[lista.nombre] =
-      normalizarNombreListaPrecio(lista.nombre) === "lista1" || precioPropio > 0
-        ? (precioPropio > 0 ? precioPropio : precioListaUno)
-        : precioListaUno;
+      precioPropio > 0 ? precioPropio : precioListaUno;
   });
 
   preciosLista["Lista 1"] = precioListaUno;
+
+  // Los margenes atados viajan con los precios. Sin esto, cada vez que alguien
+  // hacia { ...obtenerPreciosListaProducto(p) } y lo volvia a guardar, los
+  // margenes del producto desaparecian: al cargar la app, al crear una lista
+  // nueva, al hacer un aumento masivo o al importar un CSV.
+  const margenesGuardados =
+    producto.preciosLista.__margenes;
+
+  if (margenesGuardados && typeof margenesGuardados === "object" &&
+      Object.keys(margenesGuardados).length > 0) {
+    preciosLista.__margenes = { ...margenesGuardados };
+  }
 
   return preciosLista;
 }

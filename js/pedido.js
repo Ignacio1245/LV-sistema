@@ -232,17 +232,11 @@ function restaurarItemsPedidoActualLocal(itemsGuardados) {
 
         const cantidadPedida =
             Number(itemGuardado.cantidad) || 0;
-        const stockDisponible =
-            obtenerStockDisponibleProducto(producto, null);
-        let cantidadRestaurada =
-            Math.min(cantidadPedida, stockDisponible);
 
-        if (!productoEsPeso(producto)) {
-            cantidadRestaurada = Math.floor(cantidadRestaurada);
-        }
-
+        // La cantidad guardada ya esta en unidades: se valida como unidades,
+        // no como bultos, o el borrador vuelve multiplicado.
         const cantidadValidada =
-            validarCantidadPedidoProducto(producto, cantidadRestaurada);
+            validarCantidadUnidadesPedidoProducto(producto, cantidadPedida);
 
         if (!cantidadValidada.valido || cantidadValidada.cantidad <= 0) {
             productosOmitidos.push(producto.nombre);
@@ -577,9 +571,25 @@ function borrarPedidoActual() {
     renderizarPedidoActual();
 }
 
+// El boton de mostrador: guardar el pedido y atenderlo de una.
+//
+// Antes guardaba con `omitirGuardadoSupabase: true`, asi que el pedido nacia
+// SIN idSupabase. Y `pedidoPuedeOperarEnServidor` exige justamente ese id para
+// usar el descuento atomico de stock. Resultado: el pedido del mostrador
+// descontaba stock en la memoria del navegador y despues subia la fila entera
+// del producto, que es exactamente la carrera que las funciones atomicas
+// existen para evitar:
+//
+//   producto P con stock 50 en el servidor
+//   mostrador atiende 10  -> calcula 40 y manda stock = 40
+//   celular atiende 5 por la via atomica -> el servidor deja 45
+//   llega el update del mostrador -> queda 40 en vez de 35
+//
+// Ahora se guarda online primero. Cuesta una llamada mas, y a cambio el
+// descuento de stock lo hace el servidor con la fila bloqueada.
 async function guardarYAtenderPedidoActual() {
     const pedidoGuardado =
-        await guardarPedido(undefined, { omitirGuardadoSupabase: true });
+        await guardarPedido();
 
     if (!pedidoGuardado) {
         return;
@@ -590,7 +600,12 @@ async function guardarYAtenderPedidoActual() {
         return;
     }
 
-    await atenderPedido(pedidoGuardado.id);
+    // Se guarda la identidad completa: atenderPedido recarga los pedidos del
+    // servidor y ahi el pedido cambia de `id`.
+    const referencia =
+        crearReferenciaPedido(pedidoGuardado);
+
+    await atenderPedido(referencia.idSupabase || referencia.id);
 }
 
 function pedidoPuedeRefrescarDatosOnline() {
@@ -740,10 +755,74 @@ async function confirmarGuardadoPedidoOnline(pedido, omitirGuardadoSupabase, acc
 
     return true;
 }
+// Un pedido cambia de `id` cuando vuelve del servidor.
+//
+// Al crearlo, el navegador le pone `id: Date.now()`. Cuando `cargarPedidosDesde
+// Supabase` reemplaza el array, el mapper lo reconstruye con `id: numero`. Los
+// botones ya estaban dibujados con el id viejo, asi que `pedidos.find(p => p.id
+// === id)` devolvia undefined y la operacion salia EN SILENCIO: el primer clic
+// en "Atender" no hacia nada y recien funcionaba el segundo. En la entrega era
+// peor, porque mostraba "Este pedido ya no esta atendido" sobre un pedido que si
+// lo estaba.
+//
+// Por eso la busqueda tolera las tres identidades que puede tener el mismo
+// pedido, en orden de confianza.
 function obtenerPedidoLocalPorId(idPedido) {
+    if (idPedido === null || idPedido === undefined) {
+        return null;
+    }
+
+    const porId =
+        pedidos.find(function (pedidoGuardado) {
+            return pedidoGuardado.id === idPedido;
+        });
+
+    if (porId) {
+        return porId;
+    }
+
+    const porSupabase =
+        pedidos.find(function (pedidoGuardado) {
+            return pedidoGuardado.idSupabase && pedidoGuardado.idSupabase === idPedido;
+        });
+
+    if (porSupabase) {
+        return porSupabase;
+    }
+
+    const numeroBuscado =
+        Number(idPedido);
+
+    if (!Number.isFinite(numeroBuscado)) {
+        return null;
+    }
+
     return pedidos.find(function (pedidoGuardado) {
-        return pedidoGuardado.id === idPedido;
+        return Number(pedidoGuardado.numero) === numeroBuscado;
     }) || null;
+}
+
+// La identidad completa de un pedido, para poder volver a encontrarlo despues de
+// que una recarga reemplace el array entero.
+function crearReferenciaPedido(pedidoOId) {
+    const pedido =
+        pedidoOId && typeof pedidoOId === "object"
+            ? pedidoOId
+            : obtenerPedidoLocalPorId(pedidoOId);
+
+    if (!pedido) {
+        return {
+            id: pedidoOId,
+            numero: null,
+            idSupabase: null
+        };
+    }
+
+    return {
+        id: pedido.id,
+        numero: pedido.numero === undefined ? null : pedido.numero,
+        idSupabase: pedido.idSupabase || null
+    };
 }
 
 function pedidoTieneRegistroOnline(idPedido) {
@@ -984,6 +1063,54 @@ function validarCantidadPedidoProducto(producto, cantidad) {
     return {
         valido: true,
         cantidad: cantidadNumerica
+    };
+}
+
+// validarCantidadPedidoProducto recibe lo que la persona ESCRIBE en el
+// formulario: para un producto de bulto cerrado, eso son bultos, y por eso lo
+// multiplica por las unidades del bulto.
+//
+// Pero al duplicar un pedido o al recuperar un borrador, la cantidad que se
+// tiene ya viene en UNIDADES (asi se guarda). Pasarla por la funcion de arriba
+// la multiplicaba una segunda vez: un pedido de 2 bultos de 12 (24 unidades,
+// $12.000) se duplicaba como 288 unidades y $144.000.
+//
+// Esta funcion valida una cantidad que ya esta en unidades.
+function validarCantidadUnidadesPedidoProducto(producto, unidades) {
+    const cantidadNumerica =
+        Number(unidades);
+
+    if (!Number.isFinite(cantidadNumerica) || cantidadNumerica <= 0) {
+        return {
+            valido: false,
+            mensaje: "Cantidad invalida."
+        };
+    }
+
+    if (productoEsPeso(producto)) {
+        return {
+            valido: true,
+            cantidad: Math.round(cantidadNumerica * 1000) / 1000
+        };
+    }
+
+    if (productoManejaBultos(producto) && producto.ventaSoloBulto) {
+        // Se vende solo por bulto cerrado: la cantidad en unidades tiene que
+        // ser multiplo del bulto. Se redondea al bulto mas cercano, nunca a 0.
+        const unidadesPorBulto =
+            Math.max(1, enteroProductoSeguro(producto.unidadesPorBulto));
+        const bultos =
+            Math.max(1, Math.round(cantidadNumerica / unidadesPorBulto));
+
+        return {
+            valido: true,
+            cantidad: bultos * unidadesPorBulto
+        };
+    }
+
+    return {
+        valido: true,
+        cantidad: Math.max(1, Math.floor(cantidadNumerica))
     };
 }
 
@@ -2272,9 +2399,7 @@ function duplicarPedidoGuardado(id) {
     }
 
     const pedido =
-        pedidos.find(function (pedidoGuardado) {
-            return pedidoGuardado.id === id;
-        });
+        obtenerPedidoLocalPorId(id);
 
     if (!pedido) {
         alert("No se encontro el pedido para duplicar.");
@@ -2334,32 +2459,29 @@ function duplicarPedidoGuardado(id) {
 
         const cantidadOriginal =
             Number(item.cantidad) || 0;
-        const stockDisponible =
-            obtenerStockDisponibleProducto(producto, null);
-        let cantidadDuplicada =
-            Math.min(cantidadOriginal, stockDisponible);
 
-        if (!productoEsPeso(producto)) {
-            cantidadDuplicada =
-                Math.floor(cantidadDuplicada);
-        }
-
+        // Se copia el pedido entero, tal cual estaba. Si no hay stock para
+        // todo, el control salta al atender: ahi es donde se decide, y no
+        // conviene que duplicar te recorte cantidades en silencio.
         const cantidadValidada =
-            validarCantidadPedidoProducto(producto, cantidadDuplicada);
+            validarCantidadUnidadesPedidoProducto(producto, cantidadOriginal);
 
         if (!cantidadValidada.valido || cantidadValidada.cantidad <= 0) {
-            productosOmitidos.push(textoProducto + " (sin stock disponible)");
+            productosOmitidos.push(textoProducto + " (cantidad invalida)");
             return;
         }
 
-        if (cantidadValidada.cantidad < cantidadOriginal) {
+        const stockDisponible =
+            obtenerStockDisponibleProducto(producto, null);
+
+        if (cantidadValidada.cantidad > stockDisponible) {
             productosOmitidos.push(
                 textoProducto +
                 " (se copio " +
                 formatearCantidadPedido(producto, cantidadValidada.cantidad) +
-                " de " +
-                formatearCantidadPedido(producto, cantidadOriginal) +
-                ")"
+                " pero hay " +
+                formatearCantidadPedido(producto, Math.max(0, stockDisponible)) +
+                " de stock)"
             );
         }
 
@@ -2515,11 +2637,7 @@ async function atenderPedido(id) {
     }
 
     const pedido =
-        pedidos.find(function (p) {
-
-            return p.id === id;
-
-        });
+        obtenerPedidoLocalPorId(id);
 
     if (!pedido) {
         return;
@@ -2787,11 +2905,7 @@ function entregarPedido(id) {
     }
 
     const pedido =
-        pedidos.find(function (p) {
-
-            return p.id === id;
-
-        });
+        obtenerPedidoLocalPorId(id);
 
     if (!pedido) {
         return;
@@ -3131,9 +3245,7 @@ async function cobrarPedido(id) {
     }
 
     let pedido =
-        pedidos.find(function (pedidoGuardado) {
-            return pedidoGuardado.id === id;
-        });
+        obtenerPedidoLocalPorId(id);
 
     if (!pedido) {
         return;
@@ -3230,9 +3342,7 @@ async function pasarACuentaCorriente(id) {
     }
 
     let pedido =
-        pedidos.find(function (pedidoGuardado) {
-            return pedidoGuardado.id === id;
-        });
+        obtenerPedidoLocalPorId(id);
 
     if (!pedido) {
         return;
@@ -3389,9 +3499,7 @@ async function cancelarPedido(id) {
     }
 
     let pedido =
-        pedidos.find(function (pedidoGuardado) {
-            return pedidoGuardado.id === id;
-        });
+        obtenerPedidoLocalPorId(id);
 
     if (!pedido) {
         return;
@@ -3413,6 +3521,39 @@ async function cancelarPedido(id) {
     pedidosOperacionEnCurso.add(claveOperacion);
 
     try {
+        // Cancelar era la unica operacion del archivo que NO revalidaba contra
+        // el servidor antes de escribir. Chequeaba el estado contra la copia en
+        // memoria, que puede tener minutos de antiguedad:
+        //
+        //   el pedido #500 (20 unidades) lo atendio otro equipo -> stock 100 -> 80
+        //   en esta pantalla todavia figura PENDIENTE
+        //   se toca Cancelar -> pasa el chequeo viejo y queda CANCELADO
+        //   resultado: stock 80, pedido cancelado, 20 unidades desaparecidas
+        //   sin ningun movimiento que las explique
+        const datosActualizados =
+            await refrescarDatosOnlineAntesDeOperacionPedido(pedido.id);
+
+        if (!datosActualizados) {
+            return;
+        }
+
+        pedido =
+            obtenerPedidoLocalPorId(id);
+
+        if (!pedido) {
+            alert("Este pedido ya no esta en el listado. Actualiza la pantalla.");
+            return;
+        }
+
+        if (pedido.estado !== "PENDIENTE") {
+            alert(
+                "No se puede cancelar: otro equipo dejo este pedido en " +
+                (pedido.estado || "otro estado").toLowerCase() +
+                ". Actualiza el listado para ver como quedo."
+            );
+            return;
+        }
+
         pedido.estado = "CANCELADO";
 
         guardarPedidos();
@@ -3440,11 +3581,7 @@ async function cancelarPedido(id) {
 function verDetallePedido(id) {
 
     const pedido =
-        pedidos.find(function (p) {
-
-            return p.id === id;
-
-        });
+        obtenerPedidoLocalPorId(id);
 
     if (!pedido) {
         return;
@@ -3674,20 +3811,74 @@ function reabrirPedidoAtendidoDesdeDetalle(id) {
     reabrirPedidoAtendido(id);
 }
 
-async function reabrirPedidoAtendido(id) {
-    if (!tienePermiso("ventas")) {
-        alert("Tu rol no tiene permiso para reabrir pedidos.");
-        return;
+// Reabrir un pedido atendido devuelve al deposito lo que se le habia descontado.
+//
+// Antes lo hacia leyendo el stock de la memoria del navegador, sumando, y
+// subiendo la fila entera del producto. Sin lock y sin refrescar:
+//
+//   producto P con stock 50 en el servidor
+//   otro equipo atiende un pedido de 10 por la via atomica -> servidor 40
+//   aca todavia figura 50, se reabre un pedido de 5 -> se manda stock = 55
+//   el stock real deberia ser 45: se inventaron 10 unidades
+//
+// Ahora se le pide al servidor que sume la cantidad con la fila bloqueada, que
+// es para lo que existe registrar_movimiento_stock_atomico (estaba escrita y
+// desplegada, pero no la llamaba nadie).
+async function devolverStockPedidoEnServidor(pedido) {
+    if (!pedidoPuedeOperarEnServidor(pedido) ||
+        typeof registrarMovimientoStockAtomicoSupabase !== "function") {
+        return { sinServidor: true };
     }
 
-    const pedido = pedidos.find(function (p) {
-        return p.id === id;
-    });
+    const referencia =
+        "Pedido #" + (pedido.numero || pedido.id);
 
-    if (!pedido || pedido.estado !== "ATENDIDO") {
-        return;
+    for (const item of pedido.items) {
+        const producto =
+            productos.find(function (productoGuardado) {
+                return productoGuardado.codigo === item.producto.codigo;
+            });
+
+        if (!producto || !producto.idSupabase) {
+            continue;
+        }
+
+        const cantidad =
+            Number(item.cantidad) || 0;
+
+        if (cantidad <= 0) {
+            continue;
+        }
+
+        const stockResultante =
+            await registrarMovimientoStockAtomicoSupabase(
+                producto.idSupabase,
+                cantidad,
+                "Reapertura de pedido",
+                referencia
+            );
+
+        const stockAnterior =
+            obtenerStockTotalProducto(producto);
+
+        reconstruirStockProductoDesdeTotal(producto, stockResultante);
+        reactivarProductoSiCorrespondePorStock(producto);
+
+        registrarMovimientoStockProducto(producto, {
+            tipo: "Reapertura de pedido",
+            motivo: "Reapertura de pedido atendido",
+            referencia: referencia,
+            pedido: pedido.numero || pedido.id,
+            cantidad: cantidad,
+            stockAnterior: stockAnterior,
+            stockFinal: stockResultante
+        });
     }
 
+    return { sinServidor: false };
+}
+
+function devolverStockPedidoEnMemoria(pedido) {
     pedido.items.forEach(function (item) {
         const producto =
             productos.find(function (productoGuardado) {
@@ -3715,35 +3906,99 @@ async function reabrirPedidoAtendido(id) {
             stockFinal: obtenerStockTotalProducto(producto)
         });
     });
+}
 
-    pedido.estado = "PENDIENTE";
-
-    guardarPedidos();
-    guardarProductos();
-    const productosGuardadosOnline =
-        await guardarProductosPedidoOperacionSupabase(pedido);
-    const pedidoGuardadoOnline =
-        await guardarPedidoOperacionSupabase(pedido);
-
-    if (
-        pedidoDebeConfirmarGuardadoOnline() &&
-        (!productosGuardadosOnline || !pedidoGuardadoOnline)
-    ) {
-        avisarPedidoSinConfirmacionOnline("El pedido reabierto");
+async function reabrirPedidoAtendido(id) {
+    if (!tienePermiso("ventas")) {
+        alert("Tu rol no tiene permiso para reabrir pedidos.");
+        return;
     }
 
-    registrarAuditoria(
-        "Pedidos",
-        "Reabrio pedido atendido",
-        "#" + (pedido.numero || pedido.id) + " | " + pedido.cliente.nombre
-    );
+    let pedido =
+        obtenerPedidoLocalPorId(id);
 
-    renderizarPedidos();
-    renderizarProductos();
-    renderizarMovimientosGenerales();
-    actualizarStockTotal();
-    actualizarDashboard();
-    editarPedido(id);
+    if (!pedido || pedido.estado !== "ATENDIDO") {
+        return;
+    }
+
+    const claveOperacion =
+        "reabrir:" + pedido.id;
+
+    if (pedidosOperacionEnCurso.has(claveOperacion)) {
+        alert("Esta reapertura ya se esta procesando.");
+        return;
+    }
+
+    pedidosOperacionEnCurso.add(claveOperacion);
+
+    try {
+        const datosActualizados =
+            await refrescarDatosOnlineAntesDeOperacionPedido(pedido.id);
+
+        if (!datosActualizados) {
+            return;
+        }
+
+        pedido =
+            obtenerPedidoLocalPorId(id);
+
+        if (!pedido) {
+            alert("Este pedido ya no esta en el listado. Actualiza la pantalla.");
+            return;
+        }
+
+        if (pedido.estado !== "ATENDIDO") {
+            alert(
+                "No se puede reabrir: otro equipo dejo este pedido en " +
+                (pedido.estado || "otro estado").toLowerCase() + "."
+            );
+            return;
+        }
+
+        const resultadoStock =
+            await devolverStockPedidoEnServidor(pedido);
+
+        if (resultadoStock.sinServidor) {
+            devolverStockPedidoEnMemoria(pedido);
+        }
+
+        pedido.estado = "PENDIENTE";
+
+        guardarPedidos();
+        guardarProductos();
+
+        const productosGuardadosOnline =
+            resultadoStock.sinServidor
+                ? await guardarProductosPedidoOperacionSupabase(pedido)
+                : true;
+        const pedidoGuardadoOnline =
+            await guardarPedidoOperacionSupabase(pedido);
+
+        if (
+            pedidoDebeConfirmarGuardadoOnline() &&
+            (!productosGuardadosOnline || !pedidoGuardadoOnline)
+        ) {
+            avisarPedidoSinConfirmacionOnline("El pedido reabierto");
+        }
+
+        registrarAuditoria(
+            "Pedidos",
+            "Reabrio pedido atendido",
+            "#" + (pedido.numero || pedido.id) + " | " + pedido.cliente.nombre
+        );
+
+        renderizarPedidos();
+        renderizarProductos();
+        renderizarMovimientosGenerales();
+        actualizarStockTotal();
+        actualizarDashboard();
+        editarPedido(pedido.id);
+    } catch (error) {
+        console.error("No se pudo reabrir el pedido:", error);
+        alert(mensajeErrorOperacionPedido(error, "reabrir el pedido"));
+    } finally {
+        pedidosOperacionEnCurso.delete(claveOperacion);
+    }
 }
 
 function editarPedido(id) {
@@ -3752,9 +4007,8 @@ function editarPedido(id) {
         return;
     }
 
-    const pedido = pedidos.find(function (p) {
-        return p.id === id;
-    });
+    const pedido =
+        obtenerPedidoLocalPorId(id);
 
     if (!pedido) {
         return;
@@ -3813,25 +4067,25 @@ function editarPedido(id) {
     renderizarPedidoActual();
 
 }
-function eliminarPedido(id){
+// Borrar un pedido tiene que borrarlo tambien en el servidor.
+//
+// Antes hacia `pedidos.splice(indice, 1)` y nada mas. El pedido desaparecia de
+// esta pantalla, el usuario daba por hecho que se habia ido, y en cuanto alguien
+// tocaba Atender o Entregar (lo que dispara una recarga que reemplaza el array
+// completo desde la nube) el pedido REAPARECIA. En las otras computadoras nunca
+// se habia ido.
+async function eliminarPedido(id){
   if (!tienePermiso("ventas")) {
     alert("Tu rol no tiene permiso para eliminar pedidos.");
     return;
   }
 
-  const indice =
-    pedidos.findIndex(function(p){
+  const pedidoEliminado =
+    obtenerPedidoLocalPorId(id);
 
-      return p.id === id;
-
-    });
-
-  if(indice === -1){
+  if(!pedidoEliminado){
     return;
   }
-
-  const pedidoEliminado =
-    pedidos[indice];
 
   if (["ATENDIDO", "ENTREGADO"].includes(pedidoEliminado.estado)) {
     alert("No se puede eliminar un pedido atendido o entregado. Reabrilo o anulalo con el flujo correspondiente.");
@@ -3845,19 +4099,54 @@ function eliminarPedido(id){
     return;
   }
 
-  pedidos.splice(indice,1);
+  const claveOperacion =
+    "eliminar:" + pedidoEliminado.id;
 
-  guardarPedidos();
+  if (pedidosOperacionEnCurso.has(claveOperacion)) {
+    return;
+  }
 
-  registrarAuditoria(
-    "Pedidos",
-    "Elimino pedido",
-    "#" + (pedidoEliminado.numero || pedidoEliminado.id) + " | " + pedidoEliminado.cliente.nombre
-  );
+  pedidosOperacionEnCurso.add(claveOperacion);
 
-  renderizarPedidos();
-  actualizarDashboard();
+  try {
+    // Primero el servidor. Si falla, el pedido NO se saca de la pantalla: es
+    // preferible que siga a la vista a que parezca borrado y vuelva solo.
+    if (pedidoPuedeOperarEnServidor(pedidoEliminado) &&
+        typeof eliminarPedidoSupabase === "function") {
+      try {
+        await eliminarPedidoSupabase(pedidoEliminado);
+      } catch (error) {
+        console.error("No se pudo eliminar el pedido en Supabase:", error);
+        alert(
+          "No se pudo borrar el pedido en el servidor, asi que no se borro aca " +
+          "tampoco (si no, volveria solo en la proxima actualizacion).\n\n" +
+          mensajeErrorOperacionPedido(error, "eliminar el pedido")
+        );
+        return;
+      }
+    }
 
+    const indice =
+      pedidos.indexOf(pedidoEliminado);
+
+    if (indice >= 0) {
+      pedidos.splice(indice, 1);
+    }
+
+    guardarPedidos();
+
+    registrarAuditoria(
+      "Pedidos",
+      "Elimino pedido",
+      "#" + (pedidoEliminado.numero || pedidoEliminado.id) + " | " +
+      (pedidoEliminado.cliente ? pedidoEliminado.cliente.nombre : "Sin cliente")
+    );
+
+    renderizarPedidos();
+    actualizarDashboard();
+  } finally {
+    pedidosOperacionEnCurso.delete(claveOperacion);
+  }
 }
 
 

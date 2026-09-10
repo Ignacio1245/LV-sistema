@@ -187,22 +187,6 @@ async function confirmarGuardadoClienteOnline(cliente, accion) {
   return true;
 }
 
-async function confirmarMovimientoCuentaClienteOnline(cliente, movimiento, accion) {
-  if (typeof guardarMovimientoCuentaOperacionSupabase !== "function") {
-    return true;
-  }
-
-  const movimientoGuardadoOnline =
-    await guardarMovimientoCuentaOperacionSupabase(cliente, movimiento);
-
-  if (clienteDebeConfirmarGuardadoOnline() && !movimientoGuardadoOnline) {
-    avisarClienteSinConfirmacionOnline(accion);
-    return false;
-  }
-
-  return true;
-}
-
 async function confirmarEliminacionClienteOnline(cliente, accion) {
   if (typeof eliminarClienteOperacionSupabase !== "function") {
     return true;
@@ -750,6 +734,7 @@ function importarClientesDesdeTextoPlano(texto) {
   let creados = 0;
   let actualizados = 0;
   let errores = 0;
+  const codigosClientesImportados = new Set();
 
   ejecutarSinProgramarSincronizacion(function () {
     lineasDatos.forEach(function (linea) {
@@ -849,6 +834,7 @@ function importarClientesDesdeTextoPlano(texto) {
         );
       }
       actualizados += 1;
+      codigosClientesImportados.add(String(codigo));
       return;
     }
 
@@ -865,6 +851,7 @@ function importarClientesDesdeTextoPlano(texto) {
     });
 
     creados += 1;
+    codigosClientesImportados.add(String(codigo));
   });
   });
 
@@ -890,7 +877,11 @@ function importarClientesDesdeTextoPlano(texto) {
   const resumenImportacion = {
     creados: creados,
     actualizados: actualizados,
-    errores: errores
+    errores: errores,
+    // Que clientes toco de verdad esta importacion. Sin esto, la subida
+    // reescribia la fila completa de TODOS los clientes en memoria (saldo
+    // incluido) y borraba lo que otros equipos habian cobrado ese dia.
+    codigosClientes: Array.from(codigosClientesImportados)
   };
 
   actualizarEstadoImportacionClientes(
@@ -908,7 +899,8 @@ async function sincronizarImportacionClientesConSupabase(resumenImportacion) {
   const resumen = resumenImportacion || {
     creados: 0,
     actualizados: 0,
-    errores: 0
+    errores: 0,
+    codigosClientes: []
   };
 
   if (typeof haySesionSupabaseParaSincronizar !== "function" || !haySesionSupabaseParaSincronizar()) {
@@ -930,9 +922,17 @@ async function sincronizarImportacionClientesConSupabase(resumenImportacion) {
       "sync-working"
     );
 
+    const codigosClientes =
+      Array.isArray(resumen.codigosClientes) ? resumen.codigosClientes : [];
+
     const sincronizarAhora = async function () {
       await sincronizarTipoLocalConSupabase("datosBase");
-      await sincronizarTipoLocalConSupabase("clientes");
+      // Solo los clientes que la importacion toco. Subir el resto pisa saldos
+      // que se movieron en otras computadoras o celulares desde que se abrio
+      // esta pantalla.
+      await sincronizarTipoLocalConSupabase("clientes", {
+        codigosClientes: codigosClientes
+      });
     };
 
     if (typeof pausarSincronizacionAutomatica === "function") {
@@ -2160,6 +2160,67 @@ function obtenerClienteCuentaEstadoSeleccionado() {
   }) || null;
 }
 
+// Con que saldo arranca el periodo que se esta mirando.
+//
+// El estado de cuenta arrancaba el acumulado en `cliente.saldo`, que es el saldo
+// FINAL, y despues le sumaba todos los movimientos otra vez. Solo se corregia si
+// el primer movimiento traia `saldoAnterior`, y los movimientos que vuelven del
+// servidor no lo traen: el mapper solo reconstruye codigo, fecha, tipo e
+// importe. O sea que en cualquier sesion donde se hubiera tocado "Actualizar
+// datos", el papel que se le imprime al cliente decia otra cosa:
+//
+//   pedido +$50.000, pago -$40.000, saldo real $10.000
+//   el papel mostraba:  $10.000 -> $60.000 -> $20.000
+//
+// La cuenta correcta es al reves: se parte del saldo actual y se DESHACEN los
+// movimientos, primero los posteriores al periodo y despues los del periodo.
+function obtenerSaldoInicialCuentaClientePeriodo(cliente, movimientosDelPeriodo) {
+  const saldoActual =
+    Number(cliente && cliente.saldo) || 0;
+  const historial =
+    Array.isArray(cliente && cliente.historial) ? cliente.historial : [];
+  const hasta =
+    dom.cuentaClienteHastaInput ? dom.cuentaClienteHastaInput.value : "";
+
+  // Si el primer movimiento del periodo guarda con que saldo venia, esa es la
+  // fuente mas confiable y se usa tal cual.
+  const primerMovimiento =
+    Array.isArray(movimientosDelPeriodo) ? movimientosDelPeriodo[0] : null;
+
+  if (primerMovimiento && typeof primerMovimiento.saldoAnterior === "number" &&
+      Number.isFinite(primerMovimiento.saldoAnterior)) {
+    return Number(primerMovimiento.saldoAnterior);
+  }
+
+  const enElPeriodo =
+    new Set((movimientosDelPeriodo || []).map(function (movimiento) {
+      return movimiento;
+    }));
+
+  let saldo = saldoActual;
+
+  // 1) Deshacer lo que paso DESPUES del periodo, para llegar al saldo del cierre.
+  historial.forEach(function (movimiento) {
+    if (enElPeriodo.has(movimiento)) {
+      return;
+    }
+
+    const fecha =
+      obtenerFechaIsoCuentaCliente(movimiento.fecha);
+
+    if (hasta && fecha && fecha > hasta) {
+      saldo -= Number(movimiento.importe) || 0;
+    }
+  });
+
+  // 2) Deshacer los del periodo, para llegar al saldo de apertura.
+  (movimientosDelPeriodo || []).forEach(function (movimiento) {
+    saldo -= Number(movimiento.importe) || 0;
+  });
+
+  return redondearDinero(saldo);
+}
+
 function obtenerMovimientosCuentaClientePeriodo(cliente) {
   const desde =
     dom.cuentaClienteDesdeInput ? dom.cuentaClienteDesdeInput.value : "";
@@ -2214,12 +2275,7 @@ function actualizarCuentaClienteEstado() {
   const movimientos =
     obtenerMovimientosCuentaClientePeriodo(cliente);
   let saldoAcumulado =
-    Number(cliente.saldo) || 0;
-
-  if (movimientos.length > 0 && typeof movimientos[0].saldoAnterior === "number") {
-    saldoAcumulado =
-      Number(movimientos[0].saldoAnterior) || 0;
-  }
+    obtenerSaldoInicialCuentaClientePeriodo(cliente, movimientos);
 
   dom.cuentaClienteEstadoResumen.textContent =
     "Cuenta seleccionada: Cliente " + cliente.codigo + " - " + cliente.nombre +
@@ -2239,15 +2295,30 @@ function actualizarCuentaClienteEstado() {
     return;
   }
 
+  // Fila de apertura: sin esto, el papel arranca en el aire y no se puede
+  // seguir la cuenta de arriba hacia abajo.
+  const filaSaldoAnterior = html`
+    <tr>
+      <td>${dom.cuentaClienteDesdeInput.value || "-"}</td>
+      <td><strong>Saldo anterior</strong></td>
+      <td>${formatearDinero(0)}</td>
+      <td>${formatearDinero(0)}</td>
+      <td><strong>${formatearDinero(saldoAcumulado)}</strong></td>
+    </tr>
+  `;
+
   dom.cuentaClienteEstadoTable.innerHTML =
+    String(filaSaldoAnterior) +
     movimientos.map(function (movimiento) {
       const importe =
         Number(movimiento.importe) || 0;
 
+      // Siempre se acumula, nunca se salta al saldoPosterior guardado. Mezclar
+      // las dos cosas hacia que la columna pegara saltos cuando algunos
+      // movimientos lo tenian y otros no (los que vuelven del servidor no lo
+      // traen). Acumulando, la ultima fila cae justo en lo que el cliente debe.
       saldoAcumulado =
-        typeof movimiento.saldoPosterior === "number"
-          ? Number(movimiento.saldoPosterior) || 0
-          : saldoAcumulado + importe;
+        redondearDinero(saldoAcumulado + importe);
 
       return html`
         <tr>
@@ -2379,6 +2450,37 @@ function obtenerPedidoParaNotaCredito() {
   }) || null;
 }
 
+// Cuanto se le cobro DE VERDAD al cliente por cada unidad de este renglon.
+//
+// La nota de credito usaba `item.precioUnitario`, que es el precio de lista y
+// no mira la bonificacion. Con un renglon de 10 x $12.000 y 15% de bonificacion
+// el cliente debia $102.000, pero la nota le acreditaba $120.000: $18.000 de
+// regalo, y el pedido quedaba en $0 sin rastro del error.
+//
+// Se toma del subtotal guardado, que ya viene con la bonificacion aplicada.
+// Solo si no hay subtotal se cae al precio de lista menos el descuento.
+function obtenerPrecioUnitarioCobradoItemPedido(item) {
+  if (!item) {
+    return 0;
+  }
+
+  const cantidad =
+    Number(item.cantidad) || 0;
+  const subtotalGuardado =
+    Number(item.subtotal);
+
+  if (cantidad > 0 && Number.isFinite(subtotalGuardado) && subtotalGuardado >= 0) {
+    return redondearDinero(subtotalGuardado / cantidad);
+  }
+
+  const precioLista =
+    Number(item.precioUnitario || (item.producto ? item.producto.precio : 0)) || 0;
+  const descuento =
+    Math.min(100, Math.max(0, Number(item.descuentoPorcentaje) || 0));
+
+  return redondearDinero(precioLista * (1 - (descuento / 100)));
+}
+
 function obtenerCantidadNotaCreditoItem(indice) {
   const input =
     document.querySelector('[data-nota-credito-item="' + indice + '"]');
@@ -2401,7 +2503,7 @@ function calcularNotaCreditoProductos(pedido) {
       const cantidadCredito =
         Math.min(cantidadPedido, Math.max(0, obtenerCantidadNotaCreditoItem(indice)));
       const precioUnitario =
-        Number(item.precioUnitario || (item.producto ? item.producto.precio : 0)) || 0;
+        obtenerPrecioUnitarioCobradoItemPedido(item);
 
       return {
         indice: indice,
@@ -2653,7 +2755,7 @@ function renderizarProductosNotaCredito() {
       const cantidad =
         Number(item.cantidad) || 0;
       const precioUnitario =
-        Number(item.precioUnitario || (item.producto ? item.producto.precio : 0)) || 0;
+        obtenerPrecioUnitarioCobradoItemPedido(item);
       const cantidadCredito =
         obtenerCantidadNotaCreditoItem(indice);
       const subtotal =
@@ -2901,17 +3003,17 @@ async function registrarNotaCreditoDesdeFormulario(event) {
   }
 }
 
+// Antes devolvia "el mayor del historial + 1". Ese numero es la llave que el
+// servidor usa para no aplicar dos veces el mismo cobro, asi que dos cajas
+// cobrandole al mismo cliente sacaban el MISMO numero: la segunda recibia "este
+// pago ya estaba registrado" y la plata no se descontaba nunca.
+//
+// Ademas dependia de tener el historial completo en memoria: si la carga de los
+// pagos fallaba (se traga el error con un console.warn), el historial quedaba
+// vacio, devolvia 1, y ese 1 casi siempre ya existia -> se rechazaban TODOS los
+// pagos de esa sesion.
 function obtenerSiguienteCodigoPagoCliente(cliente) {
-  if (!cliente || !Array.isArray(cliente.historial)) {
-    return 1;
-  }
-
-  const codigos =
-    cliente.historial.map(function (movimiento) {
-      return Number(movimiento.codigoPago) || 0;
-    });
-
-  return Math.max(0, ...codigos) + 1;
+  return crearCodigoPagoUnico();
 }
 
 function imprimirComprobantePagoCliente(codigoCliente, codigoPago) {
@@ -2951,7 +3053,7 @@ function imprimirComprobantePagoCliente(codigoCliente, codigoPago) {
   ventana.document.write(html`
     <html>
       <head>
-        <title>Comprobante de cuenta ${pago.codigoPago}</title>
+        <title>Comprobante de cuenta ${formatearNumeroComprobantePago(pago.codigoPago)}</title>
         <style>
           body { font-family: Arial, sans-serif; color: #111827; margin: 24px; }
           .ticket { border: 1px solid #cbd5e1; padding: 18px; max-width: 360px; }
@@ -2968,7 +3070,7 @@ function imprimirComprobantePagoCliente(codigoCliente, codigoPago) {
           <h1>${nombreEmpresa}</h1>
           <p class="muted">${subtituloEmpresa}</p>
           <h2>Comprobante de cuenta corriente</h2>
-          <p><strong>Nro:</strong> ${pago.codigoPago}</p>
+          <p><strong>Nro:</strong> ${formatearNumeroComprobantePago(pago.codigoPago)}</p>
           <p><strong>Fecha:</strong> ${pago.fecha}</p>
           <p><strong>Cliente:</strong> ${cliente.codigo} - ${cliente.nombre}</p>
           <p><strong>Direccion:</strong> ${cliente.direccion || "-"}</p>

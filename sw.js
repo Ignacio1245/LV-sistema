@@ -27,7 +27,7 @@
 // Si algo sale mal, desde el panel se puede ejecutar en la consola:
 //   navigator.serviceWorker.getRegistrations().then(r => r.forEach(x => x.unregister()))
 
-const VERSION = "20260908-ux1";
+const VERSION = "20260910-seguridad1";
 const CACHE = "lv-sistema-" + VERSION;
 
 // Lo minimo para que las tres pantallas abran sin red.

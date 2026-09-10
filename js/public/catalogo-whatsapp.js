@@ -156,13 +156,6 @@ function leerPedidosPendientesCatalogo() {
   }
 }
 
-function guardarPedidosPendientesCatalogo(pedidosPendientes) {
-  localStorage.setItem(
-    CLAVE_PEDIDOS_PENDIENTES_CATALOGO,
-    JSON.stringify(Array.isArray(pedidosPendientes) ? pedidosPendientes.slice(0, 25) : [])
-  );
-}
-
 function obtenerCantidadPedidosPendientesCatalogo() {
   return leerPedidosPendientesCatalogo().length;
 }
@@ -191,12 +184,6 @@ function productoEstaActivoParaCatalogo(producto) {
       : producto.activo !== false;
 
   return productoActivoSegunSistema;
-}
-
-function hayProductosConMarcaCatalogo(listaProductos) {
-  return listaProductos.some(function (producto) {
-    return producto.mostrarCatalogo === true;
-  });
 }
 
 function filtrarProductosVisiblesCatalogo(listaProductos) {
@@ -325,15 +312,6 @@ function formatearPrecioCatalogo(valor) {
   }
 
   return "$" + (Number(valor) || 0).toLocaleString("es-AR");
-}
-
-function escaparTextoCatalogo(valor) {
-  return String(valor === null || valor === undefined ? "" : valor)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function crearImagenProductoCatalogo(producto) {

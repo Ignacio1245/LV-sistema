@@ -269,27 +269,6 @@ async function cargarAccesosParaLoginDesdeSupabase(emailLogin) {
   }
 }
 
-async function reanudarSesionSistemaDesdeSupabase() {
-  if (!usuarioSupabaseAutenticado()) {
-    return false;
-  }
-
-  await cargarAccesosParaLoginDesdeSupabase(obtenerEmailSesionSupabase());
-
-  const usuario =
-    buscarUsuarioPorEmail(obtenerEmailSesionSupabase());
-
-  if (!usuario) {
-    await cerrarSesionSupabase();
-    mostrarLoginSistema("La sesion online existe, pero el email no esta autorizado en Usuarios.");
-    return false;
-  }
-
-  aplicarUsuarioSistemaAutenticado(usuario);
-  actualizarEstadoLogin("Sesion restaurada.", "sync-ok");
-  return true;
-}
-
 function cargarDatosOperativosDespuesDelLogin() {
   cargarTodoDesdeSupabaseAutomatico()
     .then(function (resultado) {

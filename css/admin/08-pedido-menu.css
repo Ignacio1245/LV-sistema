@@ -396,3 +396,20 @@ td.celda-saldo {
   line-height: 1.35;
   text-align: center;
 }
+
+/* --- Aviso de que falta la funcion segura de accesos ----------------------
+   Sin ella no se puede crear un acceso confirmado, y el usuario que se cargue
+   queda sin poder entrar desde el celular. Se avisa al abrir Usuarios, no
+   cuando el vendedor ya esta en la calle sin poder ingresar. */
+.aviso-accesos {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid #fda29b;
+  border-left: 4px solid #b42318;
+  border-radius: 10px;
+  background: #fef3f2;
+  color: #7a271a;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+}

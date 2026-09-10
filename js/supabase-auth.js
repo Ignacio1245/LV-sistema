@@ -125,44 +125,68 @@ async function enviarRecuperacionPasswordSupabase(email) {
   return true;
 }
 
-function crearClienteAuthAisladoSupabase() {
-  if (!supabaseAuthDisponible()) {
-    throw new Error("Supabase no esta configurado.");
+// La funcion segura es la UNICA forma que tiene el sistema de crear un acceso
+// dejandolo confirmado. Si no esta desplegada, hay que decirlo con todas las
+// letras: antes solo se detectaba el 404, y cuando el proyecto no tiene ninguna
+// funcion desplegada el navegador ni siquiera llega a la respuesta (falla el
+// preflight de CORS y fetch tira "Failed to fetch"). El admin veia
+// "No se pudo crear el acceso: Failed to fetch", que no le dice que hacer.
+function esFuncionSupabaseNoDesplegada(respuestaOError) {
+  if (respuestaOError instanceof Error) {
+    const mensaje =
+      String(respuestaOError.message || "").toLowerCase();
+
+    return mensaje.includes("failed to fetch") ||
+      mensaje.includes("networkerror") ||
+      mensaje.includes("network request failed") ||
+      mensaje.includes("load failed");
   }
 
-  return window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_PUBLISHABLE_KEY,
-    {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false
-      }
-    }
-  );
+  const estado =
+    Number(respuestaOError && respuestaOError.status) || 0;
+
+  // 404: no existe. 546: la funcion se cayo al arrancar (no desplegada del
+  // todo). 502/503/504: el gateway de funciones no encuentra a quien responder.
+  return estado === 404 || estado === 546 ||
+    estado === 502 || estado === 503 || estado === 504;
 }
+
+const AVISO_FUNCION_SEGURA =
+  "Falta desplegar la funcion segura crear-usuario-sistema en Supabase. " +
+  "Sin esa funcion no se puede crear el acceso confirmado: el usuario queda " +
+  "sin poder entrar desde el celular. Desplegala con: " +
+  "supabase functions deploy crear-usuario-sistema";
 
 async function crearAccesoUsuarioConFuncionSupabase(email, password) {
   if (!usuarioSupabaseAutenticado()) {
     throw new Error("Inicia sesion como administrador para crear accesos.");
   }
 
-  const respuesta =
-    await fetch(SUPABASE_URL + "/functions/v1/crear-usuario-sistema", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + sesionSupabase.access_token
-      },
-      body: JSON.stringify({
-        email: email,
-        password: password
-      })
-    });
+  let respuesta = null;
 
-  if (respuesta.status === 404) {
-    throw new Error("Falta desplegar la funcion segura crear-usuario-sistema en Supabase.");
+  try {
+    respuesta =
+      await fetch(SUPABASE_URL + "/functions/v1/crear-usuario-sistema", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + sesionSupabase.access_token
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password
+        })
+      });
+  } catch (errorRed) {
+    if (esFuncionSupabaseNoDesplegada(errorRed)) {
+      throw new Error(AVISO_FUNCION_SEGURA);
+    }
+
+    throw errorRed;
+  }
+
+  if (esFuncionSupabaseNoDesplegada(respuesta)) {
+    throw new Error(AVISO_FUNCION_SEGURA);
   }
 
   let datos = null;
@@ -241,10 +265,7 @@ async function crearAccesoUsuarioSupabase(email, password) {
       throw errorFuncion;
     }
 
-    throw new Error(
-      "Falta desplegar la funcion segura crear-usuario-sistema en Supabase. " +
-      "Sin esa funcion el acceso puede quedar sin confirmar y despues no ingresa."
-    );
+    throw new Error(AVISO_FUNCION_SEGURA);
   }
 }
 

@@ -110,11 +110,27 @@ function obtenerProveedorProductoPedido(item) {
     : "Sin proveedor";
 }
 
+// Cuanto se vendio de verdad en este renglon.
+//
+// Antes solo aceptaba el subtotal guardado si era MAYOR a cero, y un renglon
+// bonificado al 100% (un regalo, una promo) se guarda en $0 legitimamente. Como
+// caia al calculo de abajo, que ignoraba la bonificacion, el informe contaba
+// como venta algo que nunca se cobro:
+//
+//   12 unidades a $1.000 con 100% de bonificacion -> el pedido cobro $0
+//                                                 -> el informe sumaba $12.000
+//
+// Con 20% de bonificacion contaba $10.000 en vez de $8.000. Eso inflaba la
+// ganancia estimada contra un costo real que si se descontaba, y le adjudicaba
+// ventas de mas al proveedor de ese producto. Ademas la "Facturacion" de arriba
+// usa pedido.total, que si esta bien: los dos numeros de la misma pantalla no
+// cerraban entre si.
 function obtenerSubtotalItemInforme(item) {
   const subtotalGuardado =
     Number(item.subtotal);
 
-  if (!Number.isNaN(subtotalGuardado) && subtotalGuardado > 0) {
+  // Cero es un subtotal valido, no un dato faltante.
+  if (Number.isFinite(subtotalGuardado) && subtotalGuardado >= 0) {
     return subtotalGuardado;
   }
 
@@ -124,8 +140,10 @@ function obtenerSubtotalItemInforme(item) {
       : item.producto ? Number(item.producto.precio) || 0 : 0;
   const cantidad =
     Number(item.cantidad) || 0;
+  const bonificacion =
+    Math.min(100, Math.max(0, Number(item.descuentoPorcentaje) || 0));
 
-  return redondearDinero(precio * cantidad);
+  return redondearDinero(precio * cantidad * (1 - (bonificacion / 100)));
 }
 
 function calcularMargenPedidosInforme(pedidosFacturables) {
@@ -162,6 +180,10 @@ function calcularMargenPedidosInforme(pedidosFacturables) {
       : 0;
 
   return {
+    // Se devuelve la venta sobre la que se calculo el margen. Antes quedaba
+    // encerrada en la funcion, asi que no habia forma de cruzar la ganancia con
+    // la facturacion de arriba cuando los dos numeros no cerraban.
+    ventaTotal: ventaTotal,
     costoTotal: costoTotal,
     gananciaEstimada: gananciaEstimada,
     margenEstimado: margenEstimado,
@@ -169,6 +191,22 @@ function calcularMargenPedidosInforme(pedidosFacturables) {
   };
 }
 
+// Cuanto de lo facturado en el periodo ya entro y cuanto falta.
+//
+// Antes decidia con `typeof pedido.importePagado === "number"`. Los pedidos
+// creados en la sesion no traen esa propiedad hasta la entrega, pero los que
+// vuelven del servidor SIEMPRE la traen (en 0). Resultado: un pedido PENDIENTE
+// recargado no sumaba ni a cobrado ni a pendiente, y el mismo mes con el mismo
+// filtro daba dos resultados distintos segun si habias tocado "Actualizar
+// datos" o no:
+//
+//   $1.000.000 facturados, $400.000 sin entregar
+//   antes de recargar:  cobrado $600.000 | pendiente $400.000 | 60%
+//   despues:            cobrado $600.000 | pendiente      $0  | 100%
+//
+// Ahora lo pendiente se deduce del total, que es la misma base que usa la
+// Facturacion de arriba. Asi cobrado + pendiente siempre cierra con lo
+// facturado, mire cuando se mire.
 function calcularCobranzaPedidosInforme(pedidosFacturables) {
   let cobrado = 0;
   let pendiente = 0;
@@ -176,19 +214,19 @@ function calcularCobranzaPedidosInforme(pedidosFacturables) {
   pedidosFacturables.forEach(function (pedido) {
     const totalPedido =
       Number(pedido.total) || 0;
+    const importePagado =
+      Number(pedido.importePagado);
     const pagadoPedido =
-      typeof pedido.importePagado === "number"
-        ? Number(pedido.importePagado) || 0
+      Number.isFinite(importePagado) && importePagado > 0
+        ? importePagado
         : pedido.estadoCobro === "COBRADO"
           ? totalPedido
           : 0;
-    const saldoPedido =
-      typeof pedido.saldoPendiente === "number"
-        ? Number(pedido.saldoPendiente) || 0
-        : Math.max(0, totalPedido - pagadoPedido);
+    const cobradoPedido =
+      Math.min(totalPedido, Math.max(0, pagadoPedido));
 
-    cobrado += Math.min(totalPedido, pagadoPedido);
-    pendiente += saldoPedido;
+    cobrado += cobradoPedido;
+    pendiente += Math.max(0, totalPedido - cobradoPedido);
   });
 
   const totalCobranza =

@@ -61,6 +61,7 @@ const vendedorDom = {
   nombreEncabezado: document.getElementById("vendedorNombreEncabezado"),
   metricaClientes: document.getElementById("vendedorMetricaClientes"),
   metricaProductos: document.getElementById("vendedorMetricaProductos"),
+  metricaPorCobrar: document.getElementById("vendedorMetricaPorCobrar"),
   metricaDeuda: document.getElementById("vendedorMetricaDeuda"),
   metricaPedido: document.getElementById("vendedorMetricaPedido"),
   inicio: document.getElementById("vendedorInicio"),
@@ -76,6 +77,9 @@ const vendedorDom = {
   flujoTitulo: document.getElementById("vendedorFlujoTitulo"),
   botonEnviarCatalogo: document.getElementById("vendedorBotonEnviarCatalogo"),
   nombreVendedor: document.getElementById("vendedorNombre"),
+  campoNombreVendedor: document.getElementById("vendedorCampoNombre"),
+  resumenCobranza: document.getElementById("vendedorResumenCobranza"),
+  navegacionTitulo: document.getElementById("vendedorNavegacionTitulo"),
   zonaCliente: document.getElementById("vendedorZonaCliente"),
   busquedaCliente: document.getElementById("vendedorBusquedaCliente"),
   clientesRecientes: document.getElementById("vendedorClientesRecientes"),
@@ -92,6 +96,7 @@ const vendedorDom = {
   nuevoClienteEstado: document.getElementById("vendedorNuevoClienteEstado"),
   seccionProductos: document.getElementById("vendedorSeccionProductos"),
   clientePedidoNombre: document.getElementById("vendedorClientePedidoNombre"),
+  resumenClienteNombre: document.getElementById("vendedorResumenClienteNombre"),
   cambiarCliente: document.getElementById("vendedorCambiarCliente"),
   productoEstado: document.getElementById("vendedorProductoEstado"),
   seccionCatalogo: document.getElementById("vendedorSeccionCatalogo"),
@@ -104,10 +109,8 @@ const vendedorDom = {
   cantidadItems: document.getElementById("vendedorCantidadItems"),
   cantidadUnidades: document.getElementById("vendedorCantidadUnidades"),
   formaPago: document.getElementById("vendedorFormaPago"),
-  telefonoDestino: document.getElementById("vendedorTelefonoDestino"),
   observacion: document.getElementById("vendedorObservacion"),
   botonLimpiar: document.getElementById("vendedorBotonLimpiar"),
-  botonCopiar: document.getElementById("vendedorBotonCopiar"),
   botonWhatsapp: document.getElementById("vendedorBotonWhatsapp"),
   botonVolverProductos: document.getElementById("vendedorBotonVolverProductos"),
   estadoEnvio: document.getElementById("vendedorEstadoEnvio"),
@@ -121,6 +124,7 @@ const vendedorDom = {
   cobranzaMedio: document.getElementById("vendedorCobranzaMedio"),
   cobranzaComprobante: document.getElementById("vendedorCobranzaComprobante"),
   cobranzaObservacion: document.getElementById("vendedorCobranzaObservacion"),
+  cambiarClienteCobranza: document.getElementById("vendedorCambiarClienteCobranza"),
   botonCobrarSaldo: document.getElementById("vendedorBotonCobrarSaldo"),
   botonGuardarCobranza: document.getElementById("vendedorBotonGuardarCobranza"),
   cobranzaEstado: document.getElementById("vendedorCobranzaEstado"),
@@ -763,16 +767,6 @@ function obtenerDescuentoPredeterminadoVendedor(producto) {
   return 0;
 }
 
-function obtenerTextoFormaPagoVendedor(formaPago) {
-  const textosFormaPago = {
-    CUENTA_CORRIENTE: "Cuenta corriente",
-    EFECTIVO: "Contado",
-    TRANSFERENCIA: "Transferencia"
-  };
-
-  return textosFormaPago[formaPago] || "Cuenta corriente";
-}
-
 function escaparTextoVendedor(valor) {
   return String(valor === null || valor === undefined ? "" : valor)
     .replace(/&/g, "&amp;")
@@ -1019,12 +1013,24 @@ function actualizarCampoVendedorSegunCuenta() {
     vendedorDom.nombreEncabezado.textContent =
       nombreVendedor || "Vendedor";
   }
-  vendedorDom.nombreVendedor.readOnly =
+  const esCuentaDeVendedor =
     vendedorMovilEsCuentaDeVendedor();
+
+  vendedorDom.nombreVendedor.readOnly = esCuentaDeVendedor;
   vendedorDom.nombreVendedor.classList.toggle(
     "vendedores-campo-bloqueado",
-    vendedorMovilEsCuentaDeVendedor()
+    esCuentaDeVendedor
   );
+
+  // Si la cuenta es de un vendedor, el campo no se puede editar y repite el
+  // nombre que ya esta en el encabezado: ocupaba 130px de pantalla para no
+  // decir nada nuevo. Se oculta, pero sigue en el DOM porque el pedido lo lee.
+  if (vendedorDom.campoNombreVendedor) {
+    vendedorDom.campoNombreVendedor.classList.toggle(
+      "vendedores-oculto",
+      esCuentaDeVendedor
+    );
+  }
 }
 
 function actualizarMetricasJornadaVendedor() {
@@ -1041,6 +1047,17 @@ function actualizarMetricasJornadaVendedor() {
   if (vendedorDom.metricaProductos) {
     vendedorDom.metricaProductos.textContent =
       String(productosVendedor.length);
+  }
+
+  if (vendedorDom.metricaPorCobrar) {
+    const totalPorCobrar =
+      clientesVendedor.reduce(function (total, cliente) {
+        const saldo = obtenerSaldoClienteVendedor(cliente);
+        return saldo > 0 ? total + saldo : total;
+      }, 0);
+
+    vendedorDom.metricaPorCobrar.textContent =
+      formatearDineroVendedor(totalPorCobrar);
   }
 
   if (vendedorDom.metricaDeuda) {
@@ -1330,8 +1347,14 @@ function actualizarFlujoVendedor() {
     moduloVendedorActual === "catalogo";
   const hayModulo =
     estaEnVenta || estaEnClientes || estaEnCatalogo;
+  // Con el cliente ya elegido, el buscador repetia nombre y saldo por tercera
+  // vez y empujaba "Importe cobrado" abajo del pliegue. Se pliega: el panel de
+  // cobranza ya dice a quien se le cobra, y tiene su propio boton Cambiar.
   const mostrarSelectorCliente =
-    hayModulo && (!estaEnVenta || pasoPedidoVendedorActual === "cliente");
+    hayModulo &&
+    (estaEnVenta
+      ? pasoPedidoVendedorActual === "cliente"
+      : !hayCliente);
 
   vendedorDom.inicio.classList.toggle("vendedores-oculto", hayModulo);
   vendedorDom.contenido.classList.toggle("vendedores-flujo-activo", hayModulo);
@@ -1354,6 +1377,13 @@ function actualizarFlujoVendedor() {
     "vendedores-oculto",
     !(estaEnVenta && hayCliente && pasoPedidoVendedorActual === "productos")
   );
+
+  if (vendedorDom.resumenClienteNombre) {
+    vendedorDom.resumenClienteNombre.textContent =
+      hayCliente
+        ? clienteSeleccionadoVendedor.codigo + " - " + clienteSeleccionadoVendedor.nombre
+        : "Cliente";
+  }
 
   if (vendedorDom.clientePedidoNombre) {
     vendedorDom.clientePedidoNombre.textContent =
@@ -1397,6 +1427,13 @@ function actualizarFlujoVendedor() {
       estaEnVenta ? "Venta" : estaEnClientes ? "Cobranza" : estaEnCatalogo ? "Catalogo" : "Paso 1";
   }
 
+  // El titulo va en la barra de navegacion cuando no hay pasos que mostrar, asi
+  // no hace falta una cabecera aparte dentro del panel.
+  if (vendedorDom.navegacionTitulo) {
+    vendedorDom.navegacionTitulo.textContent =
+      estaEnVenta ? "" : estaEnClientes ? "Cobrar" : estaEnCatalogo ? "Catalogo" : "";
+  }
+
   if (vendedorDom.flujoTitulo) {
     vendedorDom.flujoTitulo.textContent =
       estaEnVenta
@@ -1407,6 +1444,21 @@ function actualizarFlujoVendedor() {
             ? "Buscar cliente para enviar catalogo"
             : "Buscar cliente";
   }
+
+  // "Enviar catalogo" vivia en la pantalla de buscar cliente de las TRES tareas,
+  // incluida Cobrar, donde no pinta nada: el modulo Catalogo ya tiene su propio
+  // panel con ese boton. Y "Nuevo cliente" solo hace falta cuando se esta
+  // vendiendo. Cada boton de mas en un celular es una decision de mas.
+  if (vendedorDom.botonEnviarCatalogo) {
+    vendedorDom.botonEnviarCatalogo.classList.add("vendedores-oculto");
+  }
+
+  if (vendedorDom.botonNuevoCliente) {
+    vendedorDom.botonNuevoCliente.classList.toggle("vendedores-oculto", !estaEnVenta);
+  }
+
+  // La caja "Sin cliente seleccionado" ocupaba lugar para decir que no pasa nada.
+  vendedorDom.clienteSeleccionado.classList.toggle("vendedores-oculto", !hayCliente);
 
   vendedorDom.botonEnviarCatalogo.disabled =
     !hayCliente;
@@ -1445,9 +1497,16 @@ function seleccionarPasoPedidoVendedor(paso) {
   }
 }
 
+function limpiarFiltroZonaVendedor() {
+  if (vendedorDom.zonaCliente) {
+    vendedorDom.zonaCliente.value = "";
+  }
+}
+
 function volverInicioVendedor() {
   guardarBorradorPedidoVendedor();
   moduloVendedorActual = "";
+  limpiarFiltroZonaVendedor();
   actualizarFlujoVendedor();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -1461,6 +1520,13 @@ function seleccionarModuloVendedor(modulo) {
     moduloVendedorActual =
       moduloNuevo;
     pasoPedidoVendedorActual = "cliente";
+    mostrarTodosLosClientesCobranza = false;
+    // Elegir un cliente deja el filtro de zona pegado en la zona de ese cliente,
+    // y ese filtro no se ve en ningun lado de la pantalla. Resultado: despues de
+    // venderle a uno de Norte, al ir a Cobrar solo aparecian los de Norte y el
+    // total "Te deben" mentia, sin que nada lo explicara. Al cambiar de tarea se
+    // vuelve a ver todo.
+    limpiarFiltroZonaVendedor();
     reiniciarClientePorCambioZona();
     if (moduloNuevo === "venta") {
       restaurarBorradorPedidoVendedor();
@@ -2075,75 +2141,161 @@ function formatearCantidadRapidaVendedor(producto, cantidad) {
   return "+" + cantidad;
 }
 
+// Cuando el vendedor entra a Cobrar, lo primero que necesita no es un campo de
+// busqueda vacio: es saber a quien tiene que cobrarle y cuanto. Antes tenia que
+// acordarse del nombre y escribirlo uno por uno. Ahora entra y ve la lista de
+// deudores ordenada de mayor a menor, con el total de la jornada arriba.
+let mostrarTodosLosClientesCobranza = false;
+
+function estaEnModoCobranzaVendedor() {
+  return moduloVendedorActual === "clientes";
+}
+
+function obtenerDeudoresVendedor() {
+  return obtenerClientesZonaVendedor()
+    .filter(function (cliente) {
+      return obtenerSaldoClienteVendedor(cliente) > 0;
+    })
+    .sort(function (clienteA, clienteB) {
+      return obtenerSaldoClienteVendedor(clienteB) - obtenerSaldoClienteVendedor(clienteA);
+    });
+}
+
+function renderizarResumenCobranzaVendedor(deudores) {
+  if (!vendedorDom.resumenCobranza) {
+    return;
+  }
+
+  const enCobranza =
+    estaEnModoCobranzaVendedor();
+
+  vendedorDom.resumenCobranza.classList.toggle("vendedores-oculto", !enCobranza);
+
+  if (!enCobranza) {
+    return;
+  }
+
+  const totalPorCobrar =
+    deudores.reduce(function (total, cliente) {
+      return total + obtenerSaldoClienteVendedor(cliente);
+    }, 0);
+
+  vendedorDom.resumenCobranza.innerHTML =
+    deudores.length === 0
+      ? "<span class=\"vendedores-resumen-cobranza-vacio\">No hay clientes con deuda en esta zona.</span>"
+      : "<span>Te deben</span><strong>" + formatearDineroVendedor(totalPorCobrar) + "</strong>" +
+        "<span>" + deudores.length + (deudores.length === 1 ? " cliente" : " clientes") + "</span>";
+}
+
+function crearBotonClienteVendedor(cliente) {
+  const botonCliente = document.createElement("button");
+  botonCliente.type = "button";
+  botonCliente.className = "vendedores-opcion";
+
+  const saldoCliente =
+    obtenerSaldoClienteVendedor(cliente);
+  const claseSaldo =
+    saldoCliente > 0 ? " deuda" : saldoCliente < 0 ? " favor" : "";
+
+  botonCliente.innerHTML =
+    "<div class=\"vendedores-opcion-principal\">" +
+    "<strong>" + escaparTextoVendedor(cliente.nombre) + "</strong>" +
+    "<span class=\"vendedores-chip" + claseSaldo + "\">" + escaparTextoVendedor(obtenerTextoSaldoVendedor(saldoCliente)) + "</span>" +
+    "</div>" +
+    "<small>#" + escaparTextoVendedor(cliente.codigo) + " · " +
+    escaparTextoVendedor(cliente.direccion || "Sin direccion") + " · " +
+    escaparTextoVendedor(cliente.zona || "Sin zona") + "</small>";
+
+  botonCliente.addEventListener("click", function () {
+    intentarSeleccionarClienteVendedor(cliente);
+  });
+
+  return botonCliente;
+}
+
+function renderizarVacioClientesVendedor(mensaje, textoBoton) {
+  vendedorDom.resultadosClientes.innerHTML =
+    "<div class=\"vendedores-vacio\">" +
+    "<p>" + escaparTextoVendedor(mensaje) + "</p>" +
+    "<button type=\"button\" class=\"vendedores-principal\" data-crear-cliente-vendedor>" +
+    escaparTextoVendedor(textoBoton) + "</button>" +
+    "</div>";
+
+  const boton =
+    vendedorDom.resultadosClientes.querySelector("[data-crear-cliente-vendedor]");
+
+  if (boton) {
+    boton.addEventListener("click", mostrarAltaRapidaClienteVendedor);
+  }
+}
+
 function renderizarResultadosClientesVendedor() {
   const busqueda =
     vendedorDom.busquedaCliente.value.trim();
+  const enCobranza =
+    estaEnModoCobranzaVendedor();
+  const deudores =
+    enCobranza ? obtenerDeudoresVendedor() : [];
 
-  const coincidencias =
-    obtenerClientesZonaVendedor()
-      .filter(function (cliente) {
-        return clienteCoincideBusqueda(cliente, busqueda);
-      })
-      .sort(function (clienteA, clienteB) {
-        return ordenarClientesPorBusquedaVendedor(clienteA, clienteB, busqueda);
-      })
-      .slice(0, 12);
+  renderizarResumenCobranzaVendedor(deudores);
 
-  ultimosResultadosClientesVendedor =
-    coincidencias;
   vendedorDom.resultadosClientes.innerHTML = "";
   renderizarClientesRecientesVendedor();
 
   if (clientesVendedor.length === 0) {
-    vendedorDom.resultadosClientes.innerHTML =
-      "<div class=\"vendedores-vacio\">" +
-      "<p>No tenes clientes asignados para mostrar.</p>" +
-      "<button type=\"button\" class=\"vendedores-principal\" data-crear-cliente-vendedor>Crear primer cliente</button>" +
-      "</div>";
-    const botonCrearPrimerCliente =
-      vendedorDom.resultadosClientes.querySelector("[data-crear-cliente-vendedor]");
-
-    if (botonCrearPrimerCliente) {
-      botonCrearPrimerCliente.addEventListener("click", mostrarAltaRapidaClienteVendedor);
-    }
+    renderizarVacioClientesVendedor(
+      "No tenes clientes asignados para mostrar.",
+      "Crear primer cliente"
+    );
+    ultimosResultadosClientesVendedor = [];
     return;
   }
 
-  if (coincidencias.length === 0) {
-    vendedorDom.resultadosClientes.innerHTML =
-      "<div class=\"vendedores-vacio\">" +
-      "<p>No hay clientes con ese codigo o nombre.</p>" +
-      "<button type=\"button\" class=\"vendedores-principal\" data-crear-cliente-vendedor>Crear cliente</button>" +
-      "</div>";
-    const botonCrearCliente =
-      vendedorDom.resultadosClientes.querySelector("[data-crear-cliente-vendedor]");
+  // Modo cobranza sin busqueda: la lista de deudores, sin escribir nada.
+  const usarListaDeudores =
+    enCobranza && busqueda === "" && !mostrarTodosLosClientesCobranza && deudores.length > 0;
 
-    if (botonCrearCliente) {
-      botonCrearCliente.addEventListener("click", mostrarAltaRapidaClienteVendedor);
-    }
+  const coincidencias =
+    usarListaDeudores
+      ? deudores.slice(0, 40)
+      : obtenerClientesZonaVendedor()
+          .filter(function (cliente) {
+            return clienteCoincideBusqueda(cliente, busqueda);
+          })
+          .sort(function (clienteA, clienteB) {
+            return ordenarClientesPorBusquedaVendedor(clienteA, clienteB, busqueda);
+          })
+          .slice(0, 12);
+
+  ultimosResultadosClientesVendedor =
+    coincidencias;
+
+  if (coincidencias.length === 0) {
+    renderizarVacioClientesVendedor(
+      "No hay clientes con ese codigo o nombre.",
+      "Crear cliente"
+    );
     return;
   }
 
   coincidencias.forEach(function (cliente) {
-    const botonCliente = document.createElement("button");
-    botonCliente.type = "button";
-    botonCliente.className = "vendedores-opcion";
-    const saldoCliente =
-      obtenerSaldoClienteVendedor(cliente);
-    const claseSaldo =
-      saldoCliente > 0 ? " deuda" : saldoCliente < 0 ? " favor" : "";
-    botonCliente.innerHTML =
-      "<div class=\"vendedores-opcion-principal\">" +
-      "<strong>" + escaparTextoVendedor(cliente.codigo) + " - " + escaparTextoVendedor(cliente.nombre) + "</strong>" +
-      "<span class=\"vendedores-chip" + claseSaldo + "\">" + escaparTextoVendedor(obtenerTextoSaldoVendedor(saldoCliente)) + "</span>" +
-      "</div>" +
-      "<span>" + escaparTextoVendedor(cliente.direccion || "Sin direccion") + "</span>" +
-      "<small>" + escaparTextoVendedor(cliente.zona || "Sin zona") + " | " + escaparTextoVendedor(cliente.listaPrecios || "Lista 1") + "</small>";
-    botonCliente.addEventListener("click", function () {
-      intentarSeleccionarClienteVendedor(cliente);
-    });
-    vendedorDom.resultadosClientes.appendChild(botonCliente);
+    vendedorDom.resultadosClientes.appendChild(crearBotonClienteVendedor(cliente));
   });
+
+  // En cobranza se ofrece salir de la lista de deudores, por si hay que
+  // registrar un pago de alguien que no debe (una entrega a cuenta).
+  if (enCobranza && busqueda === "" && deudores.length > 0) {
+    const botonAlternar = document.createElement("button");
+    botonAlternar.type = "button";
+    botonAlternar.className = "vendedores-ver-todos";
+    botonAlternar.textContent =
+      usarListaDeudores ? "Ver todos los clientes" : "Ver solo los que deben";
+    botonAlternar.addEventListener("click", function () {
+      mostrarTodosLosClientesCobranza = usarListaDeudores;
+      renderizarResultadosClientesVendedor();
+    });
+    vendedorDom.resultadosClientes.appendChild(botonAlternar);
+  }
 }
 
 function seleccionarClienteVendedor(cliente) {
@@ -2330,6 +2482,16 @@ function crearControlBonificacionVendedor(valorInicial, alCambiar) {
   };
 }
 
+// Fila compacta de producto.
+//
+// Antes cada producto era una tarjeta de ~500px: en un celular de 844px se veia
+// UN producto por pantalla y armar un pedido de diez renglones era todo scroll.
+// El motivo eran tres formas distintas de poner la misma cantidad, una debajo de
+// la otra: los botones rapidos, un campo numerico y un boton "Sumar".
+//
+// Ahora la fila mide ~110px y entran seis. Los botones rapidos quedan en una
+// sola linea; la cantidad a mano se pide con el boton "123", que reemplaza esa
+// linea por un campo. Es el mismo poder, pero plegado.
 function renderizarResultadosProductosVendedor() {
   if (!clienteSeleccionadoVendedor) {
     ultimosResultadosProductosVendedor = [];
@@ -2349,7 +2511,7 @@ function renderizarResultadosProductosVendedor() {
 
         return productoCoincideBusquedaVendedor(producto, busqueda);
       })
-      .slice(0, busqueda === "" ? 8 : 12);
+      .slice(0, busqueda === "" ? 20 : 25);
 
   ultimosResultadosProductosVendedor =
     coincidencias;
@@ -2364,82 +2526,148 @@ function renderizarResultadosProductosVendedor() {
   }
 
   coincidencias.forEach(function (producto) {
-    const tarjetaProducto = document.createElement("article");
-    tarjetaProducto.className = "vendedores-producto";
-    const itemEnPedido =
-      buscarItemPedidoVendedor(producto);
-    const descuentoSugerido =
-      itemEnPedido
-        ? itemEnPedido.descuentoPorcentaje
-        : obtenerDescuentoPredeterminadoVendedor(producto);
-    if (itemEnPedido) {
-      tarjetaProducto.classList.add("vendedores-producto-en-pedido");
-    }
-    tarjetaProducto.innerHTML =
-      "<div class=\"vendedores-producto-cabeza\">" +
-      "<strong>" + escaparTextoVendedor(producto.codigo) + " - " + escaparTextoVendedor(producto.nombre) + "</strong>" +
-      (itemEnPedido
-        ? "<span class=\"vendedores-chip pedido\">En pedido: " + escaparTextoVendedor(formatearCantidadVendedor(producto, itemEnPedido.cantidad)) + "</span>"
-        : "") +
-      "</div>" +
-      "<span>" + escaparTextoVendedor(producto.marca || producto.rubro || "Sin rubro") + "</span>" +
-      "<div class=\"vendedores-producto-meta\">" +
-      "<span>Stock: " + escaparTextoVendedor(formatearCantidadVendedor(producto, obtenerStockVendedor(producto))) + "</span>" +
-      "<strong>" + formatearDineroVendedor(obtenerPrecioProductoVendedor(producto)) + "</strong>" +
-      "</div>";
+    vendedorDom.resultadosProductos.appendChild(
+      crearFilaProductoVendedor(producto)
+    );
+  });
+}
 
-    const cantidadesRapidas = document.createElement("div");
-    cantidadesRapidas.className = "vendedores-cantidades-rapidas";
-    obtenerCantidadesRapidasVendedor(producto).forEach(function (cantidadRapida) {
-      const botonCantidadRapida = document.createElement("button");
-      botonCantidadRapida.type = "button";
-      botonCantidadRapida.textContent =
+function crearFilaProductoVendedor(producto) {
+  const fila = document.createElement("article");
+  fila.className = "vendedores-producto";
+
+  const itemEnPedido =
+    buscarItemPedidoVendedor(producto);
+  const descuentoSugerido =
+    itemEnPedido
+      ? itemEnPedido.descuentoPorcentaje
+      : obtenerDescuentoPredeterminadoVendedor(producto);
+
+  if (itemEnPedido) {
+    fila.classList.add("vendedores-producto-en-pedido");
+  }
+
+  const detalle =
+    [
+      "#" + producto.codigo,
+      producto.marca || producto.rubro || "",
+      "Stock " + formatearCantidadVendedor(producto, obtenerStockVendedor(producto))
+    ].filter(function (parte) {
+      return String(parte).trim() !== "";
+    }).join(" · ");
+
+  fila.innerHTML =
+    "<div class=\"vendedores-producto-cabeza\">" +
+    "<strong>" + escaparTextoVendedor(producto.nombre) + "</strong>" +
+    "<b class=\"vendedores-producto-precio\">" + formatearDineroVendedor(obtenerPrecioProductoVendedor(producto)) + "</b>" +
+    "</div>" +
+    "<div class=\"vendedores-producto-meta\">" +
+    "<span>" + escaparTextoVendedor(detalle) + "</span>" +
+    (itemEnPedido
+      ? "<span class=\"vendedores-chip pedido\">En pedido " + escaparTextoVendedor(formatearCantidadVendedor(producto, itemEnPedido.cantidad)) + "</span>"
+      : "") +
+    "</div>";
+
+  const acciones = document.createElement("div");
+  acciones.className = "vendedores-producto-acciones";
+  fila.appendChild(acciones);
+
+  const cantidadesRapidas =
+    obtenerCantidadesRapidasVendedor(producto);
+
+  function mostrarBotonesRapidos() {
+    acciones.innerHTML = "";
+    acciones.classList.remove("vendedores-producto-acciones-manual");
+
+    if (cantidadesRapidas.length === 0) {
+      const sinStock = document.createElement("span");
+      sinStock.className = "vendedores-producto-sin-stock";
+      sinStock.textContent = "Sin stock disponible";
+      acciones.appendChild(sinStock);
+      return;
+    }
+
+    cantidadesRapidas.forEach(function (cantidadRapida) {
+      const boton = document.createElement("button");
+      boton.type = "button";
+      boton.className = "vendedores-cantidad-rapida";
+      boton.textContent =
         formatearCantidadRapidaVendedor(producto, cantidadRapida);
-      botonCantidadRapida.setAttribute(
+      boton.setAttribute(
         "aria-label",
         "Agregar " + formatearCantidadRapidaVendedor(producto, cantidadRapida).replace(/^\+/, "") + " de " + producto.nombre
       );
-      botonCantidadRapida.addEventListener("click", function () {
+      boton.addEventListener("click", function () {
         agregarProductoPedidoVendedor(producto, cantidadRapida, descuentoSugerido);
       });
-      cantidadesRapidas.appendChild(botonCantidadRapida);
+      acciones.appendChild(boton);
     });
 
-    const controlesProducto = document.createElement("div");
-    controlesProducto.className = "vendedores-producto-controles";
+    const botonManual = document.createElement("button");
+    botonManual.type = "button";
+    botonManual.className = "vendedores-cantidad-otra";
+    botonManual.textContent = "123";
+    botonManual.setAttribute("aria-label", "Escribir otra cantidad de " + producto.nombre);
+    botonManual.addEventListener("click", mostrarCantidadManual);
+    acciones.appendChild(botonManual);
+  }
 
-    const cantidadProducto = document.createElement("input");
-    cantidadProducto.type = "number";
-    cantidadProducto.min = String(obtenerIncrementoCantidadVendedor(producto));
-    cantidadProducto.step = productoEsPesoVendedor(producto) ? "0.001" : "1";
-    cantidadProducto.value = String(obtenerIncrementoCantidadVendedor(producto));
-    cantidadProducto.inputMode = "decimal";
-    cantidadProducto.setAttribute("aria-label", "Cantidad");
+  function mostrarCantidadManual() {
+    acciones.innerHTML = "";
+    acciones.classList.add("vendedores-producto-acciones-manual");
+
+    const campo = document.createElement("input");
+    campo.type = "number";
+    campo.min = String(obtenerIncrementoCantidadVendedor(producto));
+    campo.step = productoEsPesoVendedor(producto) ? "0.001" : "1";
+    campo.value = "";
+    campo.placeholder = "Cantidad";
+    campo.inputMode = "decimal";
+    campo.setAttribute("aria-label", "Cantidad de " + producto.nombre);
 
     const botonAgregar = document.createElement("button");
     botonAgregar.type = "button";
     botonAgregar.className = "vendedores-principal";
     botonAgregar.textContent = itemEnPedido ? "Sumar" : "Agregar";
 
-    botonAgregar.addEventListener("click", function () {
-      agregarProductoPedidoVendedor(producto, Number(cantidadProducto.value), descuentoSugerido);
-    });
+    function confirmar() {
+      const cantidad =
+        Number(campo.value);
 
-    cantidadProducto.addEventListener("keydown", function (evento) {
-      if (evento.key !== "Enter") {
+      if (!Number.isFinite(cantidad) || cantidad <= 0) {
+        campo.focus();
         return;
       }
 
-      evento.preventDefault();
-      agregarProductoPedidoVendedor(producto, Number(cantidadProducto.value), descuentoSugerido);
+      agregarProductoPedidoVendedor(producto, cantidad, descuentoSugerido);
+    }
+
+    botonAgregar.addEventListener("click", confirmar);
+    campo.addEventListener("keydown", function (evento) {
+      if (evento.key === "Enter") {
+        evento.preventDefault();
+        confirmar();
+      }
+      if (evento.key === "Escape") {
+        mostrarBotonesRapidos();
+      }
     });
 
-    controlesProducto.appendChild(cantidadProducto);
-    controlesProducto.appendChild(botonAgregar);
-    tarjetaProducto.appendChild(cantidadesRapidas);
-    tarjetaProducto.appendChild(controlesProducto);
-    vendedorDom.resultadosProductos.appendChild(tarjetaProducto);
-  });
+    const botonVolver = document.createElement("button");
+    botonVolver.type = "button";
+    botonVolver.className = "vendedores-cantidad-otra";
+    botonVolver.textContent = "×";
+    botonVolver.setAttribute("aria-label", "Volver a las cantidades rapidas");
+    botonVolver.addEventListener("click", mostrarBotonesRapidos);
+
+    acciones.appendChild(campo);
+    acciones.appendChild(botonAgregar);
+    acciones.appendChild(botonVolver);
+    campo.focus();
+  }
+
+  mostrarBotonesRapidos();
+  return fila;
 }
 
 function buscarItemPedidoVendedor(producto) {
@@ -2776,8 +3004,6 @@ function actualizarResumenVisualPedidoVendedor() {
   vendedorDom.barraTotal.textContent =
     totalFormateado;
 
-  vendedorDom.botonCopiar.disabled =
-    !tieneItems;
   vendedorDom.botonWhatsapp.disabled =
     !tieneItems;
   vendedorDom.botonBarraWhatsapp.disabled =
@@ -2788,6 +3014,13 @@ function actualizarResumenVisualPedidoVendedor() {
   actualizarMetricasJornadaVendedor();
 }
 
+// Renglon compacto del pedido.
+//
+// Antes cada renglon medía ~250px porque la bonificacion iba siempre desplegada,
+// con su etiqueta, cuatro botones y un campo, aunque el 90% de los renglones
+// vayan sin bonificacion. Ahora la bonificacion es un chip que se toca solo
+// cuando hace falta, y el renglon entero mide ~100px: se ve el pedido completo
+// de un vistazo antes de guardarlo.
 function renderizarItemsPedidoVendedor() {
   vendedorDom.itemsPedido.innerHTML = "";
   actualizarResumenVisualPedidoVendedor();
@@ -2806,26 +3039,33 @@ function renderizarItemsPedidoVendedor() {
     encabezadoItem.className = "vendedores-item-encabezado";
 
     const nombreProducto = document.createElement("strong");
-    nombreProducto.textContent =
-      itemPedido.producto.codigo + " - " + itemPedido.producto.nombre;
+    nombreProducto.textContent = itemPedido.producto.nombre;
 
     const subtotalProducto = document.createElement("span");
+    subtotalProducto.className = "vendedores-item-subtotal";
     subtotalProducto.textContent =
       formatearDineroVendedor(calcularSubtotalItemVendedor(itemPedido));
 
-    const detalleItem = document.createElement("small");
-    detalleItem.className = "vendedores-item-detalle";
-    detalleItem.textContent =
-      "Precio: " + formatearDineroVendedor(obtenerPrecioProductoVendedor(itemPedido.producto)) +
-      " | Bonif: " + normalizarDescuentoVendedor(itemPedido.descuentoPorcentaje || 0) + "%" +
-      " | Stock: " + formatearCantidadVendedor(itemPedido.producto, obtenerStockVendedor(itemPedido.producto));
+    const botonEliminar = document.createElement("button");
+    botonEliminar.type = "button";
+    botonEliminar.className = "vendedores-item-quitar";
+    botonEliminar.textContent = "×";
+    botonEliminar.setAttribute("aria-label", "Quitar " + itemPedido.producto.nombre);
+    botonEliminar.addEventListener("click", function () {
+      eliminarItemPedidoVendedor(itemPedido.producto);
+    });
+
+    encabezadoItem.appendChild(nombreProducto);
+    encabezadoItem.appendChild(subtotalProducto);
+    encabezadoItem.appendChild(botonEliminar);
 
     const controlCantidad = document.createElement("div");
     controlCantidad.className = "vendedores-control-cantidad";
 
     const botonRestar = document.createElement("button");
     botonRestar.type = "button";
-    botonRestar.textContent = "-";
+    botonRestar.textContent = "−";
+    botonRestar.setAttribute("aria-label", "Restar de " + itemPedido.producto.nombre);
     botonRestar.addEventListener("click", function () {
       cambiarCantidadPedidoVendedor(
         itemPedido.producto,
@@ -2847,6 +3087,7 @@ function renderizarItemsPedidoVendedor() {
     const botonSumar = document.createElement("button");
     botonSumar.type = "button";
     botonSumar.textContent = "+";
+    botonSumar.setAttribute("aria-label", "Sumar a " + itemPedido.producto.nombre);
     botonSumar.addEventListener("click", function () {
       cambiarCantidadPedidoVendedor(
         itemPedido.producto,
@@ -2858,47 +3099,68 @@ function renderizarItemsPedidoVendedor() {
     controlCantidad.appendChild(cantidad);
     controlCantidad.appendChild(botonSumar);
 
-    const controlDescuento =
-      crearControlBonificacionVendedor(
-        itemPedido.descuentoPorcentaje || 0,
-        function (descuentoNuevo) {
-          establecerDescuentoPedidoVendedor(itemPedido.producto, descuentoNuevo);
-        }
-      );
+    const descuentoActual =
+      normalizarDescuentoVendedor(itemPedido.descuentoPorcentaje || 0);
 
-    const botonEliminar = document.createElement("button");
-    botonEliminar.type = "button";
-    botonEliminar.className = "vendedores-item-quitar";
-    botonEliminar.textContent = "Quitar";
-    botonEliminar.addEventListener("click", function () {
-      eliminarItemPedidoVendedor(itemPedido.producto);
+    const precioUnitario = document.createElement("small");
+    precioUnitario.className = "vendedores-item-detalle";
+    precioUnitario.textContent =
+      formatearDineroVendedor(obtenerPrecioProductoVendedor(itemPedido.producto)) + " c/u";
+
+    const botonBonificacion = document.createElement("button");
+    botonBonificacion.type = "button";
+    botonBonificacion.className =
+      "vendedores-item-bonif" + (descuentoActual > 0 ? " activa" : "");
+    botonBonificacion.textContent =
+      descuentoActual > 0 ? "Bonif " + descuentoActual + "%" : "Bonif";
+    botonBonificacion.setAttribute("aria-expanded", "false");
+
+    const linea = document.createElement("div");
+    linea.className = "vendedores-item-linea";
+    linea.appendChild(controlCantidad);
+    linea.appendChild(precioUnitario);
+    linea.appendChild(botonBonificacion);
+
+    const cajaBonificacion = document.createElement("div");
+    cajaBonificacion.className = "vendedores-item-bonif-caja vendedores-oculto";
+
+    let controlDescuento = null;
+
+    botonBonificacion.addEventListener("click", function () {
+      const abierta =
+        !cajaBonificacion.classList.contains("vendedores-oculto");
+
+      if (abierta) {
+        cajaBonificacion.classList.add("vendedores-oculto");
+        botonBonificacion.setAttribute("aria-expanded", "false");
+        return;
+      }
+
+      if (!controlDescuento) {
+        controlDescuento =
+          crearControlBonificacionVendedor(
+            itemPedido.descuentoPorcentaje || 0,
+            function (descuentoNuevo) {
+              establecerDescuentoPedidoVendedor(itemPedido.producto, descuentoNuevo);
+            }
+          );
+        cajaBonificacion.appendChild(controlDescuento.elemento);
+      }
+
+      cajaBonificacion.classList.remove("vendedores-oculto");
+      botonBonificacion.setAttribute("aria-expanded", "true");
+      controlDescuento.input.focus();
     });
 
-    encabezadoItem.appendChild(nombreProducto);
-    encabezadoItem.appendChild(subtotalProducto);
-    encabezadoItem.appendChild(botonEliminar);
     item.appendChild(encabezadoItem);
-    item.appendChild(detalleItem);
-    item.appendChild(controlDescuento.elemento);
-    item.appendChild(controlCantidad);
+    item.appendChild(linea);
+    item.appendChild(cajaBonificacion);
     vendedorDom.itemsPedido.appendChild(item);
   });
 }
 
 function limpiarTelefonoVendedor(telefono) {
   return String(telefono || "").replace(/[^\d]/g, "");
-}
-
-function cargarTelefonoDestinoVendedor() {
-  const telefonoDesdeUrl =
-    limpiarTelefonoVendedor(telefonoVendedorDesdeUrl);
-
-  if (telefonoDesdeUrl) {
-    localStorage.setItem(CLAVE_TELEFONO_VENDEDOR, telefonoDesdeUrl);
-    return telefonoDesdeUrl;
-  }
-
-  return limpiarTelefonoVendedor(localStorage.getItem(CLAVE_TELEFONO_VENDEDOR));
 }
 
 function obtenerSaldoClienteVendedor(cliente) {
@@ -2929,8 +3191,8 @@ function actualizarVistaCobranzaVendedor() {
 
   vendedorDom.cobranzaCliente.textContent =
     hayCliente
-      ? cliente.codigo + " - " + cliente.nombre + " | " + obtenerTextoSaldoVendedor(saldo)
-      : "Elegi un cliente para ver su saldo.";
+      ? cliente.codigo + " - " + cliente.nombre
+      : "Elegi un cliente";
   vendedorDom.cobranzaSaldo.textContent =
     formatearDineroVendedor(saldo);
   vendedorDom.botonCobrarSaldo.disabled =
@@ -2944,15 +3206,14 @@ function actualizarVistaCobranzaVendedor() {
   }
 }
 
+// Usa el mismo generador que la computadora (helpers.js). El de antes armaba el
+// numero pegando textos: Date.now() + 3 digitos daba 16 digitos, y la columna
+// codigo_pago era `integer` (maximo 2.147.483.647). O sea que toda cobranza
+// cargada desde el celular moria en la base con "integer out of range".
+// Se arregla junto con supabase/sql/codigo-pago-unico.sql, que pasa la columna
+// a bigint.
 function obtenerSiguienteCodigoPagoVendedor() {
-  const marcaTiempo =
-    Date.now();
-  const sufijoAleatorio =
-    Math.floor(Math.random() * 1000);
-
-  return Number(
-    String(marcaTiempo) + String(sufijoAleatorio).padStart(3, "0")
-  );
+  return crearCodigoPagoUnico();
 }
 
 function obtenerTextoMedioCobranzaVendedor(medioPago) {
@@ -3097,16 +3358,6 @@ function completarCobranzaConSaldoVendedor() {
     String(saldo);
   vendedorDom.cobranzaImporte.focus();
   vendedorDom.cobranzaImporte.select();
-}
-
-function guardarTelefonoDestinoVendedor() {
-  const telefono =
-    limpiarTelefonoVendedor(vendedorDom.telefonoDestino.value);
-
-  if (telefono) {
-    localStorage.setItem(CLAVE_TELEFONO_VENDEDOR, telefono);
-    localStorage.setItem(CLAVE_TELEFONO_CATALOGO_VENDEDOR, telefono);
-  }
 }
 
 function obtenerTelefonoWhatsappClienteVendedor(cliente) {
@@ -3280,49 +3531,6 @@ async function enviarCatalogoVendedor() {
   await copiarCatalogoVendedor(mensajeCatalogo);
 }
 
-function construirMensajePedidoVendedor() {
-  const vendedor =
-    obtenerNombreVendedorCuentaActual() || "Sin vendedor";
-  const cliente =
-    clienteSeleccionadoVendedor || {};
-  const observacion =
-    vendedorDom.observacion.value.trim();
-
-  const lineasProductos =
-    itemsPedidoVendedor.map(function (itemPedido) {
-      const subtotal =
-        calcularSubtotalItemVendedor(itemPedido);
-      const descuento =
-        normalizarDescuentoVendedor(itemPedido.descuentoPorcentaje || 0);
-      const textoDescuento =
-        descuento > 0 ? " | Bonif. " + descuento + "%" : "";
-
-      return "- " + formatearCantidadVendedor(itemPedido.producto, itemPedido.cantidad) + " x " +
-        itemPedido.producto.codigo + " - " + itemPedido.producto.nombre + textoDescuento + " (" +
-        formatearDineroVendedor(subtotal) + ")";
-    });
-
-  const lineasMensaje = [
-    "Nuevo pedido movil",
-    "",
-    "Vendedor: " + vendedor,
-    "Cliente: " + (cliente.nombre || "Sin cliente"),
-    "Direccion: " + (cliente.direccion || "Sin direccion"),
-    "Zona: " + (cliente.zona || "Sin zona"),
-    "Forma de pago: " + obtenerTextoFormaPagoVendedor(vendedorDom.formaPago.value),
-    "",
-    lineasProductos.join("\n"),
-    "",
-    "Total estimado: " + formatearDineroVendedor(calcularTotalPedidoVendedor())
-  ];
-
-  if (observacion) {
-    lineasMensaje.push("", "Observacion: " + observacion);
-  }
-
-  return lineasMensaje.join("\n");
-}
-
 function validarPedidoVendedor() {
   if (!clienteSeleccionadoVendedor) {
     alert("Selecciona un cliente antes de enviar.");
@@ -3337,23 +3545,6 @@ function validarPedidoVendedor() {
   }
 
   return true;
-}
-
-async function copiarPedidoVendedor() {
-  if (!validarPedidoVendedor()) {
-    return;
-  }
-
-  const mensajePedido =
-    construirMensajePedidoVendedor();
-
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    await navigator.clipboard.writeText(mensajePedido);
-    alert("Pedido copiado.");
-    return;
-  }
-
-  window.prompt("Copia el pedido:", mensajePedido);
 }
 
 function obtenerFechaPedidoMovil() {
@@ -3555,33 +3746,20 @@ async function guardarPedidoMovilEnSupabase() {
   return guardarPedidoBaseMovilEnSupabase(pedidoMovil);
 }
 
-function abrirWhatsappPedidoVendedor() {
-  const telefonoDestino =
-    limpiarTelefonoVendedor(vendedorDom.telefonoDestino.value);
-
-  const enlaceWhatsapp =
-    "https://wa.me/" + telefonoDestino + "?text=" +
-    encodeURIComponent(construirMensajePedidoVendedor());
-
-  window.open(enlaceWhatsapp, "_blank", "noopener");
-}
-
-async function enviarPedidoWhatsappVendedor() {
+// El pedido se guarda en el sistema y se termina ahi.
+//
+// Antes esta funcion exigia el WhatsApp de la distribuidora y, si no estaba
+// cargado, NO dejaba guardar el pedido: el vendedor quedaba trabado por un
+// campo que no tiene nada que ver con vender. Ahora WhatsApp se usa solo para
+// pasarle el catalogo al cliente; el pedido queda en el sistema, que es donde
+// despues se factura.
+async function guardarPedidoVendedor() {
   if (pedidoVendedorEnCurso) {
-    alert("El pedido ya se esta enviando.");
+    alert("El pedido ya se esta guardando.");
     return;
   }
 
   if (!validarPedidoVendedor()) {
-    return;
-  }
-
-  const telefonoDestino =
-    limpiarTelefonoVendedor(vendedorDom.telefonoDestino.value);
-
-  if (!telefonoDestino) {
-    alert("Carga el WhatsApp de la distribuidora.");
-    vendedorDom.telefonoDestino.focus();
     return;
   }
 
@@ -3613,12 +3791,9 @@ async function enviarPedidoWhatsappVendedor() {
       crearFirmaPedidoVendedorActual();
 
     if (firmaPedidoActual && firmaPedidoActual === firmaUltimoPedidoMovilGuardado) {
-      vendedorDom.estadoEnvio.textContent =
-        "Este pedido ya estaba guardado online. Abriendo WhatsApp...";
-      abrirWhatsappPedidoVendedor();
       limpiarPedidoVendedor();
       vendedorDom.estadoEnvio.textContent =
-        "Pedido ya guardado. Listo para el siguiente cliente.";
+        "Este pedido ya estaba guardado. Listo para el siguiente cliente.";
       return;
     }
 
@@ -3637,17 +3812,11 @@ async function enviarPedidoWhatsappVendedor() {
       guardarPedidoPendienteLocalVendedor(resultadoGuardado.motivo || "Sin guardado online");
     }
 
-    vendedorDom.estadoEnvio.textContent =
-      resultadoGuardado.guardado
-        ? "Pedido guardado online. Abriendo WhatsApp..."
-        : "Pedido pendiente en este celular. Abriendo WhatsApp...";
-
-    abrirWhatsappPedidoVendedor();
     limpiarPedidoVendedor();
     vendedorDom.estadoEnvio.textContent =
       resultadoGuardado.guardado
-        ? "Pedido enviado. Listo para el siguiente cliente."
-        : "Pedido pendiente local. Listo para el siguiente cliente.";
+        ? "Pedido guardado. Listo para el siguiente cliente."
+        : "Sin señal: el pedido quedo guardado en este celular y sube solo cuando vuelva la conexion.";
   } catch (error) {
     console.error("No se pudo guardar pedido movil:", error);
 
@@ -3655,22 +3824,19 @@ async function enviarPedidoWhatsappVendedor() {
       const seAgregoPendiente =
         guardarPedidoPendienteLocalVendedor(error.message || "No se pudo guardar online");
 
-      vendedorDom.estadoEnvio.textContent =
-        seAgregoPendiente
-          ? "No se pudo guardar online. Quedo pendiente en este celular y se abre WhatsApp."
-          : "Este pedido ya estaba pendiente en este celular. Abriendo WhatsApp...";
-      abrirWhatsappPedidoVendedor();
       limpiarPedidoVendedor();
       vendedorDom.estadoEnvio.textContent =
-        "Pedido pendiente local. Listo para el siguiente cliente.";
+        seAgregoPendiente
+          ? "Sin señal: el pedido quedo guardado en este celular y sube solo cuando vuelva la conexion."
+          : "Este pedido ya estaba esperando subir desde este celular.";
     } catch (errorLocal) {
       console.error("No se pudo guardar pendiente movil:", errorLocal);
       vendedorDom.estadoEnvio.textContent =
-        "Pedido no enviado. No se pudo guardar online ni dejar pendiente local.";
+        "El pedido NO se guardo. Revisa la conexion y volve a intentar sin cerrar la app.";
     }
   } finally {
     pedidoVendedorEnCurso = false;
-    vendedorDom.botonWhatsapp.textContent = "Guardar y enviar";
+    vendedorDom.botonWhatsapp.textContent = "Guardar pedido";
     vendedorDom.botonWhatsapp.removeAttribute("aria-busy");
     vendedorDom.botonBarraWhatsapp.removeAttribute("aria-busy");
     actualizarResumenVisualPedidoVendedor();
@@ -3733,9 +3899,6 @@ function limpiarPedidoVendedor() {
 }
 
 async function iniciarVendedoresMobile() {
-  vendedorDom.telefonoDestino.value =
-    cargarTelefonoDestinoVendedor();
-
   const puedeCargarDatos =
     await prepararSesionVendedor();
 
@@ -3797,16 +3960,26 @@ vendedorDom.busquedaProducto.addEventListener("input", renderizarResultadosProdu
 vendedorDom.busquedaProducto.addEventListener("keydown", agregarPrimerProductoVendedor);
 vendedorDom.formaPago.addEventListener("change", guardarBorradorPedidoVendedor);
 vendedorDom.observacion.addEventListener("input", guardarBorradorPedidoVendedor);
-vendedorDom.telefonoDestino.addEventListener("input", guardarTelefonoDestinoVendedor);
 vendedorDom.botonLimpiar.addEventListener("click", solicitarVaciarPedidoVendedor);
-vendedorDom.botonCopiar.addEventListener("click", copiarPedidoVendedor);
-vendedorDom.botonWhatsapp.addEventListener("click", enviarPedidoWhatsappVendedor);
+vendedorDom.botonWhatsapp.addEventListener("click", guardarPedidoVendedor);
 vendedorDom.botonBarraWhatsapp.addEventListener("click", function () {
   seleccionarPasoPedidoVendedor("resumen");
 });
 vendedorDom.botonEnviarCatalogo.addEventListener("click", enviarCatalogoVendedor);
 vendedorDom.botonEnviarCatalogoPanel.addEventListener("click", enviarCatalogoVendedor);
 vendedorDom.botonCopiarCatalogo.addEventListener("click", copiarLinkCatalogoVendedor);
+if (vendedorDom.cambiarClienteCobranza) {
+  vendedorDom.cambiarClienteCobranza.addEventListener("click", function () {
+    clienteSeleccionadoVendedor = null;
+    vendedorDom.busquedaCliente.value = "";
+    vendedorDom.cobranzaImporte.value = "";
+    vendedorDom.cobranzaEstado.textContent = "";
+    actualizarVistaCobranzaVendedor();
+    renderizarResultadosClientesVendedor();
+    actualizarFlujoVendedor();
+    vendedorDom.busquedaCliente.focus();
+  });
+}
 vendedorDom.botonCobrarSaldo.addEventListener("click", completarCobranzaConSaldoVendedor);
 vendedorDom.botonGuardarCobranza.addEventListener("click", guardarCobranzaVendedor);
 if (vendedorDom.confirmacionCancelar) {
